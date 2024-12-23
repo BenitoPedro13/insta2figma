@@ -1,0 +1,19 @@
+{
+  "name": "Insta2Figma",
+  "id": "1451273691544619216",
+  "api": "1.0.0",
+  "main": "code.js",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "documentAccess": "dynamic-page",
+  "editorType": [
+    "figma"
+  ],
+  "ui": "ui.html",
+  "networkAccess": {
+    "allowedDomains": [
+      "*"
+    ],
+    "reasoning": "The plugin needs to fetch images from Instagram."
+  }
+}
