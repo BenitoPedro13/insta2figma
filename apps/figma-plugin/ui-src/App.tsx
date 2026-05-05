@@ -119,14 +119,27 @@ export function App() {
       }
       if (pm.type !== 'import-done') return;
       setImporting(false);
-      const done = pm as { error?: unknown; placed?: number; total?: number };
+      const done = pm as {
+        error?: unknown;
+        placed?: number;
+        total?: number;
+        profilePicUrl?: unknown;
+      };
       const ok = !done.error;
       const summary = ok
         ? `Colocados ${done.placed ?? 0}/${done.total ?? 0} no canvas.`
         : 'Colocação: nada importado ou erro.';
       setStatus(summary);
+      const profilePicUrl =
+        typeof done.profilePicUrl === 'string' && done.profilePicUrl.trim() !== ''
+          ? done.profilePicUrl.trim()
+          : undefined;
       if (ok && lastImportUsername.current) {
-        persistEntries((prev) => upsertAfterSuccessfulImport(prev, lastImportUsername.current));
+        persistEntries((prev) =>
+          upsertAfterSuccessfulImport(prev, lastImportUsername.current, {
+            profilePicUrl: profilePicUrl ?? null,
+          }),
+        );
         setView('list');
         setListStatus(summary);
       }

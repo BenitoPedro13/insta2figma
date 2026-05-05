@@ -60,8 +60,33 @@ async function fetchImageBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer());
 }
 
-/** Coloca imagens em grelha (URLs presign MinIO/S3). */
-async function placeSignedImages(urls: string[]): Promise<void> {
+/** Lê URL da foto no `result_summary` do job (`profile.profilePicUrlHd`). */
+function pickProfilePicUrlFromJobResultSummary(resultSummary: unknown): string | undefined {
+  if (
+    resultSummary === null ||
+    typeof resultSummary !== 'object' ||
+    Array.isArray(resultSummary)
+  ) {
+    return undefined;
+  }
+  const profile = (resultSummary as Record<string, unknown>).profile;
+  if (profile === null || typeof profile !== 'object' || Array.isArray(profile)) {
+    return undefined;
+  }
+  const pr = profile as Record<string, unknown>;
+  const hd = pr.profilePicUrlHd;
+  if (typeof hd === 'string' && hd.trim().length > 0) return hd.trim();
+  const fallback = pr.profilePicUrl;
+  return typeof fallback === 'string' && fallback.trim().length > 0
+    ? fallback.trim()
+    : undefined;
+}
+
+/** Coloca imagens em grelha (URLs presign MinIO/S3). Opcionalmente envia `profilePicUrl` à UI para o histórico (não vai para o canvas). */
+async function placeSignedImages(
+  urls: string[],
+  opts?: { profilePicUrl?: string },
+): Promise<void> {
   const size = 280;
   const gap = 16;
   const maxRowWidth = 1400;
@@ -118,6 +143,7 @@ async function placeSignedImages(urls: string[]): Promise<void> {
     placed: ok,
     total: urls.length,
     error: false,
+    ...(opts?.profilePicUrl ? { profilePicUrl: opts.profilePicUrl } : {}),
   });
 }
 
@@ -222,6 +248,7 @@ async function importProfileViaApi(
   }
 
   notifyStatus(`Job ${jobId} — a aguardar…`);
+  let lastResultSummary: unknown = undefined;
   let status = '';
   for (let i = 0; i < 120; i++) {
     await new Promise((r) => setTimeout(r, 2000));
@@ -236,13 +263,15 @@ async function importProfileViaApi(
     status = String(gData?.status ?? gj.status ?? '');
     notifyStatus(`${status} (${i})`);
     if (status === 'succeeded') {
-      const rs = gData?.resultSummary;
+      lastResultSummary = gData?.resultSummary;
+      const rs = lastResultSummary;
       if (rs !== null && typeof rs === 'object' && !Array.isArray(rs)) {
         const sm = (rs as Record<string, unknown>).scrapingMeta;
         if (sm !== null && typeof sm === 'object' && !Array.isArray(sm)) {
-          const req = sm.requestedMaxPosts;
-          const sample = sm.postsInSample;
-          const expanded = sm.expandCarouselImages === true;
+          const smb = sm as Record<string, unknown>;
+          const req = smb.requestedMaxPosts;
+          const sample = smb.postsInSample;
+          const expanded = smb.expandCarouselImages === true;
           if (typeof req === 'number' && typeof sample === 'number') {
             notifyStatus(
               `Job OK — pedido ${req} posts, carrossel ${expanded ? 'expandido' : 'só capa'}, amostra com ${sample} post(s).`,
@@ -288,7 +317,10 @@ async function importProfileViaApi(
   }
 
   notifyStatus(`A colocar ${urls.length} imagem(ns) no canvas…`);
-  await placeSignedImages(urls);
+  const profilePicForHistory = pickProfilePicUrlFromJobResultSummary(lastResultSummary);
+  await placeSignedImages(urls, {
+    ...(profilePicForHistory ? { profilePicUrl: profilePicForHistory } : {}),
+  });
 }
 
 figma.ui.onmessage = async (msg: PluginMessage) => {

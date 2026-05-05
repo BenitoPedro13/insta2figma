@@ -1,3 +1,4 @@
+import { HistoryAvatar } from '../components/HistoryAvatar';
 import type { HistoryEntry } from '../lib/historyStorage';
 
 export type ListTab = 'history' | 'favorites';
@@ -101,9 +102,7 @@ export function ListScreen({
                     onClick={() => onOpenImportForProfile(row.username)}
                     aria-label={`Importar @{row.username}`}
                   >
-                    <span className="account-avatar" aria-hidden>
-                      {row.username.slice(0, 1).toUpperCase()}
-                    </span>
+                    <HistoryAvatar username={row.username} profilePicUrl={row.profilePicUrl} />
                     <span className="account-handle">@{row.username}</span>
                   </button>
                   <button

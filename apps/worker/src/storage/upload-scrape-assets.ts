@@ -80,7 +80,9 @@ async function fetchBytes(
 }
 
 /**
- * Upload opcional de avatar + thumbnails para S3/MinIO e cria linhas `Asset`.
+ * Upload opcional de thumbnails dos posts para S3/MinIO e cria linhas `Asset`.
+ * A foto de perfil (~`profile_pic_url_hd`) fica apenas no JSON `result_summary.profile`;
+ * não é copiada para o bucket para o import no Figma ser só miniaturas de posts pedidos.
  * Falhas por item são ignoradas (log).
  */
 export async function uploadScrapeAssets(params: {
@@ -117,18 +119,6 @@ export async function uploadScrapeAssets(params: {
       },
     });
   };
-
-  const profileUrl = params.summary.profile.profilePicUrlHd;
-  if (profileUrl) {
-    try {
-      const { body, contentType } = await fetchBytes(profileUrl);
-      const ext = guessExtFromMime(contentType);
-      const key = `${prefix}profile.${ext}`;
-      await persist(key, body, contentType);
-    } catch (e) {
-      console.warn('[storage] falha ao guardar foto de perfil', e);
-    }
-  }
 
   let count = 0;
   const expand = params.expandCarouselImages === true;

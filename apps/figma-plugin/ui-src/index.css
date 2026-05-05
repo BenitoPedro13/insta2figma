@@ -315,6 +315,19 @@ body {
   flex-shrink: 0;
 }
 
+.account-avatar--photo {
+  overflow: hidden;
+  padding: 0;
+  background: #ddd;
+}
+
+.account-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .account-handle {
   color: #666;
   overflow: hidden;
