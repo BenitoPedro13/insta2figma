@@ -180,6 +180,25 @@ flowchart TD
 
 ---
 
+## 11. Backlog: avatares Instagram no histórico
+
+**Estado actual (MVP):** cada linha do histórico usa um **avatar placeholder** circular com a **primeira letra** do username (`ListScreen`). O modelo de dados em [`historyStorage.ts`](../apps/figma-plugin/ui-src/lib/historyStorage.ts) só persiste `username`, `favorite` e `lastUsedIso`.
+
+**Objectivo:** reproduzir o mock onde cada entrada mostra a **imagem circular real** da conta Instagram (ex.: `@archillect`, `@vansskate`).
+
+### O que falta especificar/implementar (quando for prioridade)
+
+1. **Fonte da URL:** o scraper/job ou um endpoint **`GET`** de *profile preview* deve expor um URL estável ou dados suficientes para obter um thumbnail (CDN Instagram, cópia no nosso storage, ou URL assinada MinIO igual às fotos dos posts — avaliar TTL e direitos).
+2. **Persistência:** alargar `HistoryEntry` com algo como **`profileImageUrl`** (string) ou **`profileImageStorageKey`**; continuar em `localStorage` ou migrar quando existir utilizador servidor.
+3. **Renderização na UI:** `<img>` com `crossOrigin`/cache e **fallback** para a letra se o fetch falhar ou o URL expirar; considerar **`figma.fetch`** vs carregar apenas no iframe (atenção a domínios em `manifest.networkAccess`).
+4. **Actualização:** após `import-done` bem-sucedido ou após resolver username no formulário, **actualizar** a entrada no histórico com a nova URL de avatar (evitar listas só com letras quando já temos media no job).
+
+### Ligação ao restante spec
+
+O ecrã de lista (**secção 3**) já descreve “Avatar circular (imagem de perfil ou placeholder)”; esta secção marca explicitamente que **placeholder-only é temporário** até o backlog acima ficar fechado.
+
+---
+
 ## Anexo A — Mapeamento ficheiros PNG → ecrã (melhor esforço)
 
 Os ficheiros abaixo estão na **raiz do repositório** do monorepo (exportações do Figma). Ajustar esta tabela após revisão visual cruzada com o sistema de design.
@@ -203,6 +222,7 @@ Copias com hash no ambiente Cursor podem existir paralelamente sob `assets/` do 
 - **Seleccção de linha vs «Start Import» já documentado** — confirmar comportamento quando há **múltiplas seleccões** ou nenhuma.
 - Persistência futura de histórico/favoritos em **servidor** vs só **local**.
 - Contrato HTTP exacto para **lookup + preview counts** antes de criar job de scrape completo.
+- **Avatares no histórico:** ver **[secção 11](PLUGIN_UI_DESIGN_SPEC.md#11-backlog-avatares-instagram-no-histórico)** (foto de perfil real vs placeholder com letra).
 
 ---
 

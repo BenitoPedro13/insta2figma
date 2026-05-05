@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'insta2figma:history:v1';
 
+/** Histórico local. Foto de perfil Instagram na lista — backlog documentado em `docs/PLUGIN_UI_DESIGN_SPEC.md` §11. */
 export type HistoryEntry = {
   username: string;
   favorite: boolean;

@@ -27,7 +27,7 @@ O `manifest.json` na pasta `dist/` referencia `code.js` e `ui.html` no mesmo dir
 - Depois corre **esbuild** em `src/code.ts` com `__html__` = string do `ui.html` gerado.
 - O ficheiro `ui.html` na raíz do pacote é **legado**; o build passou a gerar `dist/ui.html` a partir do Vite. Não dependas dele para produzir `dist/`.
 
-- **Histórico:** o ecrã inicial é a lista **History / Favorites** (dados em `localStorage`). Após um import com sucesso, o username é adicionado ou actualizado; **★** marca favoritos. **Start Import** / **+** abrem o formulário; uma linha seleccionada pré-preenche o username.
+- **Histórico:** o ecrã inicial é a lista **History / Favorites** (dados em `localStorage`). Após um import com sucesso, o username é adicionado ou actualizado; **★** marca favoritos. **Start Import** / **+** abrem o formulário; uma linha seleccionada pré-preenche o username. *(Avatares: placeholder com inicial até implementar foto de perfil — ver [docs/PLUGIN_UI_DESIGN_SPEC.md §11](../../docs/PLUGIN_UI_DESIGN_SPEC.md#11-backlog-avatares-instagram-no-histórico).)*
 
 ## Uso local (MVP)
 
