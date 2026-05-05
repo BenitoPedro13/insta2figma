@@ -8,6 +8,16 @@ Variáveis — ver [`.env.example`](./.env.example) (`JWT_SECRET`, `DATABASE_URL
 
 > **MVP auth:** `POST /v1/auth/register` e `POST /v1/auth/login` usam só **email** (sem password). Isto é apenas para desenvolvimento; produção deve seguir o fluxo recomendado na arquitetura (OIDC / sessão).
 
+## Setup rápido (recomendado)
+
+Na raiz do monorepo:
+
+```bash
+pnpm bootstrap
+```
+
+Isto já prepara `.env`, infra Docker, Prisma e migrations.
+
 ### Postgres (Docker)
 
 Na raíz do monorepo:
@@ -19,6 +29,8 @@ pnpm install
 pnpm db:migrate:deploy
 pnpm db:smoke
 ```
+
+Se já correres `pnpm bootstrap`, este bloco já foi executado.
 
 ## API HTTP
 

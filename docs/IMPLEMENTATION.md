@@ -13,6 +13,18 @@ Este guia **desdobra** o [roadmap (secção 13)](./ARQUITETURA-INSTA2FIGMA.md#13
 - [ ] **Fase 7** — Stripe + quotas atómicas + `GET /v1/me` ou `/v1/usage`
 - [ ] **Fase 8** — CORS, rate limits, observabilidade, DLQ + [checklist secção 14](./ARQUITETURA-INSTA2FIGMA.md#14-checklist-anti-padrões-llms-devem-evitar)
 
+## Onboarding DX (estado atual)
+
+Foi adicionado `pnpm bootstrap` na raiz para reduzir fricção de novos devs:
+
+- cria `.env` da API/worker quando ausentes,
+- instala dependências,
+- sobe Docker (`postgres`, `redis`, `minio`),
+- gera Prisma client,
+- aplica migrations e smoke test.
+
+Objetivo: trazer o repositório para estado funcional com um único comando.
+
 ---
 
 **Estado actual (após Fase 6 MVP + refinamentos de UX):** Plugin [`apps/figma-plugin`](../apps/figma-plugin): UI com History/Favorites, preview debounced de perfil, estimativa de imagens no CTA, import assíncrono via jobs, persistência local em `figma.clientStorage`. O `code.ts` gere autenticação MVP e chamadas API no main thread; a UI não expõe mais campos de API/email. **Próximo:** Fase 7 (Stripe / quotas). Refinar Fase 8: `networkAccess` explícito, backoff de polling, layout.

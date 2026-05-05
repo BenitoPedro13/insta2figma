@@ -15,10 +15,38 @@ via API Nest + worker BullMQ.
 ## Comandos
 
 ```bash
+pnpm bootstrap
 pnpm install
 pnpm build
 pnpm test
 pnpm lint
+```
+
+## Onboarding em 1 comando
+
+Para novos devs, o caminho recomendado é:
+
+```bash
+pnpm bootstrap
+```
+
+> Nota: `pnpm setup` é comando interno do próprio pnpm; por isso o bootstrap
+> do projeto fica em `pnpm bootstrap`.
+
+O script `scripts/setup.mjs` faz:
+
+1. cria `apps/api/.env` e `apps/worker/.env` a partir dos `.env.example` (se faltarem),
+2. instala dependências (`pnpm install`),
+3. sobe infra Docker (`postgres`, `redis`, `minio`),
+4. gera cliente Prisma,
+5. aplica migrations (`db:migrate:deploy`),
+6. executa smoke test de DB (`db:smoke`).
+
+Depois, arranca a app com:
+
+```bash
+pnpm dev:api
+pnpm dev:worker
 ```
 
 ## Mapa do monorepo
@@ -63,7 +91,7 @@ Importar no Figma após `pnpm build`: `apps/figma-plugin/dist/manifest.json` —
 
 ## Fluxo rápido de validação (repo exemplar)
 
-1. `pnpm infra:up`
+1. `pnpm bootstrap` (uma vez por máquina/projeto)
 2. `pnpm dev:api` e `pnpm dev:worker`
 3. `pnpm build` (ou build específico do plugin)
 4. Importar `apps/figma-plugin/dist/manifest.json` no Figma
@@ -72,3 +100,10 @@ Importar no Figma após `pnpm build`: `apps/figma-plugin/dist/manifest.json` —
    - ajustar posts/carrossel,
    - validar preview/estimativa,
    - importar e confirmar resultado no canvas + histórico/favoritos.
+
+## Troubleshooting rápido
+
+- `pnpm bootstrap` falha em Docker: confirmar Docker Desktop ligado e `docker compose version`.
+- `ERR_CONNECTION_REFUSED` no plugin: API não está de pé (`pnpm dev:api`) ou `PORT` diferente.
+- Job fica em `queued`: worker não está de pé (`pnpm dev:worker`) ou Redis indisponível.
+- Preview sem avatar: endpoint de preview responde sem `profilePicDataUrl` (bloqueio upstream); o fallback de UI usa placeholder.

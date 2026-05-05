@@ -33,9 +33,10 @@ O `manifest.json` na pasta `dist/` referencia `code.js` e `ui.html` no mesmo dir
 
 ## Uso local (MVP)
 
-1. **`pnpm infra:up`**, **`pnpm dev:api`** e **`pnpm dev:worker`**, com `S3_*` preenchidos (mesmos valores na API e no worker que em [apps/api/.env.example](../../apps/api/.env.example)).
-2. Abre o plugin (passos em «Importar no Figma»). No ecrã de importação, preenche **username**, ajusta posts/carrossel, valida o preview e importa.
-3. O `code.ts` (main) obtém JWT (`register`/`login`), cria job `SCRAPE_PROFILE`, faz polling até `succeeded`, chama **`?include=signedAssets`** e envia as URLs ao canvas.
+1. Corre **`pnpm bootstrap`** na raiz (onboarding automático).
+2. Arranca **`pnpm dev:api`** e **`pnpm dev:worker`**, com `S3_*` preenchidos (mesmos valores na API e no worker que em [apps/api/.env.example](../../apps/api/.env.example)).
+3. Abre o plugin (passos em «Importar no Figma»). No ecrã de importação, preenche **username**, ajusta posts/carrossel, valida o preview e importa.
+4. O `code.ts` (main) obtém JWT (`register`/`login`), cria job `SCRAPE_PROFILE`, faz polling até `succeeded`, chama **`?include=signedAssets`** e envia as URLs ao canvas.
 
 As chamadas **`fetch` à API** correm no **contexto principal do plugin** (`code.ts`), não no iframe da UI — assim **`http://127.0.0.1`** é permitido também no **Figma no browser**, sem *mixed content* no iframe. A UI envia mensagens de intenção (`profile-preview`, `import-profile`) e recebe estados via `import-status` / `import-done` / `import-error` / `profile-preview-*`.
 

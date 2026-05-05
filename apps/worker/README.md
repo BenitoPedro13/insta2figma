@@ -24,6 +24,20 @@ O worker grava linhas na tabela `assets` para todos estes ficheiros; o plugin de
 - **Ligação à Internet** (pedidos ao Instagram)
 - **MinIO** ou outro S3-compat (opcional; sem `S3_BUCKET` o job conclui só com `result_summary`)
 
+## Setup rápido (recomendado)
+
+Na raiz do monorepo:
+
+```bash
+pnpm bootstrap
+```
+
+Depois basta correr:
+
+```bash
+pnpm dev:worker
+```
+
 ## Ambiente
 
 ```bash
