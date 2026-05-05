@@ -8,6 +8,14 @@ type ImportScreenProps = {
   expandCarouselImages: boolean;
   status: string;
   importing: boolean;
+  preview: {
+    username: string;
+    mediaCount: number;
+    isPrivate: boolean;
+    profilePicUrlHd?: string;
+  } | null;
+  previewLoading: boolean;
+  previewError: string;
   onBaseChange: (v: string) => void;
   onEmailChange: (v: string) => void;
   onUsernameChange: (v: string) => void;
@@ -26,6 +34,9 @@ export function ImportScreen({
   expandCarouselImages,
   status,
   importing,
+  preview,
+  previewLoading,
+  previewError,
   onBaseChange,
   onEmailChange,
   onUsernameChange,
@@ -86,6 +97,30 @@ export function ImportScreen({
         <p className="import-hint">
           Enter only the username without &apos;@&apos;.
         </p>
+        <div className="profile-preview">
+          <span className="profile-preview-avatar" aria-hidden>
+            {preview?.profilePicUrlHd ? (
+              <img src={preview.profilePicUrlHd} alt="" className="profile-preview-avatar-img" />
+            ) : (
+              username.slice(0, 1).toUpperCase() || '?'
+            )}
+          </span>
+          <div className="profile-preview-meta">
+            <p className="profile-preview-main">
+              {previewLoading
+                ? 'A validar perfil…'
+                : preview
+                  ? `@${preview.username} · ${preview.mediaCount} posts`
+                  : username.trim()
+                    ? 'Sem preview ainda.'
+                    : 'Introduce um username para preview.'}
+            </p>
+            {preview?.isPrivate ? (
+              <p className="profile-preview-sub">Conta privada: o scrape pode não trazer posts.</p>
+            ) : null}
+            {previewError ? <p className="profile-preview-sub">{previewError}</p> : null}
+          </div>
+        </div>
 
         <div className="import-section-label">Import how many posts?</div>
         <div className="field">

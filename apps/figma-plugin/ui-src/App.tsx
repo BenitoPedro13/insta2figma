@@ -13,6 +13,12 @@ import { ImportScreen } from './screens/ImportScreen';
 import { ListScreen, type ListTab } from './screens/ListScreen';
 
 type View = 'list' | 'import';
+type ProfilePreview = {
+  username: string;
+  mediaCount: number;
+  isPrivate: boolean;
+  profilePicUrlHd?: string;
+};
 
 function normBase(b: string): string {
   return String(b ?? '')
@@ -45,6 +51,10 @@ export function App() {
   const [status, setStatus] = useState('');
   const [importing, setImporting] = useState(false);
   const lastImportUsername = useRef('');
+  const previewReqId = useRef(0);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+  const [preview, setPreview] = useState<ProfilePreview | null>(null);
 
   const onCancel = useCallback(() => {
     parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
@@ -112,6 +122,33 @@ export function App() {
         setStatus(pm.text);
         return;
       }
+      if (pm.type === 'profile-preview-data') {
+        const reqId = pm.requestId;
+        if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        setPreviewLoading(false);
+        setPreviewError('');
+        setPreview({
+          username: String(pm.username ?? ''),
+          mediaCount:
+            typeof pm.mediaCount === 'number' && Number.isFinite(pm.mediaCount)
+              ? pm.mediaCount
+              : 0,
+          isPrivate: pm.isPrivate === true,
+          profilePicUrlHd:
+            typeof pm.profilePicUrlHd === 'string' ? pm.profilePicUrlHd : undefined,
+        });
+        return;
+      }
+      if (pm.type === 'profile-preview-error') {
+        const reqId = pm.requestId;
+        if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        setPreviewLoading(false);
+        setPreview(null);
+        setPreviewError(
+          typeof pm.message === 'string' ? pm.message : 'Falha no preview do perfil.',
+        );
+        return;
+      }
       if (pm.type === 'import-error') {
         setImporting(false);
         setStatus(`Erro: ${pm.message != null ? msgToText(pm.message) : 'desconhecido'}`);
@@ -148,6 +185,41 @@ export function App() {
     parent.postMessage({ pluginMessage: { type: 'history-request' } }, '*');
     return () => window.removeEventListener('message', onMsg);
   }, [persistEntries]);
+
+  useEffect(() => {
+    if (view !== 'import' || importing) return;
+    const norm = normBase(base);
+    const mail = String(email ?? '').trim();
+    const user = String(username ?? '')
+      .trim()
+      .replace(/^@+/, '')
+      .toLowerCase();
+    if (!norm || !mail || !user) {
+      setPreviewLoading(false);
+      setPreview(null);
+      setPreviewError('');
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const reqId = previewReqId.current + 1;
+      previewReqId.current = reqId;
+      setPreviewLoading(true);
+      setPreviewError('');
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'profile-preview',
+            requestId: reqId,
+            base: norm,
+            email: mail,
+            username: user,
+          },
+        },
+        '*',
+      );
+    }, 420);
+    return () => window.clearTimeout(timer);
+  }, [view, importing, base, email, username]);
 
   const onImport = useCallback(() => {
     const norm = normBase(base);
@@ -213,6 +285,9 @@ export function App() {
             expandCarouselImages={expandCarouselImages}
             status={status}
             importing={importing}
+            preview={preview}
+            previewLoading={previewLoading}
+            previewError={previewError}
             onBaseChange={setBase}
             onEmailChange={setEmail}
             onUsernameChange={setUsername}

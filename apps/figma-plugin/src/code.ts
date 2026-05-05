@@ -221,6 +221,13 @@ type PluginMessage =
   | { type: 'history-request' }
   /** Guardado em `figma.clientStorage` (persiste entre sessões; o `localStorage` do iframe não). */
   | { type: 'history-save'; entries: unknown }
+  | {
+      type: 'profile-preview';
+      requestId: number;
+      base: string;
+      email: string;
+      username: string;
+    }
   | { type: 'create-shapes'; count: number }
   | { type: 'place-images'; urls: string[] }
   | {
@@ -418,6 +425,45 @@ async function importProfileViaApi(
   });
 }
 
+async function previewProfileViaApi(
+  base: string,
+  email: string,
+  username: string,
+): Promise<{
+  username: string;
+  profilePicUrlHd: string | null;
+  profilePicDataUrl: string | null;
+  mediaCount: number;
+  isPrivate: boolean;
+}> {
+  const token = await getToken(base, email);
+  const res = await fetch(
+    `${base}/v1/instagram/profile-preview?username=${encodeURIComponent(username)}`,
+    {
+      headers: { authorization: `Bearer ${token}` },
+    },
+  );
+  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = payload.data as Record<string, unknown> | undefined;
+  if (!res.ok || !data) {
+    throw new Error(
+      `Preview ${res.status}: ${JSON.stringify(payload.error ?? payload).slice(0, 240)}`,
+    );
+  }
+  return {
+    username: String(data.username ?? username),
+    profilePicUrlHd:
+      typeof data.profilePicUrlHd === 'string' ? data.profilePicUrlHd : null,
+    profilePicDataUrl:
+      typeof data.profilePicDataUrl === 'string' ? data.profilePicDataUrl : null,
+    mediaCount:
+      typeof data.mediaCount === 'number' && Number.isFinite(data.mediaCount)
+        ? data.mediaCount
+        : 0,
+    isPrivate: data.isPrivate === true,
+  };
+}
+
 figma.ui.onmessage = async (msg: PluginMessage) => {
   if (msg.type === 'history-request') {
     try {
@@ -498,6 +544,43 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       console.error('[Insta2Figma] import-profile', err);
       figma.notify(`Insta2Figma: ${text}`, { error: true });
       figma.ui.postMessage({ type: 'import-error', message: text });
+    }
+    return;
+  }
+
+  if (msg.type === 'profile-preview') {
+    const base = normBase(msg.base);
+    const email = String(msg.email ?? '').trim();
+    const username = String(msg.username ?? '')
+      .trim()
+      .replace(/^@+/, '')
+      .toLowerCase();
+    if (!base || !email || !username) {
+      figma.ui.postMessage({
+        type: 'profile-preview-error',
+        requestId: msg.requestId,
+        message: 'Preenche API, email e username.',
+      });
+      return;
+    }
+    try {
+      const preview = await previewProfileViaApi(base, email, username);
+      figma.ui.postMessage({
+        type: 'profile-preview-data',
+        requestId: msg.requestId,
+        username: preview.username,
+        mediaCount: preview.mediaCount,
+        isPrivate: preview.isPrivate,
+        ...(preview.profilePicDataUrl
+          ? { profilePicUrlHd: preview.profilePicDataUrl }
+          : {}),
+      });
+    } catch (err) {
+      figma.ui.postMessage({
+        type: 'profile-preview-error',
+        requestId: msg.requestId,
+        message: formatCaught(err),
+      });
     }
     return;
   }
