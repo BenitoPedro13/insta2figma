@@ -235,7 +235,23 @@ async function importProfileViaApi(
     }
     status = String(gData?.status ?? gj.status ?? '');
     notifyStatus(`${status} (${i})`);
-    if (status === 'succeeded') break;
+    if (status === 'succeeded') {
+      const rs = gData?.resultSummary;
+      if (rs !== null && typeof rs === 'object' && !Array.isArray(rs)) {
+        const sm = (rs as Record<string, unknown>).scrapingMeta;
+        if (sm !== null && typeof sm === 'object' && !Array.isArray(sm)) {
+          const req = sm.requestedMaxPosts;
+          const sample = sm.postsInSample;
+          const expanded = sm.expandCarouselImages === true;
+          if (typeof req === 'number' && typeof sample === 'number') {
+            notifyStatus(
+              `Job OK — pedido ${req} posts, carrossel ${expanded ? 'expandido' : 'só capa'}, amostra com ${sample} post(s).`,
+            );
+          }
+        }
+      }
+      break;
+    }
     if (status === 'failed') {
       const err = String(gData?.errorCode ?? '').trim();
       const msgErr = String(gData?.errorMessage ?? '').trim();

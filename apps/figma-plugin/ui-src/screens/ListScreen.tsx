@@ -9,7 +9,7 @@ type ListScreenProps = {
   onSearchChange: (q: string) => void;
   entries: HistoryEntry[];
   selectedUsername: string | null;
-  onSelectUsername: (u: string | null) => void;
+  onOpenImportForProfile: (username: string) => void;
   onToggleFavorite: (username: string) => void;
   onStartImport: () => void;
   onAddNew: () => void;
@@ -29,7 +29,7 @@ export function ListScreen({
   onSearchChange,
   entries,
   selectedUsername,
-  onSelectUsername,
+  onOpenImportForProfile,
   onToggleFavorite,
   onStartImport,
   onAddNew,
@@ -98,7 +98,8 @@ export function ListScreen({
                   <button
                     type="button"
                     className={`account-row ${sel ? 'is-selected' : ''}`}
-                    onClick={() => onSelectUsername(sel ? null : row.username)}
+                    onClick={() => onOpenImportForProfile(row.username)}
+                    aria-label={`Importar @{row.username}`}
                   >
                     <span className="account-avatar" aria-hidden>
                       {row.username.slice(0, 1).toUpperCase()}

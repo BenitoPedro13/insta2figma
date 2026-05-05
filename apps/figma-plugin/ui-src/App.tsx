@@ -51,13 +51,22 @@ export function App() {
   }, []);
 
   const openImport = useCallback(
-    (opts?: { clearUsername?: boolean }) => {
+    (opts?: { clearUsername?: boolean; username?: string }) => {
       setView('import');
       setStatus('');
       setListStatus('');
       if (opts?.clearUsername) {
         setUsername('');
         setSelectedUsername(null);
+        return;
+      }
+      if (opts?.username != null && String(opts.username).trim() !== '') {
+        const u = String(opts.username)
+          .trim()
+          .replace(/^@+/, '')
+          .toLowerCase();
+        setUsername(u);
+        setSelectedUsername(u);
         return;
       }
       if (selectedUsername) {
@@ -176,7 +185,7 @@ export function App() {
             onSearchChange={setSearch}
             entries={historyEntries}
             selectedUsername={selectedUsername}
-            onSelectUsername={setSelectedUsername}
+            onOpenImportForProfile={(u) => openImport({ username: u })}
             onToggleFavorite={onToggleFavoriteRow}
             onStartImport={() => openImport()}
             onAddNew={() => openImport({ clearUsername: true })}

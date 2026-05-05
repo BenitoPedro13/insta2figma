@@ -77,7 +77,7 @@ flowchart TD
 **Regras de produto (lista):**
 
 - **Ordem sugerida em History:** por **última utilização / último import** (mais recente no topo).
-- **Seleção explícita (recomendação para v1):** toque na **linha** (área não-estrela) **selecciona** essa entrada; **«Start Import»** abre o formulário com **username e avatar pré-preenchidos**. Toque repetido pode alternar só a selecção. **+/Start Import** sem selecção: formulário **vazio** (somente placeholders).
+- **Toque na linha** (área não-estrela): abre de imediato o **ecrã de importação** com **username** dessa entrada pré-preenchido (a linha pode ficar visualmente destacada como «última escolhida» ao voltar à lista). **«Start Import»** no rodapé abre o formulário com o username da última linha escolhida, se existir; caso contrário mantém o que já estava no campo. **+** abre o formulário **vazio**.
 - **Estrela:** toggle de favorito; **não** abre formulário nem inicia import. Persistência: **`figma.clientStorage`** (main thread, via mensagens UI↔︎plugin); o `localStorage` do iframe do plugin **não** persiste ao fechar.
 
 ---

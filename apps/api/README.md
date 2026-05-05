@@ -82,7 +82,7 @@ curl -s "$BASE/v1/jobs/$JOB_ID?include=signedAssets" \
   -H "authorization: Bearer $TOKEN"
 ```
 
-Corpo de job validado com **`@insta2figma/shared-contracts`** (`createJobBodySchema`). `result_summary` bem-sucedido segue `scrapeJobResultSummaryV5Schema` (Instagram `web_profile_info`). Correr `pnpm dev:worker` na raíz junto da API — ver [apps/worker/README.md](../../apps/worker/README.md).
+Corpo de job validado com **`@insta2figma/shared-contracts`** (`createJobBodySchema`). Os campos opcionais **`input.maxPosts`** (1–50) e **`input.expandCarouselImages`** são gravados tal como enviados e o worker usa-os no scrape e nos uploads (ver `apps/worker`). Em jobs `succeeded`, `result_summary` segue `scrapeJobResultSummaryV5Schema` e inclui **`scrapingMeta`** (eco do pedido + tamanho da amostra parseada — útil para confirmar que as opções foram aplicadas). Correr `pnpm dev:worker` na raíz junto da API — ver [apps/worker/README.md](../../apps/worker/README.md).
 
 ### Prisma (CLI)
 

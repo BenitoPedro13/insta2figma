@@ -91,17 +91,27 @@ export async function processInstagramScrapeJob(
       maxPosts,
     )) as ScrapeJobResultSummaryV5;
 
+    const expandCarousel = body.input.expandCarouselImages === true;
+    const summaryWithMeta: ScrapeJobResultSummaryV5 = {
+      ...summary,
+      scrapingMeta: {
+        requestedMaxPosts: maxPosts,
+        expandCarouselImages: expandCarousel,
+        postsInSample: summary.postsSample.length,
+      },
+    };
+
     const prefix = await uploadScrapeAssets({
       prisma,
       jobId: row.id,
-      summary,
-      expandCarouselImages: body.input.expandCarouselImages === true,
+      summary: summaryWithMeta,
+      expandCarouselImages: expandCarousel,
     });
 
     await markSucceeded(
       prisma,
       row.id,
-      summary as unknown as Prisma.InputJsonValue,
+      summaryWithMeta as unknown as Prisma.InputJsonValue,
       prefix,
     );
   } catch (e) {

@@ -94,4 +94,30 @@ describe('scrapeJobResultSummaryV5Schema', () => {
     });
     expect(data.postsSample).toHaveLength(1);
   });
+
+  it('aceita scrapingMeta opcional', () => {
+    const data = scrapeJobResultSummaryV5Schema.parse({
+      phase: 5,
+      source: 'instagram_web_profile_info',
+      username: 'demo',
+      profile: {
+        id: '1',
+        username: 'demo',
+        fullName: null,
+        biography: null,
+        followerCount: 0,
+        followingCount: 0,
+        isPrivate: false,
+        isVerified: false,
+        profilePicUrlHd: null,
+      },
+      postsSample: [],
+      scrapingMeta: {
+        requestedMaxPosts: 24,
+        expandCarouselImages: true,
+        postsInSample: 0,
+      },
+    });
+    expect(data.scrapingMeta?.requestedMaxPosts).toBe(24);
+  });
 });

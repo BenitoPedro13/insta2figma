@@ -98,6 +98,16 @@ export const instagramProfileSummarySchema = z.object({
 
 export type InstagramProfileSummary = z.infer<typeof instagramProfileSummarySchema>;
 
+/** Eco do pedido do job (útil para depuração / UI — confirma que API + worker aplicaram opções). */
+export const scrapeJobScrapingMetaSchema = z.object({
+  requestedMaxPosts: z.number().int().min(1).max(50),
+  expandCarouselImages: z.boolean(),
+  /** Tamanho de `postsSample` após parse (limitado pelo pedido e pelas edges devolvidas pelo IG). */
+  postsInSample: z.number().int().min(0),
+});
+
+export type ScrapeJobScrapingMeta = z.infer<typeof scrapeJobScrapingMetaSchema>;
+
 /** Resultado persistido em `jobs.result_summary` após scrape real (Fase 5+). */
 export const scrapeJobResultSummaryV5Schema = z.object({
   phase: z.literal(5),
@@ -105,6 +115,7 @@ export const scrapeJobResultSummaryV5Schema = z.object({
   username: z.string(),
   profile: instagramProfileSummarySchema,
   postsSample: z.array(instagramPostSummaryItemSchema),
+  scrapingMeta: scrapeJobScrapingMetaSchema.optional(),
 });
 
 export type ScrapeJobResultSummaryV5 = z.infer<
