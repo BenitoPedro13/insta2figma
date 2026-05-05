@@ -11,6 +11,11 @@ import { Prisma } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { SCRAPE_INSTAGRAM_V1_QUEUE } from '../queue/scrape-queue.name';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
+
+import type { JobSignedAssetDto } from '@insta2figma/shared-contracts';
+
+export type { JobSignedAssetDto };
 
 export type JobResponse = {
   id: string;
@@ -25,17 +30,20 @@ export type JobResponse = {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  /** Presente apenas com `GET /v1/jobs/:id?include=signedAssets` e job succeeded. */
+  signedAssets?: JobSignedAssetDto[];
 };
 
 @Injectable()
 export class JobsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
     @InjectQueue(SCRAPE_INSTAGRAM_V1_QUEUE)
     private readonly scrapeQueue: Queue,
   ) {}
 
-  toResponse(job: Job): JobResponse {
+  toResponse(job: Job, extras?: { signedAssets?: JobSignedAssetDto[] }): JobResponse {
     return {
       id: job.id,
       type: job.type,
@@ -49,6 +57,9 @@ export class JobsService {
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString() ?? null,
       finishedAt: job.finishedAt?.toISOString() ?? null,
+      ...(extras?.signedAssets !== undefined && {
+        signedAssets: extras.signedAssets,
+      }),
     };
   }
 
@@ -135,7 +146,11 @@ export class JobsService {
     return this.toResponse(job);
   }
 
-  async getOne(userId: string, jobId: string): Promise<JobResponse> {
+  async getOne(
+    userId: string,
+    jobId: string,
+    opts?: { signedAssets?: boolean },
+  ): Promise<JobResponse> {
     const job = await this.prisma.job.findUnique({ where: { id: jobId } });
     if (!job) {
       throw new NotFoundException('Job não encontrado.');
@@ -143,6 +158,43 @@ export class JobsService {
     if (job.userId !== userId) {
       throw new ForbiddenException('Sem acesso a este job.');
     }
+
+    if (
+      opts?.signedAssets &&
+      job.status === 'succeeded' &&
+      this.storage.isConfigured()
+    ) {
+      const assets = await this.prisma.asset.findMany({
+        where: { jobId },
+        orderBy: { id: 'asc' },
+      });
+      const signed = await this.storage.signGetObjects(
+        assets.map((a) => a.storageKey),
+      );
+      const keyToUrl = new Map(
+        signed.map((s) => [s.storageKey, s] as const),
+      );
+      const signedAssets: JobSignedAssetDto[] = assets
+        .map((a) => {
+          const s = keyToUrl.get(a.storageKey);
+          if (!s) return null;
+          return {
+            id: a.id,
+            storageKey: a.storageKey,
+            contentType: a.contentType,
+            url: s.url,
+            expiresAt: s.expiresAt,
+          };
+        })
+        .filter((x): x is JobSignedAssetDto => x !== null);
+
+      return this.toResponse(job, { signedAssets });
+    }
+
+    if (opts?.signedAssets && job.status === 'succeeded') {
+      return this.toResponse(job, { signedAssets: [] });
+    }
+
     return this.toResponse(job);
   }
 }

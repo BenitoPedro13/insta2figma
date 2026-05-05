@@ -1,9 +1,12 @@
 import type { Job, PrismaClient } from '@prisma/client';
 import { Prisma } from '@prisma/client';
-import { createJobBodySchema } from '@insta2figma/shared-contracts';
-
-import type { InstagramDataSource } from './http-instagram-data-source';
+import {
+  createJobBodySchema,
+  type ScrapeJobResultSummaryV5,
+} from '@insta2figma/shared-contracts';
+import { uploadScrapeAssets } from '../storage/upload-scrape-assets';
 import { InstagramUpstreamError } from './instagram-upstream-error';
+import { InstagramDataSource } from './http-instagram-data-source';
 
 /** Normalização mínima (API já valida formato). */
 export function normalizeInstagramUsername(raw: string): string {
@@ -35,6 +38,7 @@ async function markSucceeded(
   prisma: PrismaClient,
   jobId: string,
   resultSummary: Prisma.InputJsonValue,
+  resultStoragePrefix: string | null,
 ): Promise<void> {
   await prisma.job.update({
     where: { id: jobId },
@@ -42,6 +46,9 @@ async function markSucceeded(
       status: 'succeeded',
       finishedAt: new Date(),
       resultSummary,
+      ...(resultStoragePrefix !== null
+        ? { resultStoragePrefix }
+        : {}),
     },
   });
 }
@@ -79,14 +86,22 @@ export async function processInstagramScrapeJob(
   maxPosts = Math.min(50, Math.max(1, maxPosts));
 
   try {
-    const summary = await source.fetchProfilePostsSample(
+    const summary = (await source.fetchProfilePostsSample(
       usernameNorm,
       maxPosts,
-    );
+    )) as ScrapeJobResultSummaryV5;
+
+    const prefix = await uploadScrapeAssets({
+      prisma,
+      jobId: row.id,
+      summary,
+    });
+
     await markSucceeded(
       prisma,
       row.id,
       summary as unknown as Prisma.InputJsonValue,
+      prefix,
     );
   } catch (e) {
     if (e instanceof InstagramUpstreamError) {

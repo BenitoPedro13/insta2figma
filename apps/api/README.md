@@ -4,7 +4,7 @@
 
 ## Ambiente
 
-Variáveis — ver [`.env.example`](./.env.example) (inclui `JWT_SECRET`, `PORT`, `DATABASE_URL`, **`REDIS_URL`**). Se Redis estiver indisponível ao criar job, a API pode responder **503** e marcar o job como falhado (`QUEUE_UNAVAILABLE`).
+Variáveis — ver [`.env.example`](./.env.example) (`JWT_SECRET`, `DATABASE_URL`, **`REDIS_URL`**, **`S3_*`** para MinIO / R2 / S3). Se Redis estiver indisponível ao criar job, pode devolver **503** (`QUEUE_UNAVAILABLE`).
 
 > **MVP auth:** `POST /v1/auth/register` e `POST /v1/auth/login` usam só **email** (sem password). Isto é apenas para desenvolvimento; produção deve seguir o fluxo recomendado na arquitetura (OIDC / sessão).
 
@@ -39,7 +39,7 @@ Por omissão ouve em `http://localhost:3333` (ajusta `PORT` no `.env`).
 | POST | `/v1/auth/register` | — body `{ "email": "..." }` |
 | POST | `/v1/auth/login` | — body `{ "email": "..." }` |
 | POST | `/v1/jobs` | Bearer JWT; header opcional `idempotency-key` |
-| GET | `/v1/jobs/:id` | Bearer JWT |
+| GET | `/v1/jobs/:id` | Bearer JWT; query opcional `include=signedAssets` (URLs GET assinadas para `assets` do job, só se `succeeded`) |
 
 Respostas de sucesso sob envelope `{ "data": … }`; erros `{ "error": { "code", "message" } }` (ver arquitetura §7).
 
@@ -69,6 +69,10 @@ echo "$RESP"
 
 JOB_ID='…'  # substitui pelo UUID real
 curl -s "$BASE/v1/jobs/$JOB_ID" \
+  -H "authorization: Bearer $TOKEN"
+
+# Com URLs assinadas MinIO/S3 (Fase 6)
+curl -s "$BASE/v1/jobs/$JOB_ID?include=signedAssets" \
   -H "authorization: Bearer $TOKEN"
 ```
 

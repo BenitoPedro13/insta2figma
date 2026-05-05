@@ -119,3 +119,14 @@ export const INSTAGRAM_JOB_ERROR_CODES = [
 
 export type InstagramJobErrorCode =
   (typeof INSTAGRAM_JOB_ERROR_CODES)[number];
+
+/** URLs assinadas anexadas ao job com `GET ?include=signedAssets` (Fase 6). */
+export const jobSignedAssetDtoSchema = z.object({
+  id: z.string().uuid(),
+  storageKey: z.string(),
+  contentType: z.string(),
+  url: z.string(),
+  expiresAt: z.string(),
+});
+
+export type JobSignedAssetDto = z.infer<typeof jobSignedAssetDtoSchema>;

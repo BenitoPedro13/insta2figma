@@ -28,6 +28,37 @@ services:
       timeout: 5s
       retries: 12
 
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - '${MINIO_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-insta2figma}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-insta2figma_dev}
+    volumes:
+      - insta2figma_minio:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        for i in $$(seq 1 40); do
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+        mc mb local/insta2figma --ignore-existing &&
+        exit 0;
+        sleep 2;
+        done;
+        exit 1
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-insta2figma}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-insta2figma_dev}
+
 volumes:
   insta2figma_pgdata:
   insta2figma_redis:
+  insta2figma_minio:

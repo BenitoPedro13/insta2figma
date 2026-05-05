@@ -1,12 +1,15 @@
-# Worker Insta2Figma (Fase 5)
+# Worker Insta2Figma (Fases 5–6)
 
-Consumidor **BullMQ** da fila `scrape-instagram-v1` (ver `@insta2figma/shared-contracts`). Descarrega o perfil público via **`web_profile_info`** (mesma família de pedidos que [`crawler/main.py`](../../crawler/main.py)): `HttpInstagramDataSource` + parsing defensivo, erros mapeados para `IG_*` / `INTERNAL` e **retries** só para casos `retryable` (ex.: 429, 5xx, rede).
+Consumidor **BullMQ** da fila `scrape-instagram-v1` (ver `@insta2figma/shared-contracts`). Descarrega o perfil público via **`web_profile_info`**: `HttpInstagramDataSource` + parsing defensivo, erros `IG_*` / `INTERNAL` e retries BullMQ.
+
+Com **`S3_*`** definido (MinIO local ou S3-compat), após scrape faz **upload** da foto de perfil e até `STORAGE_MAX_THUMBNAILS` thumbnails para o bucket, cria linhas **`assets`** e define `jobs.result_storage_prefix` (`jobs/{jobId}/`).
 
 ## Pré-requisitos
 
 - Postgres + migrações (como na API)
 - Redis (`pnpm infra:up` na raíz do monorepo)
-- **Ligação à Internet** (o worker faz `fetch` ao Instagram)
+- **Ligação à Internet** (pedidos ao Instagram)
+- **MinIO** ou outro S3-compat (opcional; sem `S3_BUCKET` o job conclui só com `result_summary`)
 
 ## Ambiente
 
@@ -14,7 +17,7 @@ Consumidor **BullMQ** da fila `scrape-instagram-v1` (ver `@insta2figma/shared-co
 cp apps/worker/.env.example apps/worker/.env
 ```
 
-Ajusta `DATABASE_URL` e `REDIS_URL` para coincidir com a API. Opcional: `IG_FETCH_TIMEOUT_MS` (por omissão 30000), `WORKER_CONCURRENCY`.
+Ajusta `DATABASE_URL`, `REDIS_URL` e (para cópias no bucket) **`S3_*`** como na API. Opcional: `IG_FETCH_TIMEOUT_MS`, `WORKER_CONCURRENCY`, `STORAGE_MAX_THUMBNAILS`.
 
 ## Correr
 
