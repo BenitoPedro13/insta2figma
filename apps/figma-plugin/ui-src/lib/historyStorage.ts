@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'insta2figma:history:v1';
+export const HISTORY_STORAGE_KEY = 'insta2figma:history:v1';
 
 /** Histórico local. Foto de perfil Instagram na lista — backlog documentado em `docs/PLUGIN_UI_DESIGN_SPEC.md` §11. */
 export type HistoryEntry = {
@@ -7,7 +7,8 @@ export type HistoryEntry = {
   lastUsedIso: string;
 };
 
-function parse(raw: unknown): HistoryEntry[] {
+/** Interpreta dados vindos de `clientStorage` (main) ou migração. */
+export function parseHistoryPayload(raw: unknown): HistoryEntry[] {
   if (!Array.isArray(raw)) return [];
   const out: HistoryEntry[] = [];
   for (const row of raw) {
@@ -19,27 +20,33 @@ function parse(raw: unknown): HistoryEntry[] {
       username,
       favorite: Boolean(u.favorite),
       lastUsedIso:
-        typeof u.lastUsedIso === 'string' && u.lastUsedIso ? u.lastUsedIso : new Date(0).toISOString(),
+        typeof u.lastUsedIso === 'string' && u.lastUsedIso
+          ? u.lastUsedIso
+          : new Date(0).toISOString(),
     });
   }
   return out;
 }
 
-export function loadHistory(): HistoryEntry[] {
+/**
+ * Fallback: `window.localStorage` no iframe nem sempre sobrevive ao fechar o plugin.
+ * Mantido só para migrar dados antigos uma vez para `figma.clientStorage`.
+ */
+export function loadLegacyIframeHistory(): HistoryEntry[] {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
     if (!raw) return [];
-    return parse(JSON.parse(raw));
+    return parseHistoryPayload(JSON.parse(raw));
   } catch {
     return [];
   }
 }
 
-export function saveHistory(entries: HistoryEntry[]): void {
+export function clearLegacyIframeHistory(): void {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    window.localStorage.removeItem(HISTORY_STORAGE_KEY);
   } catch {
-    /* ignore quota */
+    /* ignore */
   }
 }
 
@@ -50,7 +57,10 @@ export function sortHistory(entries: HistoryEntry[]): HistoryEntry[] {
   );
 }
 
-export function upsertAfterSuccessfulImport(entries: HistoryEntry[], usernameNorm: string): HistoryEntry[] {
+export function upsertAfterSuccessfulImport(
+  entries: HistoryEntry[],
+  usernameNorm: string,
+): HistoryEntry[] {
   const key = usernameNorm.trim().toLowerCase();
   if (!key) return entries;
   const now = new Date().toISOString();

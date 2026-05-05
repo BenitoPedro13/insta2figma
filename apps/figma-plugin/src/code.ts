@@ -28,6 +28,9 @@ function formatCaught(err: unknown): string {
 
 figma.showUI(__html__, { width: 380, height: 480 });
 
+/** Alinhado com `historyStorage.ts` HISTORY_STORAGE_KEY — persistência via `clientStorage`. */
+const HISTORY_STORAGE_KEY = 'insta2figma:history:v1';
+
 const SAMPLE_JPEG_URL =
   'https://instagram.fsdu12-1.fna.fbcdn.net/v/t51.2885-15/279910414_168521058871473_7937661385851861231_n.jpg?stp=dst-jpg_e15_tt6&_nc_ht=instagram.fsdu12-1.fna.fbcdn.net&_nc_cat=109&_nc_ohc=xk0PPr11jRcQ7kNvgFq_3fe&_nc_gid=51bc36fd697b4d51a1d103f8b8dfaeca&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AYA7-Hwk3X6EBbzzfLeql0TXF9_IRKmsk-kplZ0MOH3eDg&oe=676F4807&_nc_sid=8b3546';
 
@@ -120,6 +123,9 @@ async function placeSignedImages(urls: string[]): Promise<void> {
 
 type PluginMessage =
   | { type: 'cancel' }
+  | { type: 'history-request' }
+  /** Guardado em `figma.clientStorage` (persiste entre sessões; o `localStorage` do iframe não). */
+  | { type: 'history-save'; entries: unknown }
   | { type: 'create-shapes'; count: number }
   | { type: 'place-images'; urls: string[] }
   | {
@@ -184,7 +190,9 @@ async function importProfileViaApi(
   notifyStatus('A autenticar…');
   const token = await getToken(base, email);
 
-  notifyStatus('A criar job…');
+  notifyStatus(
+    `A criar job (${options.maxPosts} posts recentes · carrossel: ${options.expandCarouselImages ? 'todas as imagens' : 'só capa'})…`,
+  );
   const idem = `figma-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const jr = await fetch(`${base}/v1/jobs`, {
     method: 'POST',
@@ -268,6 +276,37 @@ async function importProfileViaApi(
 }
 
 figma.ui.onmessage = async (msg: PluginMessage) => {
+  if (msg.type === 'history-request') {
+    try {
+      const raw = await figma.clientStorage.getAsync(HISTORY_STORAGE_KEY);
+      let entries: unknown = [];
+      if (Array.isArray(raw)) {
+        entries = raw;
+      } else if (typeof raw === 'string') {
+        try {
+          entries = JSON.parse(raw) as unknown;
+        } catch {
+          entries = [];
+        }
+      }
+      figma.ui.postMessage({ type: 'history-data', entries });
+    } catch (e) {
+      console.warn('[Insta2Figma] history-request', e);
+      figma.ui.postMessage({ type: 'history-data', entries: [] });
+    }
+    return;
+  }
+
+  if (msg.type === 'history-save') {
+    try {
+      const arr = Array.isArray(msg.entries) ? msg.entries : [];
+      await figma.clientStorage.setAsync(HISTORY_STORAGE_KEY, arr);
+    } catch (e) {
+      console.error('[Insta2Figma] history-save', e);
+    }
+    return;
+  }
+
   if (msg.type === 'cancel') {
     figma.closePlugin();
     return;

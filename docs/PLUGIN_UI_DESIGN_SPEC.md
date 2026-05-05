@@ -78,7 +78,7 @@ flowchart TD
 
 - **Ordem sugerida em History:** por **última utilização / último import** (mais recente no topo).
 - **Seleção explícita (recomendação para v1):** toque na **linha** (área não-estrela) **selecciona** essa entrada; **«Start Import»** abre o formulário com **username e avatar pré-preenchidos**. Toque repetido pode alternar só a selecção. **+/Start Import** sem selecção: formulário **vazio** (somente placeholders).
-- **Estrela:** toggle de favorito; **não** abre formulário nem inicia import. Persistência inicial: **`localStorage`** no UI até existir API de utilizador/sync.
+- **Estrela:** toggle de favorito; **não** abre formulário nem inicia import. Persistência: **`figma.clientStorage`** (main thread, via mensagens UI↔︎plugin); o `localStorage` do iframe do plugin **não** persiste ao fechar.
 
 ---
 
@@ -189,7 +189,7 @@ flowchart TD
 ### O que falta especificar/implementar (quando for prioridade)
 
 1. **Fonte da URL:** o scraper/job ou um endpoint **`GET`** de *profile preview* deve expor um URL estável ou dados suficientes para obter um thumbnail (CDN Instagram, cópia no nosso storage, ou URL assinada MinIO igual às fotos dos posts — avaliar TTL e direitos).
-2. **Persistência:** alargar `HistoryEntry` com algo como **`profileImageUrl`** (string) ou **`profileImageStorageKey`**; continuar em `localStorage` ou migrar quando existir utilizador servidor.
+2. **Persistência:** alargar `HistoryEntry` com algo como **`profileImageUrl`** (string) ou **`profileImageStorageKey`**; guardar através do mesmo fluxo `history-save` / `clientStorage` (ou sync servidor quando existir utilizador na API).
 3. **Renderização na UI:** `<img>` com `crossOrigin`/cache e **fallback** para a letra se o fetch falhar ou o URL expirar; considerar **`figma.fetch`** vs carregar apenas no iframe (atenção a domínios em `manifest.networkAccess`).
 4. **Actualização:** após `import-done` bem-sucedido ou após resolver username no formulário, **actualizar** a entrada no histórico com a nova URL de avatar (evitar listas só com letras quando já temos media no job).
 

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChromeHeader } from './components/ChromeHeader';
 import {
-  loadHistory,
-  saveHistory,
+  clearLegacyIframeHistory,
+  loadLegacyIframeHistory,
+  parseHistoryPayload,
   sortHistory,
   toggleFavorite,
   upsertAfterSuccessfulImport,
@@ -32,7 +33,7 @@ export function App() {
   const [view, setView] = useState<View>('list');
   const [listTab, setListTab] = useState<ListTab>('history');
   const [search, setSearch] = useState('');
-  const [historyEntries, setHistoryEntries] = useState(() => sortHistory(loadHistory()));
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
   const [listStatus, setListStatus] = useState('');
 
@@ -70,7 +71,7 @@ export function App() {
     (updater: HistoryEntry[] | ((prev: HistoryEntry[]) => HistoryEntry[])) => {
       setHistoryEntries((prev) => {
         const next = typeof updater === 'function' ? updater(prev) : updater;
-        saveHistory(next);
+        parent.postMessage({ pluginMessage: { type: 'history-save', entries: next } }, '*');
         return next;
       });
     },
@@ -79,11 +80,26 @@ export function App() {
 
   useEffect(() => {
     const onMsg = (ev: MessageEvent<{ pluginMessage?: unknown }>) => {
-      const pm = ev.data?.pluginMessage as
-        | { type?: string; text?: string; message?: unknown; placed?: number; total?: number; error?: boolean }
-        | undefined;
-      if (!pm?.type) return;
-      if (pm.type === 'import-status' && pm.text) {
+      const pm = ev.data?.pluginMessage as Record<string, unknown> | undefined;
+      if (!pm || typeof pm.type !== 'string') return;
+
+      if (pm.type === 'history-data') {
+        let entries = parseHistoryPayload(pm.entries);
+        if (entries.length === 0) {
+          const legacy = loadLegacyIframeHistory();
+          if (legacy.length > 0) {
+            entries = sortHistory(legacy);
+            clearLegacyIframeHistory();
+            parent.postMessage({ pluginMessage: { type: 'history-save', entries } }, '*');
+          }
+        } else {
+          clearLegacyIframeHistory();
+        }
+        setHistoryEntries(sortHistory(entries));
+        return;
+      }
+
+      if (pm.type === 'import-status' && typeof pm.text === 'string') {
         setStatus(pm.text);
         return;
       }
@@ -94,10 +110,10 @@ export function App() {
       }
       if (pm.type !== 'import-done') return;
       setImporting(false);
-      const done = pm;
+      const done = pm as { error?: unknown; placed?: number; total?: number };
       const ok = !done.error;
       const summary = ok
-        ? `Colocados ${done.placed}/${done.total} no canvas.`
+        ? `Colocados ${done.placed ?? 0}/${done.total ?? 0} no canvas.`
         : 'Colocação: nada importado ou erro.';
       setStatus(summary);
       if (ok && lastImportUsername.current) {
@@ -107,6 +123,7 @@ export function App() {
       }
     };
     window.addEventListener('message', onMsg);
+    parent.postMessage({ pluginMessage: { type: 'history-request' } }, '*');
     return () => window.removeEventListener('message', onMsg);
   }, [persistEntries]);
 
