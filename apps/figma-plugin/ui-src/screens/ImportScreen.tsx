@@ -1,8 +1,6 @@
 import { useCallback, type FormEvent } from 'react';
 
 type ImportScreenProps = {
-  base: string;
-  email: string;
   username: string;
   maxPosts: number;
   expandCarouselImages: boolean;
@@ -19,8 +17,6 @@ type ImportScreenProps = {
   } | null;
   previewLoading: boolean;
   previewError: string;
-  onBaseChange: (v: string) => void;
-  onEmailChange: (v: string) => void;
   onUsernameChange: (v: string) => void;
   onMaxPostsChange: (v: number) => void;
   onExpandCarouselChange: (v: boolean) => void;
@@ -30,8 +26,6 @@ type ImportScreenProps = {
 };
 
 export function ImportScreen({
-  base,
-  email,
   username,
   maxPosts,
   expandCarouselImages,
@@ -40,8 +34,6 @@ export function ImportScreen({
   preview,
   previewLoading,
   previewError,
-  onBaseChange,
-  onEmailChange,
   onUsernameChange,
   onMaxPostsChange,
   onExpandCarouselChange,
@@ -72,27 +64,6 @@ export function ImportScreen({
       </button>
       <div className="list-rule" />
       <form className="import-form" onSubmit={onSubmit}>
-        <div className="import-section-label">Ligação (MVP)</div>
-        <div className="field">
-          <label htmlFor="api-base">API (base)</label>
-          <input
-            id="api-base"
-            type="text"
-            value={base}
-            onChange={(e) => onBaseChange(e.target.value)}
-            autoComplete="off"
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="email">Email (sessão)</label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
-            placeholder="dev@local.test"
-          />
-        </div>
         <div className="import-section-label">What Instagram?</div>
         <div className="field">
           <label htmlFor="username">Username (sem @)</label>

@@ -4,6 +4,19 @@ Consumidor **BullMQ** da fila `scrape-instagram-v1` (ver `@insta2figma/shared-co
 
 Com **`S3_*`** definido (MinIO local ou S3-compat), após scrape faz **upload** da foto de perfil (`profile.*`, usada no avatar da lista) e de thumbnails dos posts (até `STORAGE_MAX_THUMBNAILS`). O plugin filtra `profile.*` para **não** colocar avatar no canvas, e usa essa URL assinada no histórico/favoritos.
 
+## Convenção de assets no bucket
+
+Prefixo por job: `jobs/{jobId}/`
+
+- `jobs/{jobId}/profile.{ext}`: avatar do perfil para histórico/favoritos.
+- `jobs/{jobId}/thumbs/{shortcode}.{ext}`: capa principal do post.
+- `jobs/{jobId}/thumbs/{shortcode}_{i}.{ext}`: extras de carrossel quando expandido.
+
+O worker grava linhas na tabela `assets` para todos estes ficheiros; o plugin decide o uso:
+
+- `profile.*` -> UI/lista
+- `thumbs/*` -> canvas Figma
+
 ## Pré-requisitos
 
 - Postgres + migrações (como na API)

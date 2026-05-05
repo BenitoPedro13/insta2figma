@@ -23,12 +23,6 @@ type ProfilePreview = {
   estimatedCarouselExtras: number;
 };
 
-function normBase(b: string): string {
-  return String(b ?? '')
-    .trim()
-    .replace(/\/+$/, '');
-}
-
 function msgToText(v: unknown): string {
   if (typeof v === 'string') return v;
   try {
@@ -46,8 +40,6 @@ export function App() {
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
   const [listStatus, setListStatus] = useState('');
 
-  const [base, setBase] = useState('http://127.0.0.1:3333');
-  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [maxPosts, setMaxPosts] = useState(12);
   const [expandCarouselImages, setExpandCarouselImages] = useState(false);
@@ -206,13 +198,11 @@ export function App() {
 
   useEffect(() => {
     if (view !== 'import' || importing) return;
-    const norm = normBase(base);
-    const mail = String(email ?? '').trim();
     const user = String(username ?? '')
       .trim()
       .replace(/^@+/, '')
       .toLowerCase();
-    if (!norm || !mail || !user) {
+    if (!user) {
       setPreviewLoading(false);
       setPreview(null);
       setPreviewError('');
@@ -228,8 +218,6 @@ export function App() {
           pluginMessage: {
             type: 'profile-preview',
             requestId: reqId,
-            base: norm,
-            email: mail,
             username: user,
             maxPosts,
             expandCarouselImages,
@@ -239,17 +227,15 @@ export function App() {
       );
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [view, importing, base, email, username, maxPosts, expandCarouselImages]);
+  }, [view, importing, username, maxPosts, expandCarouselImages]);
 
   const onImport = useCallback(() => {
-    const norm = normBase(base);
-    const mail = String(email ?? '').trim();
     const user = String(username ?? '')
       .trim()
       .replace(/^@+/, '')
       .toLowerCase();
-    if (!norm || !mail || !user) {
-      setStatus('Preenche API, email e username.');
+    if (!user) {
+      setStatus('Preenche username.');
       return;
     }
     lastImportUsername.current = user;
@@ -260,8 +246,6 @@ export function App() {
       {
         pluginMessage: {
           type: 'import-profile',
-          base: norm,
-          email: mail,
           username: user,
           maxPosts: posts,
           expandCarouselImages,
@@ -269,7 +253,7 @@ export function App() {
       },
       '*',
     );
-  }, [base, email, username, maxPosts, expandCarouselImages]);
+  }, [username, maxPosts, expandCarouselImages]);
 
   const onToggleFavoriteRow = useCallback(
     (u: string) => {
@@ -298,8 +282,6 @@ export function App() {
           />
         ) : (
           <ImportScreen
-            base={base}
-            email={email}
             username={username}
             maxPosts={maxPosts}
             expandCarouselImages={expandCarouselImages}
@@ -308,8 +290,6 @@ export function App() {
             preview={preview}
             previewLoading={previewLoading}
             previewError={previewError}
-            onBaseChange={setBase}
-            onEmailChange={setEmail}
             onUsernameChange={setUsername}
             onMaxPostsChange={setMaxPosts}
             onExpandCarouselChange={setExpandCarouselImages}

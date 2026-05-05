@@ -15,7 +15,7 @@ Este guia **desdobra** o [roadmap (secção 13)](./ARQUITETURA-INSTA2FIGMA.md#13
 
 ---
 
-**Estado actual (após Fase 6 MVP):** Plugin [`apps/figma-plugin`](../apps/figma-plugin): UI faz `register/login`, `POST /v1/jobs`, polling até `succeeded`, `GET ...?include=signedAssets`, `postMessage` com URLs; **`code.ts`** descarrega bytes no sandbox e cria rectângulos com `IMAGE` fill. **Próximo:** Fase 7 (Stripe / quotas). Refinar Fase 8: `networkAccess` explícito, backoff de polling, layout.
+**Estado actual (após Fase 6 MVP + refinamentos de UX):** Plugin [`apps/figma-plugin`](../apps/figma-plugin): UI com History/Favorites, preview debounced de perfil, estimativa de imagens no CTA, import assíncrono via jobs, persistência local em `figma.clientStorage`. O `code.ts` gere autenticação MVP e chamadas API no main thread; a UI não expõe mais campos de API/email. **Próximo:** Fase 7 (Stripe / quotas). Refinar Fase 8: `networkAccess` explícito, backoff de polling, layout.
 
 **Princípios transversais:** separação API / trabalho pesado; fila persistente (**BullMQ**, não apenas `Promise`/`setImmediate` em produção); contratos explícitos em `packages/shared-contracts`; secrets só no servidor; idempotência em billing/quota; preferir URLs assinadas para media ([secção 2](./ARQUITETURA-INSTA2FIGMA.md#2-princípios-arquiteturais-obrigatórios)).
 

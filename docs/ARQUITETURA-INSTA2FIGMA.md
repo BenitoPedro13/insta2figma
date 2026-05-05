@@ -1,8 +1,10 @@
 # Arquitetura Insta2Figma — Documento de referência para implementação
 
-**Versão:** 1.0  
+**Versão:** 1.1  
 **Audiência:** humanos e LLMs que implementam o sistema.  
 **Regra:** este documento define decisões **obrigatórias** salvo onde estiver marcado como *opcional* ou *fase posterior*.
+
+> Nota de alinhamento com o estado do repo: a UI do plugin já não expõe campos de conexão (`API base`/`email`). Essas configurações são geridas no main thread do plugin e devem evoluir para gestão de sessão/settings sem poluir o fluxo de produto.
 
 ---
 

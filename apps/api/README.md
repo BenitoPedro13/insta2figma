@@ -85,6 +85,27 @@ curl -s "$BASE/v1/jobs/$JOB_ID?include=signedAssets" \
 
 Corpo de job validado com **`@insta2figma/shared-contracts`** (`createJobBodySchema`). Os campos opcionais **`input.maxPosts`** (1–50) e **`input.expandCarouselImages`** são gravados tal como enviados e o worker usa-os no scrape e nos uploads (ver `apps/worker`). Em jobs `succeeded`, `result_summary` segue `scrapeJobResultSummaryV5Schema` e inclui **`scrapingMeta`** (eco do pedido + tamanho da amostra parseada — útil para confirmar que as opções foram aplicadas). Correr `pnpm dev:worker` na raíz junto da API — ver [apps/worker/README.md](../../apps/worker/README.md).
 
+### `GET /v1/instagram/profile-preview` (detalhado)
+
+Query:
+
+- `username` (obrigatório)
+- `maxPosts` (opcional, default 12, clamp 1–50)
+- `expandCarouselImages` (`true|false`)
+
+Resposta (envelope `data`) inclui:
+
+- `username`
+- `mediaCount` (contagem total de posts no perfil)
+- `isPrivate`
+- `profilePicUrlHd` (URL original IG)
+- `profilePicDataUrl` (avatar inline para UI)
+- `estimatedPostCovers`
+- `estimatedCarouselExtras`
+- `estimatedImportImages` (`covers + extras`)
+
+Este endpoint suporta o preview do formulário do plugin sem criar job.
+
 ### Prisma (CLI)
 
 ```bash

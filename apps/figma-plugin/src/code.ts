@@ -30,6 +30,8 @@ figma.showUI(__html__, { width: 380, height: 480 });
 
 /** Alinhado com `historyStorage.ts` HISTORY_STORAGE_KEY — persistência via `clientStorage`. */
 const HISTORY_STORAGE_KEY = 'insta2figma:history:v1';
+const DEFAULT_API_BASE = 'http://127.0.0.1:3333';
+const DEFAULT_SESSION_EMAIL = 'plugin@insta2figma.local';
 
 const SAMPLE_JPEG_URL =
   'https://instagram.fsdu12-1.fna.fbcdn.net/v/t51.2885-15/279910414_168521058871473_7937661385851861231_n.jpg?stp=dst-jpg_e15_tt6&_nc_ht=instagram.fsdu12-1.fna.fbcdn.net&_nc_cat=109&_nc_ohc=xk0PPr11jRcQ7kNvgFq_3fe&_nc_gid=51bc36fd697b4d51a1d103f8b8dfaeca&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AYA7-Hwk3X6EBbzzfLeql0TXF9_IRKmsk-kplZ0MOH3eDg&oe=676F4807&_nc_sid=8b3546';
@@ -224,8 +226,6 @@ type PluginMessage =
   | {
       type: 'profile-preview';
       requestId: number;
-      base: string;
-      email: string;
       username: string;
       maxPosts?: number;
       expandCarouselImages?: boolean;
@@ -234,8 +234,6 @@ type PluginMessage =
   | { type: 'place-images'; urls: string[] }
   | {
       type: 'import-profile';
-      base: string;
-      email: string;
       username: string;
       maxPosts?: number;
       expandCarouselImages?: boolean;
@@ -531,8 +529,8 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
   }
 
   if (msg.type === 'import-profile') {
-    const base = normBase(msg.base);
-    const email = String(msg.email ?? '').trim();
+    const base = normBase(DEFAULT_API_BASE);
+    const email = DEFAULT_SESSION_EMAIL;
     const username = String(msg.username ?? '')
       .trim()
       .replace(/^@+/, '')
@@ -548,13 +546,13 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       ),
     );
     const expandCarouselImages = msg.expandCarouselImages === true;
-    if (!base || !email || !username) {
-      figma.notify('Insta2Figma: Preenche API, email e username.', {
+    if (!username) {
+      figma.notify('Insta2Figma: Preenche username.', {
         error: true,
       });
       figma.ui.postMessage({
         type: 'import-error',
-        message: 'Preenche API, email e username.',
+        message: 'Preenche username.',
       });
       return;
     }
@@ -573,8 +571,8 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
   }
 
   if (msg.type === 'profile-preview') {
-    const base = normBase(msg.base);
-    const email = String(msg.email ?? '').trim();
+    const base = normBase(DEFAULT_API_BASE);
+    const email = DEFAULT_SESSION_EMAIL;
     const username = String(msg.username ?? '')
       .trim()
       .replace(/^@+/, '')
@@ -590,11 +588,11 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       ),
     );
     const expandCarouselImages = msg.expandCarouselImages === true;
-    if (!base || !email || !username) {
+    if (!username) {
       figma.ui.postMessage({
         type: 'profile-preview-error',
         requestId: msg.requestId,
-        message: 'Preenche API, email e username.',
+        message: 'Preenche username.',
       });
       return;
     }

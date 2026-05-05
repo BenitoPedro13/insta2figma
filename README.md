@@ -2,6 +2,10 @@
 
 Monorepo descrito em [docs/ARQUITETURA-INSTA2FIGMA.md](docs/ARQUITETURA-INSTA2FIGMA.md).
 
+Estado atual: plugin Figma com UI React/Vite, histórico/favoritos persistidos em
+`figma.clientStorage`, preview de perfil (avatar + estimativas) e import assíncrono
+via API Nest + worker BullMQ.
+
 ## Requisitos
 
 - [Node.js](https://nodejs.org/) 20+
@@ -16,6 +20,14 @@ pnpm build
 pnpm test
 pnpm lint
 ```
+
+## Mapa do monorepo
+
+- `apps/figma-plugin`: plugin (UI + `code.ts` no main thread do Figma).
+- `apps/api`: API Nest (`/v1`, auth MVP, jobs, preview de perfil).
+- `apps/worker`: consumidor BullMQ (scrape Instagram + uploads para S3/MinIO).
+- `packages/shared-contracts`: contratos Zod/tipos compartilhados.
+- `docs/`: arquitetura, plano de implementação e especificação visual da UI.
 
 ### Infra local (Postgres + Redis)
 
@@ -44,6 +56,19 @@ pnpm dev:worker    # scrape + upload MinIO quando S3_* está definido
 
 Copia também `apps/worker/.env.example` → `apps/worker/.env` (BD + Redis alinhados à API).
 
-Rotas e exemplos `curl`: [apps/api/README.md](apps/api/README.md). Worker: [apps/worker/README.md](apps/worker/README.md).
+Rotas e exemplos `curl`: [apps/api/README.md](apps/api/README.md).  
+Worker e política de assets: [apps/worker/README.md](apps/worker/README.md).
 
 Importar no Figma após `pnpm build`: `apps/figma-plugin/dist/manifest.json` — ver [apps/figma-plugin/README.md](apps/figma-plugin/README.md).
+
+## Fluxo rápido de validação (repo exemplar)
+
+1. `pnpm infra:up`
+2. `pnpm dev:api` e `pnpm dev:worker`
+3. `pnpm build` (ou build específico do plugin)
+4. Importar `apps/figma-plugin/dist/manifest.json` no Figma
+5. No plugin:
+   - escrever username,
+   - ajustar posts/carrossel,
+   - validar preview/estimativa,
+   - importar e confirmar resultado no canvas + histórico/favoritos.

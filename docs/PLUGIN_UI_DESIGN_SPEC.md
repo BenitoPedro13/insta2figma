@@ -109,6 +109,7 @@ flowchart TD
 
 - Título forte.
 - Linha com **avatar** (placeholder até validação bem-sucedida) + **campo texto** só **username**, **sem `@`** à esquerda do campo (política: normalizar entrada removendo `@` opcionalmente).
+- **Nota de produto (estado atual):** campos de infraestrutura (`API base`, `email`) foram removidos da UI para aderir ao design; a ligação fica no main thread do plugin.
 - **Estados mutualmente exclusivos** abaixo do campo:
   - **Idle:** ícone informação + *Enter only the username without '@'* (cinza).
   - **Loading:** spinner + *Searching username* (cinza).
@@ -122,6 +123,7 @@ flowchart TD
 - Auxiliar:
   - Enquanto o perfil **não** está resolvido: *Posts will be imported chronologically*.
   - Com perfil válido: *This Instagram has **N** posts* (N em negrito).
+  - Breakdown explícito recomendado: **capas**, **extras de carrossel**, **total**.
 - **Validação:** valor inteiro **≥ 1** para activar import; se > total de posts, **clamp** para o máximo com **feedback** (toast ou texto curto) — definir na implementação.
 
 ### Bloco C — «Preferences»
@@ -134,15 +136,15 @@ flowchart TD
 - **Import (primário):**
   - **Disabled:** utilizador não resolvido, loading, erro, ou número de posts inválido/0.
   - **Enabled:** critérios satisfeitos.
-  - **Label dinâmico:** usar **«Import N Images»** onde **N é o número de imagens esperadas**, não apenas o número de posts. Sem dados de carousel: pode mostrar‑se **«Import»** até existir pré‑cálculo, ou igualar posts a imagens só quando a opção carousel estiver desactivada — documentar comportamento degradado aceite na primeira entrega técnica se a API não suportar ainda pré‑visualização por post.
+  - **Label dinâmico:** usar **«Import N Images»** onde **N é o número de imagens esperadas**, não apenas o número de posts.
 
 ---
 
 ## 7. Regras de negócio — API / dados
 
-1. **Resolução de username (debounced):** pedido ao backend para obter **avatar**, **contagem total de posts** e dados necessários para **pré‑cálculo das imagens** nos últimos **P posts** quando *carousel*=on.
-2. **Pré‑cálculo de N imagens:** com *Export all carousel images* ligado e **posts = P**, N = Σ (imagens por post) nos **P posts mais recentes**. Se a API não expuser contagem por post na v1:
-   - **Opção degradada:** rótulo do botão = **«Import P posts»** ou **«Import»** até o contrato estar disponível; ou estimativa conservadora (documentada como «preview pago»).
+1. **Resolução de username (debounced):** pedido ao backend para obter **avatar**, **contagem total de posts** e dados para **pré‑cálculo das imagens**.
+2. **Pré‑cálculo de N imagens:** com *Export all carousel images* ligado e **posts = P**, N = Σ (imagens por post) nos **P posts mais recentes**.
+   - Estado atual: endpoint de preview já devolve `estimatedPostCovers`, `estimatedCarouselExtras` e `estimatedImportImages`.
 3. **Ordem de importação:** mais recentes primeiro (alinhado ao texto «chronologically» da UI como ordem cronológica do feed: clarificar como **retro‑chronological** / **newest first** na copy final).
 4. **Após import bem-sucedido:** regressar à lista; **History** actualiza ou cria entrada (avatar, `@handle`, timestamp); favorito mantém‑se se já existia.
 
@@ -182,7 +184,7 @@ flowchart TD
 
 ## 11. Backlog: avatares Instagram no histórico
 
-**Estado actual (MVP):** após um import com sucesso, o `code.ts` lê **`profilePicUrlHd`** do `result_summary`, faz **`fetch` no main thread** com `Referer` Instagram (CDN costuma negar hotlink no `<img>` do iframe) e envia na mensagem **`import-done`** uma string **`data:image/…;base64,…`** (fallback: URL crua). A UI guarda em **`HistoryEntry.profilePicUrl`** e [`HistoryAvatar.tsx`](../apps/figma-plugin/ui-src/components/HistoryAvatar.tsx) faz **`<img>`** com fallback para **letra**.
+**Estado actual (MVP):** após import com sucesso, o plugin usa preferencialmente o asset assinado `profile.*` para avatar no histórico/favoritos e mantém fallback para placeholder com letra. No preview do formulário, a API devolve `profilePicDataUrl` (base64) para evitar bloqueios de hotlink no iframe.
 
 **Melhorias futuras (quando for prioridade):**
 
