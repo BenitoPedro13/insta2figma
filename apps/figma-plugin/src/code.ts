@@ -60,6 +60,75 @@ async function fetchImageBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer());
 }
 
+/** Headers alinhados ao worker — CDN do IG costuma exigir `Referer` válido no main thread. */
+const IG_AVATAR_FETCH_HEADERS: Record<string, string> = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+  Referer: 'https://www.instagram.com/',
+};
+
+const MAX_PROFILE_PIC_FETCH_BYTES = 850_000;
+
+function bytesToBase64(bytes: Uint8Array): string {
+  const alphabet =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  let i = 0;
+  while (i + 2 < bytes.length) {
+    const n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    out += alphabet[(n >> 18) & 63];
+    out += alphabet[(n >> 12) & 63];
+    out += alphabet[(n >> 6) & 63];
+    out += alphabet[n & 63];
+    i += 3;
+  }
+  const rem = bytes.length - i;
+  if (rem === 1) {
+    const n = bytes[i] << 16;
+    out += alphabet[(n >> 18) & 63];
+    out += alphabet[(n >> 12) & 63];
+    out += '==';
+  } else if (rem === 2) {
+    const n = (bytes[i] << 16) | (bytes[i + 1] << 8);
+    out += alphabet[(n >> 18) & 63];
+    out += alphabet[(n >> 12) & 63];
+    out += alphabet[(n >> 6) & 63];
+    out += '=';
+  }
+  return out;
+}
+
+/** Na UI, `<img src="https://fbcdn…">` falha com frequência; fazemos fetch no main + data URL para o histórico. */
+async function fetchInstagramAvatarAsDataUrl(
+  cdnUrl: string,
+): Promise<string | undefined> {
+  try {
+    const res = (await fetch(cdnUrl.trim(), {
+      method: 'GET',
+      redirect: 'follow',
+      headers: IG_AVATAR_FETCH_HEADERS,
+    })) as unknown as {
+      ok: boolean;
+      arrayBuffer: () => Promise<ArrayBuffer>;
+      headers?: { get?: (name: string) => string | null };
+    };
+    if (!res.ok) return undefined;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength === 0 || buf.byteLength > MAX_PROFILE_PIC_FETCH_BYTES) {
+      return undefined;
+    }
+    let ct = res.headers?.get?.('content-type')?.split(';')[0]?.trim() ?? '';
+    if (!ct.startsWith('image/')) ct = 'image/jpeg';
+    const b64 = bytesToBase64(buf);
+    if (!b64) return undefined;
+    return `data:${ct};base64,${b64}`;
+  } catch (e) {
+    console.warn('[Insta2Figma] falha ao inline avatar IG', e);
+    return undefined;
+  }
+}
+
 /** Lê URL da foto no `result_summary` do job (`profile.profilePicUrlHd`). */
 function pickProfilePicUrlFromJobResultSummary(resultSummary: unknown): string | undefined {
   if (
@@ -82,7 +151,7 @@ function pickProfilePicUrlFromJobResultSummary(resultSummary: unknown): string |
     : undefined;
 }
 
-/** Coloca imagens em grelha (URLs presign MinIO/S3). Opcionalmente envia `profilePicUrl` à UI para o histórico (não vai para o canvas). */
+/** Coloca imagens em grelha (URLs presign MinIO/S3). `profilePicUrl`: CDN ou `data:` para o histórico (não vai para o canvas). */
 async function placeSignedImages(
   urls: string[],
   opts?: { profilePicUrl?: string },
@@ -297,18 +366,36 @@ async function importProfileViaApi(
     { headers: { authorization: `Bearer ${token}` } },
   );
   const sj = (await sr.json().catch(() => ({}))) as Record<string, unknown>;
-  const sData = sj.data as { signedAssets?: { url?: string }[] } | undefined;
+  const sData = sj.data as
+    | { signedAssets?: { url?: string; storageKey?: string }[] }
+    | undefined;
   if (!sr.ok) {
     throw new Error(`${sr.status}: ${JSON.stringify(sj)}`);
   }
   const fromData = sData?.signedAssets;
-  const fromRoot = sj.signedAssets as { url?: string }[] | undefined;
+  const fromRoot = sj.signedAssets as
+    | { url?: string; storageKey?: string }[]
+    | undefined;
   const list = Array.isArray(fromData)
     ? fromData
     : Array.isArray(fromRoot)
       ? fromRoot
       : [];
+  const profileAsset = list.find((a) =>
+    typeof a?.storageKey === 'string'
+      ? /\/profile\.[a-z0-9]+$/i.test(String(a.storageKey))
+      : false,
+  );
+  const profileUrlFromSignedAssets =
+    typeof profileAsset?.url === 'string' && profileAsset.url.trim() !== ''
+      ? profileAsset.url.trim()
+      : undefined;
   const urls = list
+    .filter((a) =>
+      typeof a?.storageKey === 'string'
+        ? !/\/profile\.[a-z0-9]+$/i.test(String(a.storageKey))
+        : true,
+    )
     .map((a) => (a?.url ? String(a.url) : ''))
     .filter(Boolean);
 
@@ -317,7 +404,15 @@ async function importProfileViaApi(
   }
 
   notifyStatus(`A colocar ${urls.length} imagem(ns) no canvas…`);
-  const profilePicForHistory = pickProfilePicUrlFromJobResultSummary(lastResultSummary);
+  const rawProfilePic = pickProfilePicUrlFromJobResultSummary(lastResultSummary);
+  let profilePicForHistory: string | undefined;
+  if (profileUrlFromSignedAssets) {
+    profilePicForHistory = profileUrlFromSignedAssets;
+  } else if (rawProfilePic) {
+    notifyStatus('A sincronizar foto do perfil…');
+    profilePicForHistory =
+      (await fetchInstagramAvatarAsDataUrl(rawProfilePic)) ?? rawProfilePic;
+  }
   await placeSignedImages(urls, {
     ...(profilePicForHistory ? { profilePicUrl: profilePicForHistory } : {}),
   });

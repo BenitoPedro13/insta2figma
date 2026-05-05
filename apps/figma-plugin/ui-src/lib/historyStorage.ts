@@ -1,7 +1,8 @@
 export const HISTORY_STORAGE_KEY = 'insta2figma:history:v1';
 
 /**
- * Histórico local. `profilePicUrl` vem do `result_summary` do job (CDN Instagram; pode expirar — a UI faz fallback para a letra).
+ * Histórico local. `profilePicUrl`: URL da CDN ou `data:image/…;base64,…` (preferida,
+ * vinda do fetch no main thread — o `<img>` na UI do plugin bloqueia fbcdn com frequência).
  */
 export type HistoryEntry = {
   username: string;

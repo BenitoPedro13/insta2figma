@@ -2,7 +2,7 @@
 
 Consumidor **BullMQ** da fila `scrape-instagram-v1` (ver `@insta2figma/shared-contracts`). Descarrega o perfil público via **`web_profile_info`**: `HttpInstagramDataSource` + parsing defensivo, erros `IG_*` / `INTERNAL` e retries BullMQ.
 
-Com **`S3_*`** definido (MinIO local ou S3-compat), após scrape faz **upload** de thumbnails dos posts (até `STORAGE_MAX_THUMBNAILS`; a foto de perfil **não** entra nos `assets`), cria linhas **`assets`** e define `jobs.result_storage_prefix` (`jobs/{jobId}/`).
+Com **`S3_*`** definido (MinIO local ou S3-compat), após scrape faz **upload** da foto de perfil (`profile.*`, usada no avatar da lista) e de thumbnails dos posts (até `STORAGE_MAX_THUMBNAILS`). O plugin filtra `profile.*` para **não** colocar avatar no canvas, e usa essa URL assinada no histórico/favoritos.
 
 ## Pré-requisitos
 

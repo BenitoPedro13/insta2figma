@@ -182,7 +182,7 @@ flowchart TD
 
 ## 11. Backlog: avatares Instagram no histórico
 
-**Estado actual (MVP):** após um import com sucesso, o `code.ts` extrai **`profilePicUrlHd`** do `result_summary` do job e envia na mensagem **`import-done`**; a UI guarda em **`HistoryEntry.profilePicUrl`** (`historyStorage` → `clientStorage`) e a lista renderiza [`HistoryAvatar.tsx`](../apps/figma-plugin/ui-src/components/HistoryAvatar.tsx): **`<img>`** com **fallback** para a **letra** se o pedido falhar (rede, URL expirada pela CDN do Instagram, etc.).
+**Estado actual (MVP):** após um import com sucesso, o `code.ts` lê **`profilePicUrlHd`** do `result_summary`, faz **`fetch` no main thread** com `Referer` Instagram (CDN costuma negar hotlink no `<img>` do iframe) e envia na mensagem **`import-done`** uma string **`data:image/…;base64,…`** (fallback: URL crua). A UI guarda em **`HistoryEntry.profilePicUrl`** e [`HistoryAvatar.tsx`](../apps/figma-plugin/ui-src/components/HistoryAvatar.tsx) faz **`<img>`** com fallback para **letra**.
 
 **Melhorias futuras (quando for prioridade):**
 
