@@ -3,7 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "outputs": ["node_modules/.prisma/**"],
+      "outputs": ["dist/**", "node_modules/.prisma/**"],
       "cache": false
     },
     "lint": {
@@ -11,7 +11,7 @@
     },
     "test": {
       "cache": false,
-      "env": ["DATABASE_URL"]
+      "env": ["DATABASE_URL", "JWT_SECRET"]
     }
   }
 }

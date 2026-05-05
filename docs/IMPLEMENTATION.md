@@ -6,7 +6,7 @@ Este guia **desdobra** o [roadmap (secção 13)](./ARQUITETURA-INSTA2FIGMA.md#13
 
 - [x] **Fase 1** — Monorepo (`pnpm` + Turborepo), `packages/shared-contracts`, `apps/figma-plugin` a partir do template legado
 - [x] **Fase 2** — PostgreSQL + migrations (`users`, `jobs`, `assets` opcional)
-- [ ] **Fase 3** — API NestJS MVP: `POST/GET /v1/jobs` **só DB, sem fila** (temporário, desenvolvimento)
+- [x] **Fase 3** — API NestJS MVP: `POST/GET /v1/jobs` **só DB, sem fila** (temporário; JWT `register`/`login`)
 - [ ] **Fase 4** — Redis + BullMQ na API + `apps/worker` com scrape **simulado**
 - [ ] **Fase 5** — Scrape Instagram real (`InstagramDataSource`, erros classificados)
 - [ ] **Fase 6** — Object storage S3-compat + URLs assinadas + plugin com polling no canvas
@@ -15,7 +15,7 @@ Este guia **desdobra** o [roadmap (secção 13)](./ARQUITETURA-INSTA2FIGMA.md#13
 
 ---
 
-**Estado actual (após Fase 2):** Postgres local via [`docker-compose.yml`](../docker-compose.yml); Prisma em [`apps/api`](../apps/api) com modelos `User`, `Job`, `Asset`, enum `JobStatus` e migração [`20260505210000_init`](../apps/api/prisma/migrations/20260505210000_init/migration.sql). Comandos: `pnpm infra:up`, `pnpm db:migrate:deploy`, `pnpm db:smoke`. **Em falta para o produto alvo:** Nest HTTP em `apps/api` (Fase 3), worker, Redis, etc. `crawler/` (Python) permanece exploratório.
+**Estado actual (após Fase 3):** NestJS em [`apps/api`](../apps/api) (`pnpm dev:api`): `GET /v1/health`, `POST /v1/auth/register`, `POST /v1/auth/login`, `POST /v1/jobs`, `GET /v1/jobs/:id`; envelope `{ data | error }`; jobs persistidos **sem fila** (normalmente `status: queued` na BD). **Próximo:** Fase 4 (Redis + BullMQ + `apps/worker`). Infra Postgres: [`docker-compose.yml`](../docker-compose.yml). Prisma migrações em [`apps/api/prisma/migrations/`](../apps/api/prisma/migrations/).
 
 **Princípios transversais:** separação API / trabalho pesado; fila persistente (**BullMQ**, não apenas `Promise`/`setImmediate` em produção); contratos explícitos em `packages/shared-contracts`; secrets só no servidor; idempotência em billing/quota; preferir URLs assinadas para media ([secção 2](./ARQUITETURA-INSTA2FIGMA.md#2-princípios-arquiteturais-obrigatórios)).
 

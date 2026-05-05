@@ -28,6 +28,14 @@ pnpm db:migrate:deploy   # primeira vez ou CI
 pnpm db:smoke
 ```
 
-Ver [apps/api/README.md](apps/api/README.md).
+### API Nest (Fase 3, JWT)
+
+Actualiza o `apps/api/.env` com `JWT_SECRET` (copia de `.env.example` se precisares). Depois:
+
+```bash
+pnpm dev:api
+```
+
+Rotas e exemplos `curl` em [apps/api/README.md](apps/api/README.md).
 
 Importar no Figma após `pnpm build`: `apps/figma-plugin/dist/manifest.json` — ver [apps/figma-plugin/README.md](apps/figma-plugin/README.md).
