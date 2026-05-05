@@ -8,6 +8,6 @@ dist
 !.env.example
 apps/api/.env
 apps/worker/.env
-
+.pnpm-store
 # Legado Figma (gerado ao lado do fonte)
 code.js
