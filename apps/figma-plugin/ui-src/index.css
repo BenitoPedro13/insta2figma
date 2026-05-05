@@ -161,3 +161,249 @@ body {
   max-height: 72px;
   overflow: auto;
 }
+
+/* —— List screen (History / Favorites) —— */
+
+.plugin-body--flush {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.list-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.list-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px 6px;
+}
+
+.list-tab {
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  margin: 0;
+  margin-right: 12px;
+  font: inherit;
+  font-weight: 500;
+  color: #999;
+  cursor: pointer;
+}
+
+.list-tab.is-active {
+  color: #222;
+  font-weight: 700;
+}
+
+.list-tab-add {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  padding: 4px 8px;
+  font-size: 18px;
+  line-height: 1;
+  color: #555;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.list-tab-add:hover {
+  background: #f0f0f0;
+}
+
+.list-rule {
+  height: 1px;
+  background: #e5e5e5;
+  flex-shrink: 0;
+}
+
+.list-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.list-search-icon {
+  color: #aaa;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.list-search-input {
+  flex: 1;
+  border: none;
+  padding: 4px 0;
+  font: inherit;
+  outline: none;
+  min-width: 0;
+}
+
+.list-search-input::placeholder {
+  color: #bbb;
+}
+
+.list-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 64px;
+}
+
+.list-empty {
+  padding: 28px 16px;
+  text-align: center;
+}
+
+.list-empty-text {
+  margin: 0;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.45;
+}
+
+.account-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.account-item {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.account-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px 10px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.account-row:hover {
+  background: #fafafa;
+}
+
+.account-row.is-selected {
+  background: #f0f7ff;
+}
+
+.account-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e8e8e8;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 13px;
+  color: #555;
+  flex-shrink: 0;
+}
+
+.account-handle {
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-star {
+  flex-shrink: 0;
+  width: 40px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  color: #ccc;
+  padding: 0;
+}
+
+.account-star:hover {
+  color: #999;
+}
+
+.account-star.is-on {
+  color: #222;
+}
+
+.list-foot-status {
+  margin: 0;
+  padding: 6px 12px 0;
+  font-size: 11px;
+  color: #666;
+}
+
+.list-footer {
+  padding: 12px;
+  flex-shrink: 0;
+  border-top: 1px solid #e5e5e5;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.list-cta {
+  font: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.list-cta.primary {
+  padding: 8px 14px;
+  background: #0d99ff;
+  color: #fff;
+  border: 1px solid #0d99ff;
+}
+
+/* —— Import screen —— */
+
+.import-screen {
+  padding: 12px;
+}
+
+.import-back {
+  border: none;
+  background: transparent;
+  padding: 2px 0 10px;
+  font: inherit;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.import-back:hover {
+  color: #111;
+}
+
+.import-form {
+  padding-top: 4px;
+}
+
+.import-section-label {
+  font-weight: 600;
+  font-size: 12px;
+  margin: 12px 0 6px;
+  color: #222;
+}
+
+.import-form > .field:first-of-type {
+  margin-top: 0;
+}

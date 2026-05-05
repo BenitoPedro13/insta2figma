@@ -27,10 +27,12 @@ O `manifest.json` na pasta `dist/` referencia `code.js` e `ui.html` no mesmo dir
 - Depois corre **esbuild** em `src/code.ts` com `__html__` = string do `ui.html` gerado.
 - O ficheiro `ui.html` na raíz do pacote é **legado**; o build passou a gerar `dist/ui.html` a partir do Vite. Não dependas dele para produzir `dist/`.
 
+- **Histórico:** o ecrã inicial é a lista **History / Favorites** (dados em `localStorage`). Após um import com sucesso, o username é adicionado ou actualizado; **★** marca favoritos. **Start Import** / **+** abrem o formulário; uma linha seleccionada pré-preenche o username.
+
 ## Uso local (MVP)
 
 1. **`pnpm infra:up`**, **`pnpm dev:api`** e **`pnpm dev:worker`**, com `S3_*` preenchidos (mesmos valores na API e no worker que em [apps/api/.env.example](../../apps/api/.env.example)).
-2. Abre o plugin (passos acima) e define **API** (ex.: `http://127.0.0.1:3333`), **email** e **username** Instagram → **Importar perfil para o canvas**.
+2. Abre o plugin (passos em «Importar no Figma»). No ecrã de importação, define **API** (ex.: `http://127.0.0.1:3333`), **email** e **username** Instagram → confirma o import no formulário (ou selecciona uma linha na lista e **Start Import** para pré-preencher o username).
 3. A UI obtém JWT (`register` ou `login`), cria um job `SCRAPE_PROFILE`, faz polling até `succeeded`, chama **`?include=signedAssets`** e envia as URLs ao `code.ts`, que faz `fetch`, `createImage` e uma grelha de rectângulos.
 
 As chamadas **`fetch` à API** correm no **contexto principal do plugin** (`code.ts`), não no iframe da UI — assim **`http://127.0.0.1`** é permitido também no **Figma no browser**, sem *mixed content* no iframe. A UI apenas envia `{ type: 'import-profile', base, email, username }` e recebe actualizações via `import-status` / `import-done` / `import-error`.
