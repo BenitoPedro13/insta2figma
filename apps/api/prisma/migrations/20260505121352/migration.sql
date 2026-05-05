@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "assets" ALTER COLUMN "id" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "jobs" ALTER COLUMN "id" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "users" ALTER COLUMN "id" DROP DEFAULT;

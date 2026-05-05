@@ -1,17 +1,83 @@
-<h2>Rectangle Creator</h2>
-<p>Count: <input id="count" type="number" value="5"></p>
-<button id="create">Create</button>
-<button id="cancel">Cancel</button>
+<h2>Insta2Figma</h2>
+<p>
+  API (base)<br/>
+  <input id="base" type="text" style="width:100%;box-sizing:border-box" value="http://127.0.0.1:3333" />
+</p>
+<p>
+  Email (sessão MVP)<br/>
+  <input id="email" type="email" style="width:100%;box-sizing:border-box" placeholder="dev@local.test" />
+</p>
+<p>
+  Username Instagram<br/>
+  <input id="username" type="text" style="width:100%;box-sizing:border-box" placeholder="google" />
+</p>
+<p><button id="import">Importar perfil para o canvas</button></p>
+<p><button id="cancel">Fechar</button></p>
+<p id="status" style="font-size:11px;color:#666;max-height:72px;overflow:auto"></p>
 <script>
+const $ = (id) => document.getElementById(id);
 
-document.getElementById('create').onclick = () => {
-  const textbox = document.getElementById('count');
-  const count = parseInt(textbox.value, 10);
-  parent.postMessage({ pluginMessage: { type: 'create-shapes', count } }, '*')
+function setStatus(t) {
+  $('status').textContent = t;
 }
 
-document.getElementById('cancel').onclick = () => {
-  parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*')
+function msgToText(v) {
+  if (typeof v === 'string') return v;
+  try {
+    return JSON.stringify(v);
+  } catch (e) {
+    return String(v);
+  }
 }
 
+function normBase(b) {
+  return String(b || '').trim().replace(/\/+$/, '');
+}
+
+$('import').onclick = () => {
+  const base = normBase($('base').value);
+  const email = String($('email').value || '').trim();
+  const usernameRaw = String($('username').value || '').trim().replace(/^@+/, '');
+  if (!base || !email || !usernameRaw) {
+    setStatus('Preenche API, email e username.');
+    return;
+  }
+  $('import').disabled = true;
+  setStatus('A arrancar…');
+  parent.postMessage(
+    {
+      pluginMessage: {
+        type: 'import-profile',
+        base: base,
+        email: email,
+        username: usernameRaw.toLowerCase(),
+      },
+    },
+    '*',
+  );
+};
+
+$('cancel').onclick = () => {
+  parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
+};
+
+window.addEventListener('message', function (ev) {
+  const pm = ev.data && ev.data.pluginMessage;
+  if (!pm || !pm.type) return;
+  if (pm.type === 'import-status' && pm.text) {
+    setStatus(pm.text);
+    return;
+  }
+  if (pm.type === 'import-error') {
+    $('import').disabled = false;
+    setStatus('Erro: ' + (pm.message != null ? msgToText(pm.message) : 'desconhecido'));
+    return;
+  }
+  if (pm.type !== 'import-done') return;
+  $('import').disabled = false;
+  var t = pm.error
+    ? 'Colocação: nada importado ou erro.'
+    : 'Colocados ' + pm.placed + '/' + pm.total + ' no canvas.';
+  setStatus(t);
+});
 </script>

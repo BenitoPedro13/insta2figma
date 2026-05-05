@@ -9,13 +9,13 @@ Este guia **desdobra** o [roadmap (secção 13)](./ARQUITETURA-INSTA2FIGMA.md#13
 - [x] **Fase 3** — API NestJS MVP: `POST/GET /v1/jobs` **só DB, sem fila** (temporário; JWT `register`/`login`)
 - [x] **Fase 4** — Redis + BullMQ na API + `apps/worker` com scrape **simulado**
 - [x] **Fase 5** — Scrape Instagram real (`InstagramDataSource`, erros classificados)
-- [x] **Fase 6** — Object storage S3-compat (**MinIO** em dev) + uploads no worker + URLs assinadas na API; *plugin Figma (polling + imagens no canvas) ainda por alinhar*
+- [x] **Fase 6** — MinIO/S3-compat, uploads worker, presign API e plugin (`polling`, thumbnails no canvas)
 - [ ] **Fase 7** — Stripe + quotas atómicas + `GET /v1/me` ou `/v1/usage`
 - [ ] **Fase 8** — CORS, rate limits, observabilidade, DLQ + [checklist secção 14](./ARQUITETURA-INSTA2FIGMA.md#14-checklist-anti-padrões-llms-devem-evitar)
 
 ---
 
-**Estado actual (após Fase 6 infra/API):** **MinIO** no [`docker-compose.yml`](../docker-compose.yml); worker faz **PutObject** de avatar + thumbnails (tabela **`assets`**); API expõe **`GET /v1/jobs/:id?include=signedAssets`** (`StorageService`, AWS SDK presign). **Próximo:** consumir estas URLs no **plugin Figma** (polling + `fetch`/imagens); depois **Fase 7** (Stripe/quota).
+**Estado actual (após Fase 6 MVP):** Plugin [`apps/figma-plugin`](../apps/figma-plugin): UI faz `register/login`, `POST /v1/jobs`, polling até `succeeded`, `GET ...?include=signedAssets`, `postMessage` com URLs; **`code.ts`** descarrega bytes no sandbox e cria rectângulos com `IMAGE` fill. **Próximo:** Fase 7 (Stripe / quotas). Refinar Fase 8: `networkAccess` explícito, backoff de polling, layout.
 
 **Princípios transversais:** separação API / trabalho pesado; fila persistente (**BullMQ**, não apenas `Promise`/`setImmediate` em produção); contratos explícitos em `packages/shared-contracts`; secrets só no servidor; idempotência em billing/quota; preferir URLs assinadas para media ([secção 2](./ARQUITETURA-INSTA2FIGMA.md#2-princípios-arquiteturais-obrigatórios)).
 

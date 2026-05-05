@@ -12,17 +12,43 @@ async function bootstrap(): Promise<void> {
   const config = app.get(ConfigService);
   app.setGlobalPrefix('v1');
   const corsStr = config.get<string>('CORS_ORIGINS');
-  const corsOrigins =
+  const fromEnv =
     corsStr
       ?.split(',')
       .map((s) => s.trim())
       .filter(Boolean) ?? [];
-  if (corsOrigins.length > 0) {
-    app.enableCors({
-      origin: corsOrigins,
-      credentials: true,
-    });
-  }
+  const defaultFigmaOrigins = [
+    'https://www.figma.com',
+    'https://www.figma.dev',
+    'https://figma.com',
+  ];
+  /** Inclui `Origin: null` (proxy de fetch do plugin Figma). */
+  const allowOrigins = new Set<string>([
+    'null',
+    ...defaultFigmaOrigins,
+    ...fromEnv,
+  ]);
+
+  app.enableCors({
+    origin: (
+      origin: string | undefined,
+      cb: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (origin == null || origin === '') {
+        cb(null, true);
+        return;
+      }
+      cb(null, allowOrigins.has(origin));
+    },
+    credentials: true,
+    allowedHeaders: [
+      'Authorization',
+      'Content-Type',
+      'Idempotency-Key',
+      'Accept',
+    ],
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

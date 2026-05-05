@@ -31,6 +31,12 @@ pnpm --filter @insta2figma/api run start:dev
 
 Por omissão ouve em `http://localhost:3333` (ajusta `PORT` no `.env`).
 
+### CORS e plugin Figma
+
+A lista permitida inclui sempre a origem opaca **`null`** (é o que o navegador envia quando o **`fetch`** do código do plugin corre via proxy do Figma), mais **`https://www.figma.com`**, **`https://www.figma.dev`** e **`https://figma.com`**. Opcionalmente, **`CORS_ORIGINS`** acrescenta mais origens separadas por vírgulas — não removes as anteriores.
+
+Se vires **`ERR_CONNECTION_REFUSED`**, o processo Nest não está a ouvir na porta esperada ou não está ligado onde o Figma corre (arranca **`pnpm dev:api`** e confirma o `PORT`). Depois destas mudanças, **reinicia a API**.
+
 ### Endpoints (prefixo global `/v1`)
 
 | Método | Rota | Auth |
@@ -85,3 +91,6 @@ pnpm --filter @insta2figma/api exec prisma generate
 pnpm --filter @insta2figma/api exec prisma migrate dev
 pnpm --filter @insta2figma/api exec prisma studio
 ```
+
+Se ao arrancar vires **`SyntaxError` em `node_modules/.../.prisma/client/index.js`**, costuma ser cliente gerado corrompido ou escrita concorrente: `pnpm --filter @insta2figma/api exec prisma generate` na raíz, ou remover `node_modules` e repetir `pnpm install`.
+
