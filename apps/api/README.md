@@ -1,6 +1,6 @@
 # API Insta2Figma
 
-**Prisma** + **Postgres** + **Redis** + **NestJS** (Fase 4: `POST /v1/jobs` cria registo em BD e **enfileira** BullMQ `scrape-instagram-v1`; o processamento real corre em [`apps/worker`](../../apps/worker)). Persistência: §5.2; fila: §5.3 da [arquitetura](../../docs/ARQUITETURA-INSTA2FIGMA.md).
+**Prisma** + **Postgres** + **Redis** + **NestJS** (`POST /v1/jobs` persiste e **enfileira** BullMQ `scrape-instagram-v1`; o scrape real corre em [`apps/worker`](../../apps/worker), Fase 5). Persistência: §5.2; fila: §5.3 da [arquitetura](../../docs/ARQUITETURA-INSTA2FIGMA.md).
 
 ## Ambiente
 
@@ -72,7 +72,7 @@ curl -s "$BASE/v1/jobs/$JOB_ID" \
   -H "authorization: Bearer $TOKEN"
 ```
 
-Corpo de job validado com **`@insta2figma/shared-contracts`** (`createJobBodySchema`). Para ver o estado avançar até `succeeded` (simulação na Fase 4), corre na raíz `pnpm dev:worker` em paralelo com esta API — ver [worker README](../../apps/worker/README.md).
+Corpo de job validado com **`@insta2figma/shared-contracts`** (`createJobBodySchema`). `result_summary` bem-sucedido segue `scrapeJobResultSummaryV5Schema` (Instagram `web_profile_info`). Correr `pnpm dev:worker` na raíz junto da API — ver [apps/worker/README.md](../../apps/worker/README.md).
 
 ### Prisma (CLI)
 

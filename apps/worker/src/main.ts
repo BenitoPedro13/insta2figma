@@ -1,7 +1,21 @@
 import 'dotenv/config';
+import type { Job as BullMqJob } from 'bullmq';
 import { Worker } from 'bullmq';
 import Redis from 'ioredis';
 import { PrismaClient } from '@prisma/client';
+
+import {
+  SCRAPE_INSTAGRAM_V1_QUEUE,
+  scrapeInstagramV1JobPayloadSchema,
+} from '@insta2figma/shared-contracts';
+
+import { HttpInstagramDataSource } from './instagram/http-instagram-data-source';
+import { InstagramUpstreamError } from './instagram/instagram-upstream-error';
+import { processInstagramScrapeJob } from './instagram/scrape-runner';
+
+function truncateMessage(msg: string, max = 2000): string {
+  return msg.length <= max ? msg : `${msg.slice(0, max - 1)}…`;
+}
 
 const prisma = new PrismaClient();
 
@@ -9,8 +23,12 @@ async function main(): Promise<void> {
   const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
   const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 
-  const { SCRAPE_INSTAGRAM_V1_QUEUE, scrapeInstagramV1JobPayloadSchema } =
-    await import('@insta2figma/shared-contracts');
+  const timeoutMs = Math.max(
+    5_000,
+    Number.parseInt(process.env.IG_FETCH_TIMEOUT_MS ?? '30000', 10) ||
+      30_000,
+  );
+  const dataSource = new HttpInstagramDataSource({ timeoutMs });
 
   const concurrency = Math.max(
     1,
@@ -36,59 +54,78 @@ async function main(): Promise<void> {
         console.warn('[worker] job inexistente na BD, ack:', jobId);
         return;
       }
-      if (row.status !== 'queued') {
+
+      const terminalSkip =
+        row.status === 'succeeded' ||
+        row.status === 'failed' ||
+        row.status === 'canceled';
+
+      if (terminalSkip) {
         console.info(
-          '[worker] idempotente — estado',
+          '[worker] idempotente — já terminal',
           jobId,
           row.status,
         );
         return;
       }
 
-      await prisma.job.update({
-        where: { id: jobId },
-        data: { status: 'running', startedAt: new Date() },
-      });
-
-      try {
-        await new Promise((r) => setTimeout(r, 500));
-        const input = row.input as { username?: string };
+      if (row.status === 'queued') {
         await prisma.job.update({
           where: { id: jobId },
-          data: {
-            status: 'succeeded',
-            finishedAt: new Date(),
-            resultSummary: {
-              simulated: true,
-              phase: 4,
-              username:
-                typeof input.username === 'string' ? input.username : null,
-            },
-          },
+          data: { status: 'running', startedAt: new Date() },
         });
-      } catch (err) {
-        console.error('[worker] erro ao processar', jobId, err);
-        await prisma.job.update({
-          where: { id: jobId },
-          data: {
-            status: 'failed',
-            finishedAt: new Date(),
-            errorCode: 'INTERNAL',
-            errorMessage: 'Erro no worker (simulação Fase 4).',
-          },
-        });
-        throw err;
       }
+
+      await processInstagramScrapeJob(prisma, row, dataSource);
+      console.info(`[worker] job ${jobId} ciclo BullMQ terminou sem throw.`);
     },
     { connection, concurrency },
   );
 
-  worker.on('failed', (job, err) => {
-    console.error('[worker] Bull job failed', job?.id, err);
+  worker.on('failed', async (job: BullMqJob | undefined, err: Error) => {
+    const finalFailure = Boolean(job?.finishedOn);
+    if (!finalFailure) {
+      console.warn(
+        '[worker] tentativa falhou; retry agendado',
+        job?.id,
+        err?.message,
+      );
+      return;
+    }
+
+    const parsed = scrapeInstagramV1JobPayloadSchema.safeParse(job?.data);
+    if (!parsed.success) return;
+    const bizId = parsed.data.jobId;
+
+    const current = await prisma.job.findUnique({ where: { id: bizId } });
+    if (!current || current.status !== 'running') return;
+
+    let code = 'INTERNAL';
+    let message = truncateMessage(
+      err?.message ?? 'Todas as tentativas na fila falharam.',
+    );
+
+    if (err instanceof InstagramUpstreamError) {
+      code = err.code;
+      message = truncateMessage(err.message);
+    }
+
+    await prisma.job.update({
+      where: { id: bizId },
+      data: {
+        status: 'failed',
+        finishedAt: new Date(),
+        errorCode: code,
+        errorMessage: message,
+      },
+    });
+    console.warn(
+      `[worker] job ${bizId} falhou permanentemente (${code}) após retries.`,
+    );
   });
 
   console.info(
-    `[worker] Insta2Figma à escuta da fila "${SCRAPE_INSTAGRAM_V1_QUEUE}" (concurrency=${concurrency})`,
+    `[worker] à escuta da fila "${SCRAPE_INSTAGRAM_V1_QUEUE}" (concurrency=${concurrency}, igTimeoutMs=${timeoutMs})`,
   );
 
   const shutdown = async (): Promise<void> => {

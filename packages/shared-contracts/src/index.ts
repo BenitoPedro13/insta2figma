@@ -66,3 +66,56 @@ export const scrapeInstagramV1JobPayloadSchema = z.object({
 export type ScrapeInstagramV1JobPayload = z.infer<
   typeof scrapeInstagramV1JobPayloadSchema
 >;
+
+/** Item leve do feed para `result_summary` (URLs IG podem expirar; Fase 6 armazena cópias). */
+export const instagramPostSummaryItemSchema = z.object({
+  shortcode: z.string(),
+  thumbnailUrl: z.string().nullable(),
+  isVideo: z.boolean().optional(),
+});
+
+export type InstagramPostSummaryItem = z.infer<
+  typeof instagramPostSummaryItemSchema
+>;
+
+export const instagramProfileSummarySchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  fullName: z.string().nullable(),
+  biography: z.string().nullable(),
+  followerCount: z.number(),
+  followingCount: z.number(),
+  /** Contagem total anunciada pelo IG (timeline / posts). */
+  mediaCount: z.number().optional(),
+  isPrivate: z.boolean(),
+  isVerified: z.boolean(),
+  profilePicUrlHd: z.string().nullable(),
+});
+
+export type InstagramProfileSummary = z.infer<typeof instagramProfileSummarySchema>;
+
+/** Resultado persistido em `jobs.result_summary` após scrape real (Fase 5+). */
+export const scrapeJobResultSummaryV5Schema = z.object({
+  phase: z.literal(5),
+  source: z.literal('instagram_web_profile_info'),
+  username: z.string(),
+  profile: instagramProfileSummarySchema,
+  postsSample: z.array(instagramPostSummaryItemSchema),
+});
+
+export type ScrapeJobResultSummaryV5 = z.infer<
+  typeof scrapeJobResultSummaryV5Schema
+>;
+
+/** Códigos sanitizados escritos em `jobs.error_code` quando o scrape falha (§9 arquitetura). */
+export const INSTAGRAM_JOB_ERROR_CODES = [
+  'IG_RATE_LIMIT',
+  'IG_NOT_FOUND',
+  'IG_UPSTREAM',
+  'IG_PARSE',
+  'IG_BLOCKED',
+  'INTERNAL',
+] as const;
+
+export type InstagramJobErrorCode =
+  (typeof INSTAGRAM_JOB_ERROR_CODES)[number];

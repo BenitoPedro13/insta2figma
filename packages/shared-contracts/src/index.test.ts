@@ -4,6 +4,7 @@ import {
   jobStatusSchema,
   jobTypeSchema,
   scrapeInstagramV1JobPayloadSchema,
+  scrapeJobResultSummaryV5Schema,
 } from './index';
 
 describe('jobTypeSchema', () => {
@@ -47,5 +48,29 @@ describe('scrapeInstagramV1JobPayloadSchema', () => {
       jobId: '00000000-0000-4000-8000-000000000001',
     });
     expect(parsed.jobId).toBe('00000000-0000-4000-8000-000000000001');
+  });
+});
+
+describe('scrapeJobResultSummaryV5Schema', () => {
+  it('valida exemplo mínimo de resultado da Fase 5', () => {
+    const data = scrapeJobResultSummaryV5Schema.parse({
+      phase: 5,
+      source: 'instagram_web_profile_info',
+      username: 'demo',
+      profile: {
+        id: '1',
+        username: 'demo',
+        fullName: 'Demo',
+        biography: '',
+        followerCount: 1,
+        followingCount: 0,
+        mediaCount: 2,
+        isPrivate: false,
+        isVerified: false,
+        profilePicUrlHd: 'https://example.com/p.jpg',
+      },
+      postsSample: [{ shortcode: 'abc', thumbnailUrl: 'https://t', isVideo: false }],
+    });
+    expect(data.postsSample).toHaveLength(1);
   });
 });
