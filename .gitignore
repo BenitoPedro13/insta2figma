@@ -1,0 +1,11 @@
+node_modules
+dist
+.turbo
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Legado Figma (gerado ao lado do fonte)
+code.js

@@ -6,14 +6,10 @@
   "capabilities": [],
   "enableProposedApi": false,
   "documentAccess": "dynamic-page",
-  "editorType": [
-    "figma"
-  ],
+  "editorType": ["figma"],
   "ui": "ui.html",
   "networkAccess": {
-    "allowedDomains": [
-      "*"
-    ],
-    "reasoning": "The plugin needs to fetch images from Instagram."
+    "allowedDomains": ["*"],
+    "reasoning": "Dev MVP: permite o proxy atual; substituir por domínios explícitos (API + storage) antes de produção — ver docs/IMPLEMENTATION.md Fase 8."
   }
 }
