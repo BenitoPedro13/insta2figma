@@ -14,7 +14,9 @@ const IG_HEADERS: Record<string, string> = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
-  Accept: '*/*',
+  Accept: 'application/json, text/plain, */*',
+  Referer: 'https://www.instagram.com/',
+  Origin: 'https://www.instagram.com',
 };
 
 function webProfileUrl(username: string): string {
@@ -76,6 +78,13 @@ export class HttpInstagramDataSource implements InstagramDataSource {
         true,
       );
     }
+    if (res.status === 401 || res.status === 403) {
+      throw new InstagramUpstreamError(
+        'IG_BLOCKED',
+        `Instagram devolveu HTTP ${res.status} (acesso negado).`,
+        false,
+      );
+    }
     if (res.status >= 500) {
       throw new InstagramUpstreamError(
         'IG_UPSTREAM',
@@ -84,13 +93,17 @@ export class HttpInstagramDataSource implements InstagramDataSource {
       );
     }
 
+    const rawText = await res.text();
+    const trimmed = rawText.trim();
+
     let body: unknown;
     try {
-      body = await res.json();
+      body = JSON.parse(trimmed);
     } catch (e) {
+      const preview = trimmed.replace(/\s+/gu, ' ').slice(0, 160);
       throw new InstagramUpstreamError(
-        'IG_PARSE',
-        'Resposta não é JSON válido.',
+        'IG_BLOCKED',
+        `Resposta não-JSON (bloqueio, captcha ou HTML). Pré-visualização: ${preview}`,
         false,
         { cause: e },
       );

@@ -7,7 +7,9 @@
     "start": "node dist/main.js",
     "start:dev": "prisma generate --schema ../api/prisma/schema.prisma && tsx watch src/main.ts",
     "lint": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "RUN_IG_INTEGRATION=1 vitest run src/instagram/http-instagram.integration.test.ts",
+    "ig:smoke": "tsx scripts/instagram-scrape-smoke.ts"
   },
   "dependencies": {
     "@insta2figma/shared-contracts": "workspace:*",

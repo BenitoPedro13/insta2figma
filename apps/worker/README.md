@@ -34,7 +34,24 @@ Na raíz do monorepo também podes usar `pnpm dev:worker`.
 
 O Prisma Client é gerado a partir de **`apps/api/prisma/schema.prisma`** (fonte única).
 
-## Contratos
+## Testes automáticos contra o Instagram (opcional)
+
+Por omissão **`pnpm test`** no worker só corre testes **sem rede** (parser). Para acertar no endpoint real:
+
+```bash
+pnpm test:ig
+# ou dentro de apps/worker: pnpm test:integration   (define RUN_IG_INTEGRATION=1)
+```
+
+Smoke rápido (imprime JSON para `stdout`; erros para `stderr`; exit 0 / 1):
+
+```bash
+pnpm ig:smoke
+pnpm ig:smoke -- instagram
+IG_SMOKE_USERNAME=google pnpm ig:smoke
+```
+
+Variáveis opcionais: `IG_FETCH_TIMEOUT_MS` (igual ao worker).
 
 Successo (`jobs.result_summary`): ver `scrapeJobResultSummaryV5Schema` em **`@insta2figma/shared-contracts`** (`phase: 5`, `postsSample`, etc.). Perfis privados ou sem dados de timeline podem devolver lista vazia de posts mesmo com scrape bem-sucedido.
 
