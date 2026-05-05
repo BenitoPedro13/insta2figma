@@ -30,7 +30,7 @@ function main() {
   ensureEnv('apps/api');
   ensureEnv('apps/worker');
 
-  run('pnpm install');
+  run('pnpm install --force');
   run('pnpm infra:up');
   run('pnpm --filter @insta2figma/api exec prisma generate');
   run('pnpm db:migrate:deploy');
