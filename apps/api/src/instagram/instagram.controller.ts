@@ -15,7 +15,18 @@ export class InstagramController {
   getProfilePreview(
     @Req() _req: AuthedRequest,
     @Query('username') username?: string,
+    @Query('maxPosts') maxPostsRaw?: string,
+    @Query('expandCarouselImages') expandCarouselRaw?: string,
   ) {
-    return this.preview.getProfilePreview(String(username ?? ''));
+    const parsedPosts = Number.parseInt(String(maxPostsRaw ?? ''), 10);
+    const maxPosts = Number.isFinite(parsedPosts)
+      ? Math.min(50, Math.max(1, parsedPosts))
+      : 12;
+    const expandCarouselImages =
+      String(expandCarouselRaw ?? '').toLowerCase() === 'true';
+    return this.preview.getProfilePreview(String(username ?? ''), {
+      maxPosts,
+      expandCarouselImages,
+    });
   }
 }

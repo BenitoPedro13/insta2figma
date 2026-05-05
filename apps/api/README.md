@@ -46,7 +46,7 @@ Se vires **`ERR_CONNECTION_REFUSED`**, o processo Nest não está a ouvir na por
 | POST | `/v1/auth/login` | — body `{ "email": "..." }` |
 | POST | `/v1/jobs` | Bearer JWT; header opcional `idempotency-key` |
 | GET | `/v1/jobs/:id` | Bearer JWT; query opcional `include=signedAssets` (URLs GET assinadas para `assets` do job, só se `succeeded`) |
-| GET | `/v1/instagram/profile-preview?username=...` | Bearer JWT; preview leve (avatar, mediaCount, private) para UX no formulário |
+| GET | `/v1/instagram/profile-preview?username=...&maxPosts=12&expandCarouselImages=true` | Bearer JWT; preview leve (avatar, mediaCount, privado + estimativa de imagens) para UX no formulário |
 
 Respostas de sucesso sob envelope `{ "data": … }`; erros `{ "error": { "code", "message" } }` (ver arquitetura §7).
 

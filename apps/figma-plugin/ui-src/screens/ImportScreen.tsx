@@ -13,6 +13,7 @@ type ImportScreenProps = {
     mediaCount: number;
     isPrivate: boolean;
     profilePicUrlHd?: string;
+    estimatedImportImages: number;
   } | null;
   previewLoading: boolean;
   previewError: string;
@@ -142,7 +143,11 @@ export function ImportScreen({
             }}
           />
         </div>
-        <p className="import-hint">Posts will be imported chronologically.</p>
+        <p className="import-hint">
+          {preview
+            ? `Estimativa atual: ${preview.estimatedImportImages} imagem(ns) para importar.`
+            : 'Posts will be imported chronologically.'}
+        </p>
 
         <div className="import-section-label">Preferences</div>
         <label className="checkbox-row">

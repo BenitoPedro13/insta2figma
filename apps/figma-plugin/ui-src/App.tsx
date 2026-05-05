@@ -18,6 +18,7 @@ type ProfilePreview = {
   mediaCount: number;
   isPrivate: boolean;
   profilePicUrlHd?: string;
+  estimatedImportImages: number;
 };
 
 function normBase(b: string): string {
@@ -134,6 +135,11 @@ export function App() {
               ? pm.mediaCount
               : 0,
           isPrivate: pm.isPrivate === true,
+          estimatedImportImages:
+            typeof pm.estimatedImportImages === 'number' &&
+            Number.isFinite(pm.estimatedImportImages)
+              ? pm.estimatedImportImages
+              : 0,
           profilePicUrlHd:
             typeof pm.profilePicUrlHd === 'string' ? pm.profilePicUrlHd : undefined,
         });
@@ -213,13 +219,15 @@ export function App() {
             base: norm,
             email: mail,
             username: user,
+            maxPosts,
+            expandCarouselImages,
           },
         },
         '*',
       );
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [view, importing, base, email, username]);
+  }, [view, importing, base, email, username, maxPosts, expandCarouselImages]);
 
   const onImport = useCallback(() => {
     const norm = normBase(base);

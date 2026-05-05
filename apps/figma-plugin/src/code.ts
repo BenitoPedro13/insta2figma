@@ -227,6 +227,8 @@ type PluginMessage =
       base: string;
       email: string;
       username: string;
+      maxPosts?: number;
+      expandCarouselImages?: boolean;
     }
   | { type: 'create-shapes'; count: number }
   | { type: 'place-images'; urls: string[] }
@@ -429,16 +431,21 @@ async function previewProfileViaApi(
   base: string,
   email: string,
   username: string,
+  opts: { maxPosts: number; expandCarouselImages: boolean },
 ): Promise<{
   username: string;
   profilePicUrlHd: string | null;
   profilePicDataUrl: string | null;
   mediaCount: number;
   isPrivate: boolean;
+  estimatedImportImages: number;
 }> {
   const token = await getToken(base, email);
+  const qs = `username=${encodeURIComponent(username)}&maxPosts=${encodeURIComponent(
+    String(opts.maxPosts),
+  )}&expandCarouselImages=${opts.expandCarouselImages ? 'true' : 'false'}`;
   const res = await fetch(
-    `${base}/v1/instagram/profile-preview?username=${encodeURIComponent(username)}`,
+    `${base}/v1/instagram/profile-preview?${qs}`,
     {
       headers: { authorization: `Bearer ${token}` },
     },
@@ -461,6 +468,11 @@ async function previewProfileViaApi(
         ? data.mediaCount
         : 0,
     isPrivate: data.isPrivate === true,
+    estimatedImportImages:
+      typeof data.estimatedImportImages === 'number' &&
+      Number.isFinite(data.estimatedImportImages)
+        ? data.estimatedImportImages
+        : 0,
   };
 }
 
@@ -555,6 +567,17 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       .trim()
       .replace(/^@+/, '')
       .toLowerCase();
+    const maxPostsRaw = msg.maxPosts ?? 12;
+    const maxPosts = Math.min(
+      50,
+      Math.max(
+        1,
+        Number.isFinite(Number(maxPostsRaw))
+          ? Math.floor(Number(maxPostsRaw))
+          : 12,
+      ),
+    );
+    const expandCarouselImages = msg.expandCarouselImages === true;
     if (!base || !email || !username) {
       figma.ui.postMessage({
         type: 'profile-preview-error',
@@ -564,13 +587,17 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       return;
     }
     try {
-      const preview = await previewProfileViaApi(base, email, username);
+      const preview = await previewProfileViaApi(base, email, username, {
+        maxPosts,
+        expandCarouselImages,
+      });
       figma.ui.postMessage({
         type: 'profile-preview-data',
         requestId: msg.requestId,
         username: preview.username,
         mediaCount: preview.mediaCount,
         isPrivate: preview.isPrivate,
+        estimatedImportImages: preview.estimatedImportImages,
         ...(preview.profilePicDataUrl
           ? { profilePicUrlHd: preview.profilePicDataUrl }
           : {}),
