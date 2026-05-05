@@ -127,6 +127,8 @@ type PluginMessage =
       base: string;
       email: string;
       username: string;
+      maxPosts?: number;
+      expandCarouselImages?: boolean;
     }
   | { type: 'error'; message: unknown };
 
@@ -173,6 +175,7 @@ async function importProfileViaApi(
   base: string,
   email: string,
   username: string,
+  options: { maxPosts: number; expandCarouselImages: boolean },
 ): Promise<void> {
   const notifyStatus = (text: string) => {
     figma.ui.postMessage({ type: 'import-status', text });
@@ -192,7 +195,11 @@ async function importProfileViaApi(
     },
     body: JSON.stringify({
       type: 'SCRAPE_PROFILE',
-      input: { username },
+      input: {
+        username,
+        maxPosts: options.maxPosts,
+        expandCarouselImages: options.expandCarouselImages,
+      },
     }),
   });
   const jobBody = (await jr.json().catch(() => ({}))) as Record<string, unknown>;
@@ -278,6 +285,17 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       .trim()
       .replace(/^@+/, '')
       .toLowerCase();
+    const maxPostsRaw = msg.maxPosts ?? 8;
+    const maxPosts = Math.min(
+      50,
+      Math.max(
+        1,
+        Number.isFinite(Number(maxPostsRaw))
+          ? Math.floor(Number(maxPostsRaw))
+          : 8,
+      ),
+    );
+    const expandCarouselImages = msg.expandCarouselImages === true;
     if (!base || !email || !username) {
       figma.notify('Insta2Figma: Preenche API, email e username.', {
         error: true,
@@ -289,7 +307,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       return;
     }
     try {
-      await importProfileViaApi(base, email, username);
+      await importProfileViaApi(base, email, username, {
+        maxPosts,
+        expandCarouselImages,
+      });
     } catch (err) {
       const text = formatCaught(err);
       console.error('[Insta2Figma] import-profile', err);

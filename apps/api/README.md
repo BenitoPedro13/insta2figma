@@ -68,7 +68,7 @@ RESP=$(curl -s -X POST "$BASE/v1/jobs" \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
   -H 'idempotency-key: demo-1' \
-  -d '{"type":"SCRAPE_PROFILE","input":{"username":"instagram"}}')
+  -d '{"type":"SCRAPE_PROFILE","input":{"username":"instagram","maxPosts":12,"expandCarouselImages":true}}')
 echo "$RESP"
 # Em zsh/bash com jq: JOB_ID=$(echo "$RESP" | jq -r '.data.id')
 # Sem jq: copia o UUID do campo "id" da resposta para JOB_ID.

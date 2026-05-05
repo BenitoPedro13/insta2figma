@@ -4,11 +4,15 @@ type ImportScreenProps = {
   base: string;
   email: string;
   username: string;
+  maxPosts: number;
+  expandCarouselImages: boolean;
   status: string;
   importing: boolean;
   onBaseChange: (v: string) => void;
   onEmailChange: (v: string) => void;
   onUsernameChange: (v: string) => void;
+  onMaxPostsChange: (v: number) => void;
+  onExpandCarouselChange: (v: boolean) => void;
   onImport: () => void;
   onBack: () => void;
   onClose: () => void;
@@ -18,11 +22,15 @@ export function ImportScreen({
   base,
   email,
   username,
+  maxPosts,
+  expandCarouselImages,
   status,
   importing,
   onBaseChange,
   onEmailChange,
   onUsernameChange,
+  onMaxPostsChange,
+  onExpandCarouselChange,
   onImport,
   onBack,
   onClose,
@@ -75,9 +83,45 @@ export function ImportScreen({
             autoComplete="off"
           />
         </div>
+        <p className="import-hint">
+          Enter only the username without &apos;@&apos;.
+        </p>
+
+        <div className="import-section-label">Import how many posts?</div>
+        <div className="field">
+          <label htmlFor="max-posts">Número de posts</label>
+          <input
+            id="max-posts"
+            type="number"
+            min={1}
+            max={50}
+            step={1}
+            value={Number.isFinite(maxPosts) ? maxPosts : ''}
+            onChange={(e) => {
+              const n = Number.parseInt(e.target.value, 10);
+              if (!Number.isFinite(n)) {
+                onMaxPostsChange(1);
+                return;
+              }
+              onMaxPostsChange(Math.min(50, Math.max(1, n)));
+            }}
+          />
+        </div>
+        <p className="import-hint">Posts will be imported chronologically.</p>
+
+        <div className="import-section-label">Preferences</div>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={expandCarouselImages}
+            onChange={(e) => onExpandCarouselChange(e.target.checked)}
+          />
+          Export all images from carousel posts
+        </label>
+
         <div className="plugin-actions">
           <button type="submit" className="primary" disabled={importing}>
-            Importar perfil para o canvas
+            {importing ? 'A importar…' : `Importar (${maxPosts} posts)`}
           </button>
           <button type="button" className="secondary" onClick={onClose}>
             Fechar

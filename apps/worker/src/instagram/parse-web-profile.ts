@@ -34,6 +34,21 @@ function isLikelyVideo(node: Record<string, unknown>): boolean {
   return typeof vu === 'string' && vu.length > 0;
 }
 
+function parseSidecarCarouselUrls(node: Record<string, unknown>): string[] {
+  const esc = asRecord(node.edge_sidecar_to_children);
+  if (!esc) return [];
+  const edges = esc.edges;
+  if (!Array.isArray(edges)) return [];
+  const urls: string[] = [];
+  for (const e of edges) {
+    const child = asRecord(asRecord(e)?.node);
+    if (!child) continue;
+    const u = pickThumbnail(child);
+    if (u && !urls.includes(u)) urls.push(u);
+  }
+  return urls;
+}
+
 function parseTimelineSample(
   user: Record<string, unknown>,
   maxPosts: number,
@@ -52,11 +67,16 @@ function parseTimelineSample(
     if (!node) continue;
     const shortcode = node.shortcode;
     if (typeof shortcode !== 'string' || shortcode.length === 0) continue;
-    out.push({
+    const sidecar = parseSidecarCarouselUrls(node);
+    const item: InstagramPostSummaryItem = {
       shortcode,
       thumbnailUrl: pickThumbnail(node),
       isVideo: isLikelyVideo(node),
-    });
+    };
+    if (sidecar.length > 0) {
+      item.carouselImageUrls = sidecar;
+    }
+    out.push(item);
     if (out.length >= cap) break;
   }
   return out;

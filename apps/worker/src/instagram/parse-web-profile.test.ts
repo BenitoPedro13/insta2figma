@@ -61,4 +61,41 @@ describe('buildScrapeSummaryV5FromUserNode', () => {
     );
     expect(summary.postsSample).toHaveLength(5);
   });
+
+  it('lista URLs de carrossel quando presentes', () => {
+    const userWithSidecar = {
+      ...minimalUser,
+      edge_owner_to_timeline_media: {
+        count: 1,
+        edges: [
+          {
+            node: {
+              shortcode: 'side1',
+              display_url: 'https://example.test/cover.jpg',
+              __typename: 'GraphSidecar',
+              edge_sidecar_to_children: {
+                edges: [
+                  {
+                    node: { display_url: 'https://example.test/a.jpg' },
+                  },
+                  {
+                    node: { display_url: 'https://example.test/b.jpg' },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    };
+    const summary = buildScrapeSummaryV5FromUserNode(
+      'fixture',
+      userWithSidecar,
+      10,
+    );
+    expect(summary.postsSample[0]?.carouselImageUrls).toEqual([
+      'https://example.test/a.jpg',
+      'https://example.test/b.jpg',
+    ]);
+  });
 });

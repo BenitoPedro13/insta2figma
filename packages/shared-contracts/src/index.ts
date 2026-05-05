@@ -16,6 +16,10 @@ export type JobStatus = z.infer<typeof jobStatusSchema>;
 
 export const scrapeProfileInputSchema = z.object({
   username: z.string().min(1).max(64),
+  /** Nº de posts mais recentes a cobrir no scrape (timeline). Omisso = default por tipo de job. */
+  maxPosts: z.number().int().min(1).max(50).optional(),
+  /** Se true, imagens extra de posts tipo carrossel entram também no upload (URLs em `carouselImageUrls`). */
+  expandCarouselImages: z.boolean().optional(),
 });
 
 export type ScrapeProfileInput = z.infer<typeof scrapeProfileInputSchema>;
@@ -27,9 +31,7 @@ export const createJobBodySchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('SCRAPE_POSTS'),
-    input: scrapeProfileInputSchema.extend({
-      maxPosts: z.number().int().positive().optional(),
-    }),
+    input: scrapeProfileInputSchema,
   }),
 ]);
 
@@ -72,6 +74,8 @@ export const instagramPostSummaryItemSchema = z.object({
   shortcode: z.string(),
   thumbnailUrl: z.string().nullable(),
   isVideo: z.boolean().optional(),
+  /** URLs adicionais (carrossel / sidecar), sem o thumbnail principal já em `thumbnailUrl`. */
+  carouselImageUrls: z.array(z.string()).optional(),
 });
 
 export type InstagramPostSummaryItem = z.infer<

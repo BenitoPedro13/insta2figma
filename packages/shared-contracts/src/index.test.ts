@@ -32,6 +32,25 @@ describe('createJobBodySchema', () => {
     expect(parsed.type).toBe('SCRAPE_PROFILE');
   });
 
+  it('aceita maxPosts e expandCarouselImages', () => {
+    const parsed = createJobBodySchema.parse({
+      type: 'SCRAPE_PROFILE',
+      input: {
+        username: 'instagram',
+        maxPosts: 12,
+        expandCarouselImages: true,
+      },
+    });
+    expect(parsed).toMatchObject({
+      type: 'SCRAPE_PROFILE',
+      input: {
+        username: 'instagram',
+        maxPosts: 12,
+        expandCarouselImages: true,
+      },
+    });
+  });
+
   it('rejeita username vazio', () => {
     expect(() =>
       createJobBodySchema.parse({
@@ -69,7 +88,9 @@ describe('scrapeJobResultSummaryV5Schema', () => {
         isVerified: false,
         profilePicUrlHd: 'https://example.com/p.jpg',
       },
-      postsSample: [{ shortcode: 'abc', thumbnailUrl: 'https://t', isVideo: false }],
+      postsSample: [
+        { shortcode: 'abc', thumbnailUrl: 'https://t', isVideo: false },
+      ],
     });
     expect(data.postsSample).toHaveLength(1);
   });

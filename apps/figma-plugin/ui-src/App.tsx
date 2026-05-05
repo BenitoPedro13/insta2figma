@@ -39,6 +39,8 @@ export function App() {
   const [base, setBase] = useState('http://127.0.0.1:3333');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
+  const [maxPosts, setMaxPosts] = useState(12);
+  const [expandCarouselImages, setExpandCarouselImages] = useState(false);
   const [status, setStatus] = useState('');
   const [importing, setImporting] = useState(false);
   const lastImportUsername = useRef('');
@@ -122,6 +124,7 @@ export function App() {
     lastImportUsername.current = user;
     setImporting(true);
     setStatus('A arrancar…');
+    const posts = Math.min(50, Math.max(1, Math.floor(maxPosts)));
     parent.postMessage(
       {
         pluginMessage: {
@@ -129,11 +132,13 @@ export function App() {
           base: norm,
           email: mail,
           username: user,
+          maxPosts: posts,
+          expandCarouselImages,
         },
       },
       '*',
     );
-  }, [base, email, username]);
+  }, [base, email, username, maxPosts, expandCarouselImages]);
 
   const onToggleFavoriteRow = useCallback(
     (u: string) => {
@@ -165,11 +170,15 @@ export function App() {
             base={base}
             email={email}
             username={username}
+            maxPosts={maxPosts}
+            expandCarouselImages={expandCarouselImages}
             status={status}
             importing={importing}
             onBaseChange={setBase}
             onEmailChange={setEmail}
             onUsernameChange={setUsername}
+            onMaxPostsChange={setMaxPosts}
+            onExpandCarouselChange={setExpandCarouselImages}
             onImport={onImport}
             onBack={() => setView('list')}
             onClose={onCancel}

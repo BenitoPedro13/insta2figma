@@ -407,3 +407,25 @@ body {
 .import-form > .field:first-of-type {
   margin-top: 0;
 }
+
+.import-hint {
+  margin: -4px 0 8px;
+  font-size: 11px;
+  color: #888;
+  line-height: 1.35;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 4px;
+  font-size: 12px;
+  color: #444;
+  cursor: pointer;
+}
+
+.checkbox-row input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}

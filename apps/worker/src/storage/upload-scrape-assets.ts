@@ -30,6 +30,15 @@ const MAX_THUMBS = Math.min(
   ),
 );
 
+const MAX_THUMBS_EXPANDED = Math.min(
+  150,
+  Math.max(
+    MAX_THUMBS,
+    Number.parseInt(process.env.STORAGE_MAX_THUMBNAILS_EXPANDED ?? '96', 10) ||
+      96,
+  ),
+);
+
 function guessExtFromMime(mime: string): string {
   if (mime.includes('webp')) return 'webp';
   if (mime.includes('png')) return 'png';
@@ -78,6 +87,8 @@ export async function uploadScrapeAssets(params: {
   prisma: PrismaClient;
   jobId: string;
   summary: ScrapeJobResultSummaryV5;
+  /** Se true, também faz upload das URLs extra em cada `carouselImageUrls`. */
+  expandCarouselImages?: boolean;
 }): Promise<string | null> {
   if (!isS3Configured()) {
     console.info('[storage] S3 não configurado — a saltar upload de assets.');
@@ -120,17 +131,38 @@ export async function uploadScrapeAssets(params: {
   }
 
   let count = 0;
+  const expand = params.expandCarouselImages === true;
+  const maxSlots = expand ? MAX_THUMBS_EXPANDED : MAX_THUMBS;
+
   for (const p of params.summary.postsSample) {
-    if (count >= MAX_THUMBS) break;
-    if (!p.thumbnailUrl) continue;
-    try {
-      const { body, contentType } = await fetchBytes(p.thumbnailUrl);
-      const ext = guessExtFromMime(contentType);
-      const key = `${prefix}thumbs/${p.shortcode}.${ext}`;
-      await persist(key, body, contentType);
-      count += 1;
-    } catch (e) {
-      console.warn('[storage] falha thumbnail', p.shortcode, e);
+    if (count >= maxSlots) break;
+
+    const urlsToStore: string[] = [];
+    if (p.thumbnailUrl) urlsToStore.push(p.thumbnailUrl);
+    if (expand && Array.isArray(p.carouselImageUrls)) {
+      for (const cu of p.carouselImageUrls) {
+        if (!cu || urlsToStore.includes(cu)) continue;
+        urlsToStore.push(cu);
+      }
+    }
+
+    if (urlsToStore.length === 0) continue;
+
+    let slotIdx = 0;
+    for (const url of urlsToStore) {
+      if (count >= maxSlots) break;
+      try {
+        const { body, contentType } = await fetchBytes(url);
+        const ext = guessExtFromMime(contentType);
+        const slug =
+          urlsToStore.length <= 1 ? p.shortcode : `${p.shortcode}_${slotIdx}`;
+        slotIdx += 1;
+        const key = `${prefix}thumbs/${slug}.${ext}`;
+        await persist(key, body, contentType);
+        count += 1;
+      } catch (e) {
+        console.warn('[storage] falha thumbnail', p.shortcode, slotIdx - 1, e);
+      }
     }
   }
 

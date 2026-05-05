@@ -78,10 +78,10 @@ export async function processInstagramScrapeJob(
   const usernameNorm = normalizeInstagramUsername(body.input.username);
 
   let maxPosts: number =
-    body.type === 'SCRAPE_PROFILE'
-      ? 8
-      : typeof body.input.maxPosts === 'number'
-        ? body.input.maxPosts
+    typeof body.input.maxPosts === 'number'
+      ? body.input.maxPosts
+      : body.type === 'SCRAPE_PROFILE'
+        ? 8
         : 24;
   maxPosts = Math.min(50, Math.max(1, maxPosts));
 
@@ -95,6 +95,7 @@ export async function processInstagramScrapeJob(
       prisma,
       jobId: row.id,
       summary,
+      expandCarouselImages: body.input.expandCarouselImages === true,
     });
 
     await markSucceeded(
