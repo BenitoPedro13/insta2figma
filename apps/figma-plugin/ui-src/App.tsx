@@ -19,6 +19,8 @@ type ProfilePreview = {
   isPrivate: boolean;
   profilePicUrlHd?: string;
   estimatedImportImages: number;
+  estimatedPostCovers: number;
+  estimatedCarouselExtras: number;
 };
 
 function normBase(b: string): string {
@@ -139,6 +141,16 @@ export function App() {
             typeof pm.estimatedImportImages === 'number' &&
             Number.isFinite(pm.estimatedImportImages)
               ? pm.estimatedImportImages
+              : 0,
+          estimatedPostCovers:
+            typeof pm.estimatedPostCovers === 'number' &&
+            Number.isFinite(pm.estimatedPostCovers)
+              ? pm.estimatedPostCovers
+              : 0,
+          estimatedCarouselExtras:
+            typeof pm.estimatedCarouselExtras === 'number' &&
+            Number.isFinite(pm.estimatedCarouselExtras)
+              ? pm.estimatedCarouselExtras
               : 0,
           profilePicUrlHd:
             typeof pm.profilePicUrlHd === 'string' ? pm.profilePicUrlHd : undefined,

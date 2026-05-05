@@ -439,6 +439,8 @@ async function previewProfileViaApi(
   mediaCount: number;
   isPrivate: boolean;
   estimatedImportImages: number;
+  estimatedPostCovers: number;
+  estimatedCarouselExtras: number;
 }> {
   const token = await getToken(base, email);
   const qs = `username=${encodeURIComponent(username)}&maxPosts=${encodeURIComponent(
@@ -472,6 +474,16 @@ async function previewProfileViaApi(
       typeof data.estimatedImportImages === 'number' &&
       Number.isFinite(data.estimatedImportImages)
         ? data.estimatedImportImages
+        : 0,
+    estimatedPostCovers:
+      typeof data.estimatedPostCovers === 'number' &&
+      Number.isFinite(data.estimatedPostCovers)
+        ? data.estimatedPostCovers
+        : 0,
+    estimatedCarouselExtras:
+      typeof data.estimatedCarouselExtras === 'number' &&
+      Number.isFinite(data.estimatedCarouselExtras)
+        ? data.estimatedCarouselExtras
         : 0,
   };
 }
@@ -598,6 +610,8 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         mediaCount: preview.mediaCount,
         isPrivate: preview.isPrivate,
         estimatedImportImages: preview.estimatedImportImages,
+        estimatedPostCovers: preview.estimatedPostCovers,
+        estimatedCarouselExtras: preview.estimatedCarouselExtras,
         ...(preview.profilePicDataUrl
           ? { profilePicUrlHd: preview.profilePicDataUrl }
           : {}),

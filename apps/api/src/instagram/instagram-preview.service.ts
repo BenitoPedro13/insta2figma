@@ -43,6 +43,8 @@ export class InstagramPreviewService {
     mediaCount: number;
     isPrivate: boolean;
     estimatedImportImages: number;
+    estimatedPostCovers: number;
+    estimatedCarouselExtras: number;
   }> {
     const username = normalizeUsername(usernameRaw);
     if (!username) {
@@ -100,17 +102,19 @@ export class InstagramPreviewService {
     const edges = Array.isArray(edge?.edges) ? edge?.edges : [];
     const cap = Math.min(50, Math.max(1, opts?.maxPosts ?? 12));
     const expand = opts?.expandCarouselImages === true;
-    let estimatedImportImages = 0;
+    let estimatedPostCovers = 0;
+    let estimatedCarouselExtras = 0;
     for (const e of edges.slice(0, cap)) {
       const node = toRecord(toRecord(e)?.node);
       if (!node) continue;
-      estimatedImportImages += 1;
+      estimatedPostCovers += 1;
       if (!expand) continue;
       const sidecar = toRecord(node.edge_sidecar_to_children);
       const sideEdges = Array.isArray(sidecar?.edges) ? sidecar.edges : [];
       const extra = Math.max(0, sideEdges.length - 1);
-      estimatedImportImages += extra;
+      estimatedCarouselExtras += extra;
     }
+    const estimatedImportImages = estimatedPostCovers + estimatedCarouselExtras;
     let profilePicDataUrl: string | null = null;
     if (hd) {
       try {
@@ -143,6 +147,8 @@ export class InstagramPreviewService {
       mediaCount,
       isPrivate: user.is_private === true,
       estimatedImportImages,
+      estimatedPostCovers,
+      estimatedCarouselExtras,
     };
   }
 }

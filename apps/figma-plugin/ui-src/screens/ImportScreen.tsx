@@ -14,6 +14,8 @@ type ImportScreenProps = {
     isPrivate: boolean;
     profilePicUrlHd?: string;
     estimatedImportImages: number;
+    estimatedPostCovers: number;
+    estimatedCarouselExtras: number;
   } | null;
   previewLoading: boolean;
   previewError: string;
@@ -54,6 +56,14 @@ export function ImportScreen({
     },
     [onImport],
   );
+  const ctaLabel = (() => {
+    if (importing) return 'A importar…';
+    const estimated = preview?.estimatedImportImages;
+    if (typeof estimated === 'number' && Number.isFinite(estimated) && estimated > 0) {
+      return `Importar ${estimated} ${estimated === 1 ? 'imagem' : 'imagens'}`;
+    }
+    return `Importar (${maxPosts} posts)`;
+  })();
 
   return (
     <div className="import-screen">
@@ -148,6 +158,12 @@ export function ImportScreen({
             ? `Estimativa atual: ${preview.estimatedImportImages} imagem(ns) para importar.`
             : 'Posts will be imported chronologically.'}
         </p>
+        {preview ? (
+          <p className="import-hint">
+            Capas de posts: {preview.estimatedPostCovers} · Extras de carrossel:{' '}
+            {preview.estimatedCarouselExtras} · Total: {preview.estimatedImportImages}
+          </p>
+        ) : null}
 
         <div className="import-section-label">Preferences</div>
         <label className="checkbox-row">
@@ -161,7 +177,7 @@ export function ImportScreen({
 
         <div className="plugin-actions">
           <button type="submit" className="primary" disabled={importing}>
-            {importing ? 'A importar…' : `Importar (${maxPosts} posts)`}
+            {ctaLabel}
           </button>
           <button type="button" className="secondary" onClick={onClose}>
             Fechar
