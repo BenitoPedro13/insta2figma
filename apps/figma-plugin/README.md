@@ -20,6 +20,13 @@ ou `pnpm build` (builda todos os pacotes).
 
 O `manifest.json` na pasta `dist/` referencia `code.js` e `ui.html` no mesmo directório (ver [ARQUITETURA-INSTA2FIGMA.md](../../docs/ARQUITETURA-INSTA2FIGMA.md) §4.4).
 
+## Fonte da UI (React)
+
+- Código editável em `ui-src/` (`App.tsx`, estilos). `pnpm build` corre **Vite** com **`vite-plugin-singlefile`** (JS/CSS inlinados em `dist/index.html` → `dist/ui.html`). Isto é necessário porque **`figma.showUI(__html__)`** injeta HTML no iframe: referências externas `<script src="./assets/...">` **não resolvem** e a UI fica em branco.
+
+- Depois corre **esbuild** em `src/code.ts` com `__html__` = string do `ui.html` gerado.
+- O ficheiro `ui.html` na raíz do pacote é **legado**; o build passou a gerar `dist/ui.html` a partir do Vite. Não dependas dele para produzir `dist/`.
+
 ## Uso local (MVP)
 
 1. **`pnpm infra:up`**, **`pnpm dev:api`** e **`pnpm dev:worker`**, com `S3_*` preenchidos (mesmos valores na API e no worker que em [apps/api/.env.example](../../apps/api/.env.example)).
