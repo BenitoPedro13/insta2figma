@@ -54,3 +54,15 @@ export type ApiEnvelope<T> = {
   data?: T;
   error?: SanitizedApiError;
 };
+
+/** Nome estável da fila (arquitetura §5.3). */
+export const SCRAPE_INSTAGRAM_V1_QUEUE = 'scrape-instagram-v1' as const;
+
+/** Payload BullMQ correlacionado com `jobs.id` (UUID de negócio). */
+export const scrapeInstagramV1JobPayloadSchema = z.object({
+  jobId: z.string().uuid(),
+});
+
+export type ScrapeInstagramV1JobPayload = z.infer<
+  typeof scrapeInstagramV1JobPayloadSchema
+>;

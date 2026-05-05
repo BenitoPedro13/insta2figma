@@ -9,10 +9,12 @@
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f postgres",
+    "infra:logs:redis": "docker compose logs -f redis",
     "db:migrate:dev": "pnpm --filter @insta2figma/api exec prisma migrate dev",
     "db:migrate:deploy": "pnpm --filter @insta2figma/api exec prisma migrate deploy",
     "db:smoke": "pnpm --filter @insta2figma/api run db:smoke",
-    "dev:api": "pnpm --filter @insta2figma/api run start:dev"
+    "dev:api": "pnpm --filter @insta2figma/api run start:dev",
+    "dev:worker": "pnpm --filter @insta2figma/worker run start:dev"
   },
   "devDependencies": {
     "turbo": "^2.3.3"

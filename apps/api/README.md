@@ -1,10 +1,10 @@
 # API Insta2Figma
 
-**Prisma** + **Postgres** + **NestJS** (Fase 3: jobs via HTTP com JWT, **sem fila** ainda). Persistência: §5.2 da [arquitetura](../../docs/ARQUITETURA-INSTA2FIGMA.md).
+**Prisma** + **Postgres** + **Redis** + **NestJS** (Fase 4: `POST /v1/jobs` cria registo em BD e **enfileira** BullMQ `scrape-instagram-v1`; o processamento real corre em [`apps/worker`](../../apps/worker)). Persistência: §5.2; fila: §5.3 da [arquitetura](../../docs/ARQUITETURA-INSTA2FIGMA.md).
 
 ## Ambiente
 
-Variáveis — ver [`.env.example`](./.env.example) (inclui `JWT_SECRET`, `PORT`, `DATABASE_URL`).
+Variáveis — ver [`.env.example`](./.env.example) (inclui `JWT_SECRET`, `PORT`, `DATABASE_URL`, **`REDIS_URL`**). Se Redis estiver indisponível ao criar job, a API pode responder **503** e marcar o job como falhado (`QUEUE_UNAVAILABLE`).
 
 > **MVP auth:** `POST /v1/auth/register` e `POST /v1/auth/login` usam só **email** (sem password). Isto é apenas para desenvolvimento; produção deve seguir o fluxo recomendado na arquitetura (OIDC / sessão).
 
@@ -58,17 +58,21 @@ curl -s -X POST "$BASE/v1/auth/register" \
 
 TOKEN="..."
 
-curl -s -X POST "$BASE/v1/jobs" \
+RESP=$(curl -s -X POST "$BASE/v1/jobs" \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
   -H 'idempotency-key: demo-1' \
-  -d '{"type":"SCRAPE_PROFILE","input":{"username":"instagram"}}'
+  -d '{"type":"SCRAPE_PROFILE","input":{"username":"instagram"}}')
+echo "$RESP"
+# Em zsh/bash com jq: JOB_ID=$(echo "$RESP" | jq -r '.data.id')
+# Sem jq: copia o UUID do campo "id" da resposta para JOB_ID.
 
-curl -s "$BASE/v1/jobs/JOB_UUID" \
+JOB_ID='…'  # substitui pelo UUID real
+curl -s "$BASE/v1/jobs/$JOB_ID" \
   -H "authorization: Bearer $TOKEN"
 ```
 
-Corpo de job validado com **`@insta2figma/shared-contracts`** (`createJobBodySchema`).
+Corpo de job validado com **`@insta2figma/shared-contracts`** (`createJobBodySchema`). Para ver o estado avançar até `succeeded` (simulação na Fase 4), corre na raíz `pnpm dev:worker` em paralelo com esta API — ver [worker README](../../apps/worker/README.md).
 
 ### Prisma (CLI)
 

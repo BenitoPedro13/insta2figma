@@ -7,6 +7,7 @@ dist
 .env.*
 !.env.example
 apps/api/.env
+apps/worker/.env
 
 # Legado Figma (gerado ao lado do fonte)
 code.js

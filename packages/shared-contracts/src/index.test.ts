@@ -3,6 +3,7 @@ import {
   createJobBodySchema,
   jobStatusSchema,
   jobTypeSchema,
+  scrapeInstagramV1JobPayloadSchema,
 } from './index';
 
 describe('jobTypeSchema', () => {
@@ -37,5 +38,14 @@ describe('createJobBodySchema', () => {
         input: { username: '' },
       }),
     ).toThrow();
+  });
+});
+
+describe('scrapeInstagramV1JobPayloadSchema', () => {
+  it('aceita jobId uuid', () => {
+    const parsed = scrapeInstagramV1JobPayloadSchema.parse({
+      jobId: '00000000-0000-4000-8000-000000000001',
+    });
+    expect(parsed.jobId).toBe('00000000-0000-4000-8000-000000000001');
   });
 });

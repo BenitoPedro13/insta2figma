@@ -3,9 +3,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import type { Job, JobStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
+import type { Queue } from 'bullmq';
+import { SCRAPE_INSTAGRAM_V1_QUEUE } from '../queue/scrape-queue.name';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type JobResponse = {
@@ -25,7 +29,11 @@ export type JobResponse = {
 
 @Injectable()
 export class JobsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(SCRAPE_INSTAGRAM_V1_QUEUE)
+    private readonly scrapeQueue: Queue,
+  ) {}
 
   toResponse(job: Job): JobResponse {
     return {
@@ -71,8 +79,10 @@ export class JobsService {
     }
 
     const data = parsed.data;
+    let job: Job;
+
     try {
-      const job = await this.prisma.job.create({
+      job = await this.prisma.job.create({
         data: {
           userId,
           type: data.type,
@@ -81,7 +91,6 @@ export class JobsService {
           status: 'queued',
         },
       });
-      return this.toResponse(job);
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
@@ -97,6 +106,33 @@ export class JobsService {
       }
       throw e;
     }
+
+    try {
+      await this.scrapeQueue.add(
+        'run',
+        { jobId: job.id },
+        {
+          attempts: 6,
+          backoff: { type: 'exponential', delay: 3000 },
+          jobId: job.id,
+        },
+      );
+    } catch (_enqueueErr) {
+      await this.prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: 'failed',
+          errorCode: 'QUEUE_UNAVAILABLE',
+          errorMessage: 'Redis ou BullMQ indisponível ao enfileirar.',
+          finishedAt: new Date(),
+        },
+      });
+      throw new ServiceUnavailableException(
+        'Fila indisponível; o job foi marcado como falhado.',
+      );
+    }
+
+    return this.toResponse(job);
   }
 
   async getOne(userId: string, jobId: string): Promise<JobResponse> {

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "cache": false,
+      "env": ["DATABASE_URL", "REDIS_URL"]
+    },
+    "lint": {
+      "cache": true,
+      "dependsOn": ["^build"]
+    }
+  }
+}

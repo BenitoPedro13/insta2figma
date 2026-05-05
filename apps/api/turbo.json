@@ -11,7 +11,7 @@
     },
     "test": {
       "cache": false,
-      "env": ["DATABASE_URL", "JWT_SECRET"]
+      "env": ["DATABASE_URL", "JWT_SECRET", "REDIS_URL"]
     }
   }
 }
