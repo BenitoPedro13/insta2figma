@@ -5,7 +5,13 @@
   "scripts": {
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f postgres",
+    "db:migrate:dev": "pnpm --filter @insta2figma/api exec prisma migrate dev",
+    "db:migrate:deploy": "pnpm --filter @insta2figma/api exec prisma migrate deploy",
+    "db:smoke": "pnpm --filter @insta2figma/api run db:smoke"
   },
   "devDependencies": {
     "turbo": "^2.3.3"

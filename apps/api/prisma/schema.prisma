@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(uuid()) @db.Uuid
+  email            String?  @unique
+  stripeCustomerId String?  @map("stripe_customer_id")
+  planTier         String   @default("free") @map("plan_tier")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  jobs Job[]
+
+  @@map("users")
+}
+
+enum JobStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+
+  @@map("job_status")
+}
+
+model Job {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  type                String
+  input               Json
+  status              JobStatus @default(queued)
+  resultSummary       Json?     @map("result_summary")
+  resultStoragePrefix String?   @map("result_storage_prefix")
+  errorCode           String?   @map("error_code")
+  errorMessage        String?   @map("error_message") @db.Text
+  idempotencyKey      String?   @map("idempotency_key")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  startedAt           DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt          DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets Asset[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("jobs")
+}
+
+model Asset {
+  id          String    @id @default(uuid()) @db.Uuid
+  jobId       String    @map("job_id") @db.Uuid
+  contentType String    @map("content_type")
+  storageKey  String    @map("storage_key")
+  byteSize    BigInt    @map("byte_size")
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("assets")
+}
