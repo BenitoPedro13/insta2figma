@@ -26,12 +26,33 @@ function formatCaught(err: unknown): string {
   }
 }
 
-figma.showUI(__html__, { width: 380, height: 480 });
+figma.showUI(__html__, { width: 380, height: 520 });
+
+void bootstrapSession();
 
 /** Alinhado com `historyStorage.ts` HISTORY_STORAGE_KEY — persistência via `clientStorage`. */
 const HISTORY_STORAGE_KEY = 'insta2figma:history:v1';
+const SESSION_STORAGE_KEY = 'insta2figma:session:v1';
 const DEFAULT_API_BASE = 'http://127.0.0.1:3333';
-const DEFAULT_SESSION_EMAIL = 'plugin@insta2figma.local';
+
+type StoredSession = {
+  accessToken: string;
+  userId: string;
+  figmaUserId: string;
+};
+
+type SessionQuotas = {
+  jobsRemaining: number | null;
+  jobsLimit: number | null;
+  maxPosts: number;
+  expandCarouselImages: boolean;
+};
+
+type SessionPayload = {
+  planTier: 'free' | 'pro';
+  quotas: SessionQuotas;
+  userId: string;
+};
 
 const SAMPLE_JPEG_URL =
   'https://instagram.fsdu12-1.fna.fbcdn.net/v/t51.2885-15/279910414_168521058871473_7937661385851861231_n.jpg?stp=dst-jpg_e15_tt6&_nc_ht=instagram.fsdu12-1.fna.fbcdn.net&_nc_cat=109&_nc_ohc=xk0PPr11jRcQ7kNvgFq_3fe&_nc_gid=51bc36fd697b4d51a1d103f8b8dfaeca&edm=AOQ1c0wBAAAA&ccb=7-5&oh=00_AYA7-Hwk3X6EBbzzfLeql0TXF9_IRKmsk-kplZ0MOH3eDg&oe=676F4807&_nc_sid=8b3546';
@@ -238,6 +259,9 @@ type PluginMessage =
       maxPosts?: number;
       expandCarouselImages?: boolean;
     }
+  | { type: 'session-request' }
+  | { type: 'billing-checkout' }
+  | { type: 'billing-portal' }
   | { type: 'error'; message: unknown };
 
 function normBase(b: string): string {
@@ -246,42 +270,158 @@ function normBase(b: string): string {
     .replace(/\/+$/, '');
 }
 
-async function getToken(base: string, email: string): Promise<string> {
-  const reg = await fetch(`${base}/v1/auth/register`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-  const regJ = (await reg.json().catch(() => ({}))) as Record<string, unknown>;
-  const regData = regJ.data as { accessToken?: string } | undefined;
-  if (reg.ok && regData?.accessToken) {
-    return regData.accessToken;
+function parseApiError(payload: Record<string, unknown>): string {
+  const err = payload.error as { code?: string; message?: string } | undefined;
+  if (err?.message) return err.message;
+  return JSON.stringify(payload).slice(0, 240);
+}
+
+async function loadStoredSession(): Promise<StoredSession | null> {
+  try {
+    const raw = await figma.clientStorage.getAsync(SESSION_STORAGE_KEY);
+    if (!raw || typeof raw !== 'object') return null;
+    const s = raw as StoredSession;
+    if (
+      typeof s.accessToken === 'string' &&
+      typeof s.userId === 'string' &&
+      typeof s.figmaUserId === 'string'
+    ) {
+      return s;
+    }
+  } catch (e) {
+    console.warn('[Insta2Figma] loadStoredSession', e);
   }
-  const login = await fetch(`${base}/v1/auth/login`, {
+  return null;
+}
+
+async function saveStoredSession(session: StoredSession): Promise<void> {
+  await figma.clientStorage.setAsync(SESSION_STORAGE_KEY, session);
+}
+
+async function authFigmaUser(
+  base: string,
+  figmaUserId: string,
+  name?: string,
+): Promise<StoredSession> {
+  const res = await fetch(`${base}/v1/auth/figma`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ figmaUserId, name }),
   });
-  const loginJ = (await login.json().catch(() => ({}))) as Record<
-    string,
-    unknown
-  >;
-  const loginData = loginJ.data as { accessToken?: string } | undefined;
-  const loginErr = loginJ.error as { code?: string; message?: string } | undefined;
-  const regErr = regJ.error as { code?: string; message?: string } | undefined;
-  if (!login.ok || !loginData?.accessToken) {
-    throw new Error(
-      `Auth (register ${reg.status}, login ${login.status}): ${JSON.stringify(
-        loginErr ?? regErr ?? loginJ,
-      ).slice(0, 240)}`,
+  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = payload.data as
+    | { accessToken?: string; userId?: string }
+    | undefined;
+  if (!res.ok || !data?.accessToken || !data?.userId) {
+    throw new Error(`Auth Figma ${res.status}: ${parseApiError(payload)}`);
+  }
+  const session: StoredSession = {
+    accessToken: data.accessToken,
+    userId: data.userId,
+    figmaUserId,
+  };
+  await saveStoredSession(session);
+  return session;
+}
+
+async function fetchMe(base: string, token: string): Promise<SessionPayload> {
+  const res = await fetch(`${base}/v1/me`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = payload.data as Record<string, unknown> | undefined;
+  if (!res.ok || !data) {
+    throw new Error(`GET /me ${res.status}: ${parseApiError(payload)}`);
+  }
+  const quotasRaw = data.quotas as Record<string, unknown> | undefined;
+  const planTier = data.planTier === 'pro' ? 'pro' : 'free';
+  return {
+    planTier,
+    userId: String(data.userId ?? ''),
+    quotas: {
+      jobsRemaining:
+        typeof quotasRaw?.jobsRemaining === 'number'
+          ? quotasRaw.jobsRemaining
+          : quotasRaw?.jobsRemaining === null
+            ? null
+            : 0,
+      jobsLimit:
+        typeof quotasRaw?.jobsLimit === 'number'
+          ? quotasRaw.jobsLimit
+          : quotasRaw?.jobsLimit === null
+            ? null
+            : null,
+      maxPosts:
+        typeof quotasRaw?.maxPosts === 'number' && Number.isFinite(quotasRaw.maxPosts)
+          ? quotasRaw.maxPosts
+          : 12,
+      expandCarouselImages: quotasRaw?.expandCarouselImages === true,
+    },
+  };
+}
+
+async function ensureSession(base: string): Promise<{
+  session: StoredSession;
+  me: SessionPayload;
+}> {
+  const figmaUser = figma.currentUser;
+  if (!figmaUser?.id) {
+    throw new Error('Inicia sessão no Figma para usar o Insta2Figma.');
+  }
+  const figmaUserId = figmaUser.id;
+  let stored = await loadStoredSession();
+  if (!stored || stored.figmaUserId !== figmaUserId) {
+    stored = await authFigmaUser(
+      base,
+      figmaUserId,
+      figmaUser.name ?? undefined,
     );
   }
-  return loginData.accessToken;
+  const me = await fetchMe(base, stored.accessToken);
+  return { session: stored, me };
+}
+
+async function bootstrapSession(): Promise<void> {
+  const base = normBase(DEFAULT_API_BASE);
+  try {
+    const { me } = await ensureSession(base);
+    figma.ui.postMessage({ type: 'session-data', ...me });
+  } catch (err) {
+    figma.ui.postMessage({
+      type: 'session-error',
+      message: formatCaught(err),
+    });
+  }
+}
+
+async function openBillingCheckout(base: string, token: string): Promise<void> {
+  const res = await fetch(`${base}/v1/billing/checkout-session`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = payload.data as { url?: string } | undefined;
+  if (!res.ok || !data?.url) {
+    throw new Error(`Checkout ${res.status}: ${parseApiError(payload)}`);
+  }
+  figma.openExternal(data.url);
+}
+
+async function openBillingPortal(base: string, token: string): Promise<void> {
+  const res = await fetch(`${base}/v1/billing/portal-session`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = payload.data as { url?: string } | undefined;
+  if (!res.ok || !data?.url) {
+    throw new Error(`Portal ${res.status}: ${parseApiError(payload)}`);
+  }
+  figma.openExternal(data.url);
 }
 
 async function importProfileViaApi(
   base: string,
-  email: string,
   username: string,
   options: { maxPosts: number; expandCarouselImages: boolean },
 ): Promise<void> {
@@ -290,7 +430,9 @@ async function importProfileViaApi(
   };
 
   notifyStatus('A autenticar…');
-  const token = await getToken(base, email);
+  const { session, me } = await ensureSession(base);
+  const token = session.accessToken;
+  figma.ui.postMessage({ type: 'session-data', ...me });
 
   notifyStatus(
     `A criar job (${options.maxPosts} posts recentes · carrossel: ${options.expandCarouselImages ? 'todas as imagens' : 'só capa'})…`,
@@ -316,7 +458,14 @@ async function importProfileViaApi(
   const data = jobBody.data as { id?: string } | undefined;
   const legacyId = typeof jobBody.id === 'string' ? jobBody.id : undefined;
   if (!jr.ok) {
-    throw new Error(`${jr.status}: ${JSON.stringify(jobBody)}`);
+    const err = jobBody.error as { code?: string; message?: string } | undefined;
+    if (err?.code === 'QUOTA_EXCEEDED') {
+      throw new Error(
+        err.message ??
+          'Quota mensal esgotada. Faz upgrade para Pro para continuar.',
+      );
+    }
+    throw new Error(`${jr.status}: ${parseApiError(jobBody)}`);
   }
   const jobId = data?.id ?? legacyId;
   if (!jobId) {
@@ -427,7 +576,6 @@ async function importProfileViaApi(
 
 async function previewProfileViaApi(
   base: string,
-  email: string,
   username: string,
   opts: { maxPosts: number; expandCarouselImages: boolean },
 ): Promise<{
@@ -440,7 +588,8 @@ async function previewProfileViaApi(
   estimatedPostCovers: number;
   estimatedCarouselExtras: number;
 }> {
-  const token = await getToken(base, email);
+  const { session } = await ensureSession(base);
+  const token = session.accessToken;
   const qs = `username=${encodeURIComponent(username)}&maxPosts=${encodeURIComponent(
     String(opts.maxPosts),
   )}&expandCarouselImages=${opts.expandCarouselImages ? 'true' : 'false'}`;
@@ -487,6 +636,35 @@ async function previewProfileViaApi(
 }
 
 figma.ui.onmessage = async (msg: PluginMessage) => {
+  if (msg.type === 'session-request') {
+    await bootstrapSession();
+    return;
+  }
+
+  if (msg.type === 'billing-checkout') {
+    const base = normBase(DEFAULT_API_BASE);
+    try {
+      const { session } = await ensureSession(base);
+      await openBillingCheckout(base, session.accessToken);
+      figma.notify('Checkout aberto no browser.');
+    } catch (err) {
+      figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
+    }
+    return;
+  }
+
+  if (msg.type === 'billing-portal') {
+    const base = normBase(DEFAULT_API_BASE);
+    try {
+      const { session } = await ensureSession(base);
+      await openBillingPortal(base, session.accessToken);
+      figma.notify('Portal de cliente aberto no browser.');
+    } catch (err) {
+      figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
+    }
+    return;
+  }
+
   if (msg.type === 'history-request') {
     try {
       const raw = await figma.clientStorage.getAsync(HISTORY_STORAGE_KEY);
@@ -530,7 +708,6 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
   if (msg.type === 'import-profile') {
     const base = normBase(DEFAULT_API_BASE);
-    const email = DEFAULT_SESSION_EMAIL;
     const username = String(msg.username ?? '')
       .trim()
       .replace(/^@+/, '')
@@ -557,7 +734,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       return;
     }
     try {
-      await importProfileViaApi(base, email, username, {
+      await importProfileViaApi(base, username, {
         maxPosts,
         expandCarouselImages,
       });
@@ -572,7 +749,6 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
   if (msg.type === 'profile-preview') {
     const base = normBase(DEFAULT_API_BASE);
-    const email = DEFAULT_SESSION_EMAIL;
     const username = String(msg.username ?? '')
       .trim()
       .replace(/^@+/, '')
@@ -597,7 +773,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       return;
     }
     try {
-      const preview = await previewProfileViaApi(base, email, username, {
+      const preview = await previewProfileViaApi(base, username, {
         maxPosts,
         expandCarouselImages,
       });

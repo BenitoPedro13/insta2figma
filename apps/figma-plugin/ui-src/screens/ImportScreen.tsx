@@ -3,7 +3,11 @@ import { useCallback, type FormEvent } from 'react';
 type ImportScreenProps = {
   username: string;
   maxPosts: number;
+  maxPostsLimit: number;
   expandCarouselImages: boolean;
+  allowCarousel: boolean;
+  quotaExceeded: boolean;
+  planTier: 'free' | 'pro';
   status: string;
   importing: boolean;
   preview: {
@@ -21,6 +25,7 @@ type ImportScreenProps = {
   onMaxPostsChange: (v: number) => void;
   onExpandCarouselChange: (v: boolean) => void;
   onImport: () => void;
+  onUpgrade: () => void;
   onBack: () => void;
   onClose: () => void;
 };
@@ -28,7 +33,11 @@ type ImportScreenProps = {
 export function ImportScreen({
   username,
   maxPosts,
+  maxPostsLimit,
   expandCarouselImages,
+  allowCarousel,
+  quotaExceeded,
+  planTier,
   status,
   importing,
   preview,
@@ -38,6 +47,7 @@ export function ImportScreen({
   onMaxPostsChange,
   onExpandCarouselChange,
   onImport,
+  onUpgrade,
   onBack,
   onClose,
 }: ImportScreenProps) {
@@ -111,7 +121,7 @@ export function ImportScreen({
             id="max-posts"
             type="number"
             min={1}
-            max={50}
+            max={maxPostsLimit}
             step={1}
             value={Number.isFinite(maxPosts) ? maxPosts : ''}
             onChange={(e) => {
@@ -120,7 +130,7 @@ export function ImportScreen({
                 onMaxPostsChange(1);
                 return;
               }
-              onMaxPostsChange(Math.min(50, Math.max(1, n)));
+              onMaxPostsChange(Math.min(maxPostsLimit, Math.max(1, n)));
             }}
           />
         </div>
@@ -141,15 +151,34 @@ export function ImportScreen({
           <input
             type="checkbox"
             checked={expandCarouselImages}
+            disabled={!allowCarousel}
             onChange={(e) => onExpandCarouselChange(e.target.checked)}
           />
           Export all images from carousel posts
+          {!allowCarousel ? (
+            <span className="import-hint"> (Pro)</span>
+          ) : null}
         </label>
 
+        {quotaExceeded ? (
+          <p className="import-quota-warn">
+            Quota mensal esgotada no plano {planTier === 'pro' ? 'Pro' : 'Free'}.
+          </p>
+        ) : null}
+
         <div className="plugin-actions">
-          <button type="submit" className="primary" disabled={importing}>
-            {ctaLabel}
+          <button
+            type="submit"
+            className="primary"
+            disabled={importing || quotaExceeded}
+          >
+            {quotaExceeded ? 'Quota esgotada' : ctaLabel}
           </button>
+          {quotaExceeded ? (
+            <button type="button" className="secondary" onClick={onUpgrade}>
+              Upgrade to Pro
+            </button>
+          ) : null}
           <button type="button" className="secondary" onClick={onClose}>
             Fechar
           </button>

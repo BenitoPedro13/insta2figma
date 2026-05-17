@@ -18,9 +18,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const body = exception.getResponse();
       const message = this.extractMessage(body);
+      const customCode = this.extractCode(body);
       response.status(status).json({
         error: {
-          code: `HTTP_${status}`,
+          code: customCode ?? `HTTP_${status}`,
           message,
         },
       });
@@ -47,6 +48,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message: 'Erro interno.',
       },
     });
+  }
+
+  private extractCode(body: string | object): string | undefined {
+    if (body && typeof body === 'object' && 'code' in body) {
+      const c = (body as { code: unknown }).code;
+      if (typeof c === 'string') return c;
+    }
+    return undefined;
   }
 
   private extractMessage(body: string | object): string {

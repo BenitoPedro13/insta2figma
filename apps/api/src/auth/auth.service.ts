@@ -2,9 +2,23 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import type { FigmaAuthDto } from './dto/figma-auth.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 import type { JwtPayload } from './auth-token.payload';
+
+function figmaSyntheticEmail(figmaUserId: string): string {
+  const safe = figmaUserId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 48);
+  return `figma+${safe}@mailinator.com`;
+}
+
+const LEGACY_EMAIL_SUFFIXES = ['@users.insta2figma.app', '@example.com'];
+
+function isLegacySyntheticEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const lower = email.toLowerCase();
+  return LEGACY_EMAIL_SUFFIXES.some((s) => lower.endsWith(s));
+}
 
 @Injectable()
 export class AuthService {
@@ -37,7 +51,31 @@ export class AuthService {
     return this.signForUser(user.id);
   }
 
-  private signForUser(userId: string): {
+  async authFigma(
+    dto: FigmaAuthDto,
+  ): Promise<{ accessToken: string; expiresIn: string; userId: string }> {
+    const figmaUserId = dto.figmaUserId.trim();
+    let user = await this.prisma.user.findUnique({
+      where: { figmaUserId },
+    });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          figmaUserId,
+          email: figmaSyntheticEmail(figmaUserId),
+        },
+      });
+    } else if (isLegacySyntheticEmail(user.email)) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { email: figmaSyntheticEmail(figmaUserId) },
+      });
+    }
+    const tokens = this.signForUser(user.id);
+    return { ...tokens, userId: user.id };
+  }
+
+  signForUser(userId: string): {
     accessToken: string;
     expiresIn: string;
   } {

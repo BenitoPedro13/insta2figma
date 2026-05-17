@@ -8,16 +8,58 @@ datasource db {
 }
 
 model User {
-  id               String   @id @default(uuid()) @db.Uuid
-  email            String?  @unique
-  stripeCustomerId String?  @map("stripe_customer_id")
-  planTier         String   @default("free") @map("plan_tier")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String   @id @default(uuid()) @db.Uuid
+  email           String?  @unique
+  figmaUserId     String?  @unique @map("figma_user_id")
+  polarCustomerId String?  @map("polar_customer_id")
+  planTier        String   @default("free") @map("plan_tier")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  jobs Job[]
+  jobs          Job[]
+  subscriptions Subscription[]
+  usageCounters UsageCounter[]
 
   @@map("users")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid()) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  polarSubscriptionId  String    @unique @map("polar_subscription_id")
+  productId            String    @map("product_id")
+  status               String
+  currentPeriodEnd     DateTime? @map("current_period_end") @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("subscriptions")
+}
+
+model UsageCounter {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  periodStart DateTime @map("period_start") @db.Date
+  jobsUsed    Int      @default(0) @map("jobs_used")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, periodStart])
+  @@map("usage_counters")
+}
+
+model WebhookEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  polarEventId String   @unique @map("polar_event_id")
+  eventType    String   @map("event_type")
+  processedAt  DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@map("webhook_events")
 }
 
 enum JobStatus {

@@ -11,6 +11,8 @@ import { Prisma } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { SCRAPE_INSTAGRAM_V1_QUEUE } from '../queue/scrape-queue.name';
 import { PrismaService } from '../prisma/prisma.service';
+import { currentPeriodStartUtc } from '../plan/plan.config';
+import { PlanService } from '../plan/plan.service';
 import { StorageService } from '../storage/storage.service';
 
 import type { JobSignedAssetDto } from '@insta2figma/shared-contracts';
@@ -39,6 +41,7 @@ export class JobsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly plan: PlanService,
     @InjectQueue(SCRAPE_INSTAGRAM_V1_QUEUE)
     private readonly scrapeQueue: Queue,
   ) {}
@@ -90,17 +93,36 @@ export class JobsService {
     }
 
     const data = parsed.data;
+    const input = data.input as {
+      maxPosts?: number;
+      expandCarouselImages?: boolean;
+    };
+    await this.plan.assertCanCreateJob(userId, {
+      maxPosts: input.maxPosts,
+      expandCarouselImages: input.expandCarouselImages,
+    });
+
+    const periodStart = currentPeriodStartUtc();
     let job: Job;
 
     try {
-      job = await this.prisma.job.create({
-        data: {
-          userId,
-          type: data.type,
-          input: data.input as unknown as Prisma.InputJsonValue,
-          idempotencyKey: key ?? undefined,
-          status: 'queued',
-        },
+      job = await this.prisma.$transaction(async (tx) => {
+        await tx.usageCounter.upsert({
+          where: {
+            userId_periodStart: { userId, periodStart },
+          },
+          create: { userId, periodStart, jobsUsed: 1 },
+          update: { jobsUsed: { increment: 1 } },
+        });
+        return tx.job.create({
+          data: {
+            userId,
+            type: data.type,
+            input: data.input as unknown as Prisma.InputJsonValue,
+            idempotencyKey: key ?? undefined,
+            status: 'queued',
+          },
+        });
       });
     } catch (e) {
       if (

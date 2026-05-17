@@ -145,3 +145,41 @@ export const jobSignedAssetDtoSchema = z.object({
 });
 
 export type JobSignedAssetDto = z.infer<typeof jobSignedAssetDtoSchema>;
+
+/** Tiers de subscrição (Fase 7 — Polar). */
+export const PLAN_TIERS = ['free', 'pro'] as const;
+export const planTierSchema = z.enum(PLAN_TIERS);
+export type PlanTier = z.infer<typeof planTierSchema>;
+
+export const meQuotasSchema = z.object({
+  jobsRemaining: z.number().int().min(0).nullable(),
+  jobsLimit: z.number().int().min(0).nullable(),
+  maxPosts: z.number().int().min(1),
+  expandCarouselImages: z.boolean(),
+});
+
+export type MeQuotas = z.infer<typeof meQuotasSchema>;
+
+export const meSubscriptionSchema = z.object({
+  status: z.string(),
+  currentPeriodEnd: z.string().nullable(),
+});
+
+export type MeSubscription = z.infer<typeof meSubscriptionSchema>;
+
+export const meResponseSchema = z.object({
+  userId: z.string().uuid(),
+  planTier: planTierSchema,
+  quotas: meQuotasSchema,
+  subscription: meSubscriptionSchema.optional(),
+});
+
+export type MeResponse = z.infer<typeof meResponseSchema>;
+
+export const QUOTA_EXCEEDED_ERROR_CODE = 'QUOTA_EXCEEDED' as const;
+
+export const billingSessionUrlSchema = z.object({
+  url: z.string().url(),
+});
+
+export type BillingSessionUrl = z.infer<typeof billingSessionUrlSchema>;

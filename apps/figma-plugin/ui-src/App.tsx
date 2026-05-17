@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AccountBanner } from './components/AccountBanner';
 import { ChromeHeader } from './components/ChromeHeader';
 import {
   clearLegacyIframeHistory,
@@ -50,6 +51,14 @@ export function App() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
+  const [planTier, setPlanTier] = useState<'free' | 'pro'>('free');
+  const [jobsRemaining, setJobsRemaining] = useState<number | null>(null);
+  const [jobsLimit, setJobsLimit] = useState<number | null>(null);
+  const [maxPostsLimit, setMaxPostsLimit] = useState(12);
+  const [allowCarousel, setAllowCarousel] = useState(false);
+  const [sessionError, setSessionError] = useState('');
+
+  const quotaExceeded = jobsRemaining != null && jobsRemaining <= 0;
 
   const onCancel = useCallback(() => {
     parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
@@ -96,6 +105,47 @@ export function App() {
     const onMsg = (ev: MessageEvent<{ pluginMessage?: unknown }>) => {
       const pm = ev.data?.pluginMessage as Record<string, unknown> | undefined;
       if (!pm || typeof pm.type !== 'string') return;
+
+      if (pm.type === 'session-data') {
+        setSessionError('');
+        setPlanTier(pm.planTier === 'pro' ? 'pro' : 'free');
+        const q = pm.quotas as Record<string, unknown> | undefined;
+        if (q) {
+          setJobsRemaining(
+            typeof q.jobsRemaining === 'number'
+              ? q.jobsRemaining
+              : q.jobsRemaining === null
+                ? null
+                : null,
+          );
+          setJobsLimit(
+            typeof q.jobsLimit === 'number'
+              ? q.jobsLimit
+              : q.jobsLimit === null
+                ? null
+                : null,
+          );
+          const mp =
+            typeof q.maxPosts === 'number' && Number.isFinite(q.maxPosts)
+              ? q.maxPosts
+              : 12;
+          setMaxPostsLimit(mp);
+          setMaxPosts((prev) => Math.min(prev, mp));
+          const carousel = q.expandCarouselImages === true;
+          setAllowCarousel(carousel);
+          if (!carousel) setExpandCarouselImages(false);
+        }
+        return;
+      }
+
+      if (pm.type === 'session-error') {
+        setSessionError(
+          typeof pm.message === 'string'
+            ? pm.message
+            : 'Sessão indisponível. Inicia sessão no Figma.',
+        );
+        return;
+      }
 
       if (pm.type === 'history-data') {
         let entries = parseHistoryPayload(pm.entries);
@@ -192,9 +242,18 @@ export function App() {
       }
     };
     window.addEventListener('message', onMsg);
+    parent.postMessage({ pluginMessage: { type: 'session-request' } }, '*');
     parent.postMessage({ pluginMessage: { type: 'history-request' } }, '*');
     return () => window.removeEventListener('message', onMsg);
   }, [persistEntries]);
+
+  const onUpgrade = useCallback(() => {
+    parent.postMessage({ pluginMessage: { type: 'billing-checkout' } }, '*');
+  }, []);
+
+  const onManageSubscription = useCallback(() => {
+    parent.postMessage({ pluginMessage: { type: 'billing-portal' } }, '*');
+  }, []);
 
   useEffect(() => {
     if (view !== 'import' || importing) return;
@@ -238,10 +297,14 @@ export function App() {
       setStatus('Preenche username.');
       return;
     }
+    if (quotaExceeded) {
+      setStatus('Quota mensal esgotada. Faz upgrade para Pro.');
+      return;
+    }
     lastImportUsername.current = user;
     setImporting(true);
     setStatus('A arrancar…');
-    const posts = Math.min(50, Math.max(1, Math.floor(maxPosts)));
+    const posts = Math.min(maxPostsLimit, Math.max(1, Math.floor(maxPosts)));
     parent.postMessage(
       {
         pluginMessage: {
@@ -253,7 +316,7 @@ export function App() {
       },
       '*',
     );
-  }, [username, maxPosts, expandCarouselImages]);
+  }, [username, maxPosts, expandCarouselImages, quotaExceeded, maxPostsLimit]);
 
   const onToggleFavoriteRow = useCallback(
     (u: string) => {
@@ -265,6 +328,14 @@ export function App() {
   return (
     <div className="plugin-shell">
       <ChromeHeader title="Insta2Figma" onClose={onCancel} />
+      <AccountBanner
+        planTier={planTier}
+        jobsRemaining={jobsRemaining}
+        jobsLimit={jobsLimit}
+        sessionError={sessionError}
+        onUpgrade={onUpgrade}
+        onManage={onManageSubscription}
+      />
       <div className={`plugin-body ${view === 'list' ? 'plugin-body--flush' : ''}`}>
         {view === 'list' ? (
           <ListScreen
@@ -284,7 +355,11 @@ export function App() {
           <ImportScreen
             username={username}
             maxPosts={maxPosts}
+            maxPostsLimit={maxPostsLimit}
             expandCarouselImages={expandCarouselImages}
+            allowCarousel={allowCarousel}
+            quotaExceeded={quotaExceeded}
+            planTier={planTier}
             status={status}
             importing={importing}
             preview={preview}
@@ -294,6 +369,7 @@ export function App() {
             onMaxPostsChange={setMaxPosts}
             onExpandCarouselChange={setExpandCarouselImages}
             onImport={onImport}
+            onUpgrade={onUpgrade}
             onBack={() => setView('list')}
             onClose={onCancel}
           />

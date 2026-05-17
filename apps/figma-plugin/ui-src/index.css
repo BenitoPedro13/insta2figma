@@ -26,6 +26,89 @@ body {
   min-height: 100vh;
 }
 
+.account-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+.account-banner--error {
+  background: #fff4f4;
+}
+
+.account-banner--error p {
+  margin: 0;
+  color: #b42318;
+  font-size: 11px;
+}
+
+.account-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.account-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.account-badge--free {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.account-badge--pro {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.account-quota {
+  font-size: 11px;
+  color: #666;
+}
+
+.account-banner-actions {
+  flex-shrink: 0;
+}
+
+.account-upgrade,
+.account-manage {
+  border: none;
+  background: transparent;
+  color: #7c3aed;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.account-upgrade:hover,
+.account-manage:hover {
+  text-decoration: underline;
+}
+
+.import-quota-warn {
+  margin: 0;
+  padding: 8px 10px;
+  background: #fff8e6;
+  border-radius: 6px;
+  color: #8a6100;
+  font-size: 11px;
+}
+
 .chrome-header {
   display: flex;
   align-items: center;

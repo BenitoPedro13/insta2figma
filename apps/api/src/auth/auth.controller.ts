@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { FigmaAuthDto } from './dto/figma-auth.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
@@ -28,6 +29,20 @@ export class AuthController {
     tokenType: 'Bearer';
   }> {
     return this.auth.login(dto).then((t) => ({
+      ...t,
+      tokenType: 'Bearer' as const,
+    }));
+  }
+
+  @Post('figma')
+  @HttpCode(HttpStatus.OK)
+  authFigma(@Body() dto: FigmaAuthDto): Promise<{
+    accessToken: string;
+    expiresIn: string;
+    tokenType: 'Bearer';
+    userId: string;
+  }> {
+    return this.auth.authFigma(dto).then((t) => ({
       ...t,
       tokenType: 'Bearer' as const,
     }));

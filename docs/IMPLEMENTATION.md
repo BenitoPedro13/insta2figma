@@ -10,7 +10,7 @@ Este guia **desdobra** o [roadmap (secção 13)](./ARQUITETURA-INSTA2FIGMA.md#13
 - [x] **Fase 4** — Redis + BullMQ na API + `apps/worker` com scrape **simulado**
 - [x] **Fase 5** — Scrape Instagram real (`InstagramDataSource`, erros classificados)
 - [x] **Fase 6** — MinIO/S3-compat, uploads worker, presign API e plugin (`polling`, thumbnails no canvas)
-- [ ] **Fase 7** — Stripe + quotas atómicas + `GET /v1/me` ou `/v1/usage`
+- [x] **Fase 7** — Polar.sh + quotas atómicas + `GET /v1/me` + auth Figma + plugin billing
 - [ ] **Fase 8** — CORS, rate limits, observabilidade, DLQ + [checklist secção 14](./ARQUITETURA-INSTA2FIGMA.md#14-checklist-anti-padrões-llms-devem-evitar)
 
 ## Onboarding DX (estado atual)
@@ -27,7 +27,7 @@ Objetivo: trazer o repositório para estado funcional com um único comando.
 
 ---
 
-**Estado actual (após Fase 6 MVP + refinamentos de UX):** Plugin [`apps/figma-plugin`](../apps/figma-plugin): UI com History/Favorites, preview debounced de perfil, estimativa de imagens no CTA, import assíncrono via jobs, persistência local em `figma.clientStorage`. O `code.ts` gere autenticação MVP e chamadas API no main thread; a UI não expõe mais campos de API/email. **Próximo:** Fase 7 (Stripe / quotas). Refinar Fase 8: `networkAccess` explícito, backoff de polling, layout.
+**Estado actual (após Fase 7):** Billing via [Polar.sh](https://polar.sh/docs/integrate/sdk/adapters/express): checkout/portal autenticados, webhooks `customer.state_changed`, tiers Free/Pro com quotas em `POST /v1/jobs`. Plugin: auth por `figma.currentUser`, JWT em `clientStorage`, banner de plano e CTA upgrade. **Próximo:** Fase 8 (CORS, rate limits, observabilidade).
 
 **Princípios transversais:** separação API / trabalho pesado; fila persistente (**BullMQ**, não apenas `Promise`/`setImmediate` em produção); contratos explícitos em `packages/shared-contracts`; secrets só no servidor; idempotência em billing/quota; preferir URLs assinadas para media ([secção 2](./ARQUITETURA-INSTA2FIGMA.md#2-princípios-arquiteturais-obrigatórios)).
 
@@ -126,16 +126,19 @@ flowchart LR
 
 ---
 
-## Fase 7 — Billing Stripe e quotas atómicas
+## Fase 7 — Billing Polar.sh e quotas atómicas
 
-**Objetivo:** [secções 5.6, 6.3, 8.4](./ARQUITETURA-INSTA2FIGMA.md#56-pagamentos-stripe).
+**Objetivo:** [secções 5.6, 6.3, 8.4](./ARQUITETURA-INSTA2FIGMA.md#56-pagamentos-stripe) (implementado com **Polar** em vez de Stripe).
 
-- Módulo Stripe: webhook com **corpo cru** para verificação de assinatura; idempotência por `event.id` ou natural key.
-- Tabelas `subscriptions` (+ `stripe_subscription_id`, `status`, `current_period_end`) e modelo de uso (contadores ou `usage_events` — uma estratégia documentada).
-- Em `POST /v1/jobs`: **transação** que cria job + consome/regista quota (**nunca** sem idempotência explícita — header `idempotency-key` recomendado, [secção 7.1](./ARQUITETURA-INSTA2FIGMA.md#71-endpoints-mínimos)).
-- Endpoint `GET /v1/me` ou `GET /v1/usage` para UI do plugin.
+- Módulo `billing/`: `@polar-sh/sdk` (checkout/portal sessions) + `@polar-sh/express` (webhooks com raw body em `main.ts`).
+- Prisma: `polar_customer_id`, `figma_user_id`, `subscriptions`, `usage_counters`, `webhook_events`.
+- `POST /v1/auth/figma` — utilizador único por `figma.currentUser.id`.
+- `GET /v1/me` — plano e quotas para o plugin.
+- `POST /v1/billing/checkout-session` e `portal-session` — URLs para `figma.openExternal`.
+- Webhook `POST /v1/billing/webhooks/polar` — `customer.state_changed` / subscrições → `plan_tier`.
+- Em `POST /v1/jobs`: transação `usage_counters` + `jobs`; erro `402` com código `QUOTA_EXCEEDED`.
 
-**Critério de conclusão:** quota bloqueia criação de job quando esgotada; Stripe atualiza estado de plano de forma determinística em replays.
+**Critério de conclusão:** quota bloqueia criação de job quando esgotada; Polar atualiza `plan_tier` de forma idempotente em replays de webhook.
 
 ---
 

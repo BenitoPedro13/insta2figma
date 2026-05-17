@@ -8,6 +8,7 @@
   "documentAccess": "dynamic-page",
   "editorType": ["figma"],
   "ui": "ui.html",
+  "permissions": ["currentuser"],
   "networkAccess": {
     "allowedDomains": ["*"],
     "reasoning": "Dev MVP: permite o proxy atual; substituir por domínios explícitos (API + storage) antes de produção — ver docs/IMPLEMENTATION.md Fase 8."
