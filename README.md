@@ -138,14 +138,17 @@ Guia completo (scopes do token, troubleshooting, `curl`): **[docs/DEV-POLAR-NGRO
 - Job fica em `queued`: worker não está de pé (`pnpm dev` ou `pnpm dev:worker`) ou Redis indisponível.
 - Preview sem avatar: endpoint de preview responde sem `profilePicDataUrl` (bloqueio upstream); o fallback de UI usa placeholder.
 - Checkout Polar / plano Pro: ver [docs/DEV-POLAR-NGROK.md](docs/DEV-POLAR-NGROK.md).
-- **`P3018` / `relation "assets" does not exist` no bootstrap:** migration antiga fora de ordem. Na raiz, com Docker a correr:
+- **`P3018` / `relation "assets" does not exist`:** a migration `20260505121352` foi removida do repo (estava antes do `init`). O Postgres ficou bloqueado. Na raiz:
   ```bash
-  # Opção A — BD local vazia (recomendado para novo dev)
-  pnpm --filter @insta2figma/api exec prisma migrate reset --force
-  pnpm db:migrate:deploy
-
-  # Opção B — já tinha falhado a migration 20260505121352 (antes do fix)
-  pnpm --filter @insta2figma/api exec prisma migrate resolve --rolled-back "20260505121352"
   git pull
+  pnpm infra:up
+  # Recomendado (BD local de dev — apaga dados):
+  pnpm --filter @insta2figma/api exec prisma migrate reset --force
+  pnpm bootstrap
+  ```
+  Ou só desbloquear e migrar:
+  ```bash
+  pnpm --filter @insta2figma/api exec prisma migrate resolve --rolled-back "20260505121352"
   pnpm db:migrate:deploy
   ```
+  O `pnpm bootstrap` tenta o `resolve` automaticamente.
