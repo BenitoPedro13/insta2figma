@@ -32,7 +32,7 @@ describe('buildScrapeSummaryV5FromUserNode', () => {
     const summary = buildScrapeSummaryV5FromUserNode(
       'fixture',
       minimalUser,
-      10,
+      { maxPosts: 10 },
     );
     expect(scrapeJobResultSummaryV5Schema.parse(summary)).toEqual(summary);
     expect(summary.profile.followerCount).toBe(100);
@@ -57,7 +57,7 @@ describe('buildScrapeSummaryV5FromUserNode', () => {
     const summary = buildScrapeSummaryV5FromUserNode(
       'fixture',
       user,
-      5,
+      { maxPosts: 5 },
     );
     expect(summary.postsSample).toHaveLength(5);
   });
@@ -91,11 +91,33 @@ describe('buildScrapeSummaryV5FromUserNode', () => {
     const summary = buildScrapeSummaryV5FromUserNode(
       'fixture',
       userWithSidecar,
-      10,
+      { maxPosts: 10 },
     );
     expect(summary.postsSample[0]?.carouselImageUrls).toEqual([
       'https://example.test/a.jpg',
       'https://example.test/b.jpg',
     ]);
+  });
+
+  it('seleciona post único por posição', () => {
+    const manyEdges = Array.from({ length: 12 }, (_, i) => ({
+      node: {
+        shortcode: `p${i}`,
+        display_url: 'https://x',
+        __typename: 'GraphImage',
+      },
+    }));
+
+    const user = {
+      ...minimalUser,
+      edge_owner_to_timeline_media: { count: 12, edges: manyEdges },
+    };
+
+    const summary = buildScrapeSummaryV5FromUserNode('fixture', user, {
+      selectionMode: 'single',
+      startIndex: 10,
+    });
+    expect(summary.postsSample).toHaveLength(1);
+    expect(summary.postsSample[0]?.shortcode).toBe('p9');
   });
 });

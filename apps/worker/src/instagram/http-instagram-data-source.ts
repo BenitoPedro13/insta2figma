@@ -1,11 +1,15 @@
-import type { ScrapeJobResultSummaryV5 } from '@insta2figma/shared-contracts';
+import type {
+  ScrapeJobResultSummaryV5,
+  ScrapeSelectionInput,
+} from '@insta2figma/shared-contracts';
 import { InstagramUpstreamError } from './instagram-upstream-error';
 import { buildScrapeSummaryV5FromUserNode } from './parse-web-profile';
 
 export interface InstagramDataSource {
   fetchProfilePostsSample(
     usernameNormalized: string,
-    maxPosts: number,
+    selectionInput: ScrapeSelectionInput,
+    defaults?: { defaultMaxPosts?: number },
   ): Promise<ScrapeJobResultSummaryV5>;
 }
 
@@ -52,7 +56,8 @@ export class HttpInstagramDataSource implements InstagramDataSource {
 
   async fetchProfilePostsSample(
     usernameNormalized: string,
-    maxPosts: number,
+    selectionInput: ScrapeSelectionInput,
+    defaults?: { defaultMaxPosts?: number },
   ): Promise<ScrapeJobResultSummaryV5> {
     let res: Response;
     try {
@@ -155,7 +160,8 @@ export class HttpInstagramDataSource implements InstagramDataSource {
       return buildScrapeSummaryV5FromUserNode(
         usernameNormalized,
         userNode,
-        maxPosts,
+        selectionInput,
+        defaults,
       );
     } catch (e) {
       if (e instanceof InstagramUpstreamError) throw e;

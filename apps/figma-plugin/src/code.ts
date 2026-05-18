@@ -93,6 +93,43 @@ const IG_AVATAR_FETCH_HEADERS: Record<string, string> = {
 
 const MAX_PROFILE_PIC_FETCH_BYTES = 850_000;
 
+async function fetchInstagramCdnAsDataUrl(
+  cdnUrl: string,
+  maxBytes: number,
+): Promise<string | undefined> {
+  try {
+    const res = (await fetch(cdnUrl.trim(), {
+      method: 'GET',
+      redirect: 'follow',
+      headers: IG_AVATAR_FETCH_HEADERS,
+    })) as unknown as {
+      ok: boolean;
+      arrayBuffer: () => Promise<ArrayBuffer>;
+      headers?: { get?: (name: string) => string | null };
+    };
+    if (!res.ok) return undefined;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength === 0 || buf.byteLength > maxBytes) {
+      return undefined;
+    }
+    let ct = res.headers?.get?.('content-type')?.split(';')[0]?.trim() ?? '';
+    if (!ct.startsWith('image/')) ct = 'image/jpeg';
+    const b64 = bytesToBase64(buf);
+    if (!b64) return undefined;
+    return `data:${ct};base64,${b64}`;
+  } catch (e) {
+    console.warn('[Insta2Figma] falha ao inline CDN IG', e);
+    return undefined;
+  }
+}
+
+/** Na UI, `<img src="https://fbcdn…">` falha com frequência; fazemos fetch no main + data URL. */
+async function fetchInstagramAvatarAsDataUrl(
+  cdnUrl: string,
+): Promise<string | undefined> {
+  return fetchInstagramCdnAsDataUrl(cdnUrl, MAX_PROFILE_PIC_FETCH_BYTES);
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   const alphabet =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -122,37 +159,6 @@ function bytesToBase64(bytes: Uint8Array): string {
   return out;
 }
 
-/** Na UI, `<img src="https://fbcdn…">` falha com frequência; fazemos fetch no main + data URL para o histórico. */
-async function fetchInstagramAvatarAsDataUrl(
-  cdnUrl: string,
-): Promise<string | undefined> {
-  try {
-    const res = (await fetch(cdnUrl.trim(), {
-      method: 'GET',
-      redirect: 'follow',
-      headers: IG_AVATAR_FETCH_HEADERS,
-    })) as unknown as {
-      ok: boolean;
-      arrayBuffer: () => Promise<ArrayBuffer>;
-      headers?: { get?: (name: string) => string | null };
-    };
-    if (!res.ok) return undefined;
-    const buf = new Uint8Array(await res.arrayBuffer());
-    if (buf.byteLength === 0 || buf.byteLength > MAX_PROFILE_PIC_FETCH_BYTES) {
-      return undefined;
-    }
-    let ct = res.headers?.get?.('content-type')?.split(';')[0]?.trim() ?? '';
-    if (!ct.startsWith('image/')) ct = 'image/jpeg';
-    const b64 = bytesToBase64(buf);
-    if (!b64) return undefined;
-    return `data:${ct};base64,${b64}`;
-  } catch (e) {
-    console.warn('[Insta2Figma] falha ao inline avatar IG', e);
-    return undefined;
-  }
-}
-
-/** Lê URL da foto no `result_summary` do job (`profile.profilePicUrlHd`). */
 function pickProfilePicUrlFromJobResultSummary(resultSummary: unknown): string | undefined {
   if (
     resultSummary === null ||
@@ -250,6 +256,11 @@ type PluginMessage =
       username: string;
       maxPosts?: number;
       expandCarouselImages?: boolean;
+      selectionMode?: 'recent' | 'single' | 'range';
+      startIndex?: number;
+      postCount?: number;
+      timelineOrder?: 'newest_first' | 'oldest_first';
+      previewListSize?: number;
     }
   | { type: 'create-shapes'; count: number }
   | { type: 'place-images'; urls: string[] }
@@ -258,6 +269,10 @@ type PluginMessage =
       username: string;
       maxPosts?: number;
       expandCarouselImages?: boolean;
+      selectionMode?: 'recent' | 'single' | 'range';
+      startIndex?: number;
+      postCount?: number;
+      timelineOrder?: 'newest_first' | 'oldest_first';
     }
   | { type: 'session-request' }
   | { type: 'billing-checkout' }
@@ -423,7 +438,14 @@ async function openBillingPortal(base: string, token: string): Promise<void> {
 async function importProfileViaApi(
   base: string,
   username: string,
-  options: { maxPosts: number; expandCarouselImages: boolean },
+  options: {
+    maxPosts: number;
+    expandCarouselImages: boolean;
+    selectionMode?: 'recent' | 'single' | 'range';
+    startIndex?: number;
+    postCount?: number;
+    timelineOrder?: 'newest_first' | 'oldest_first';
+  },
 ): Promise<void> {
   const notifyStatus = (text: string) => {
     figma.ui.postMessage({ type: 'import-status', text });
@@ -435,7 +457,7 @@ async function importProfileViaApi(
   figma.ui.postMessage({ type: 'session-data', ...me });
 
   notifyStatus(
-    `A criar job (${options.maxPosts} posts recentes · carrossel: ${options.expandCarouselImages ? 'todas as imagens' : 'só capa'})…`,
+    `A criar job (${options.selectionMode ?? 'recent'} · carrossel: ${options.expandCarouselImages ? 'todas as imagens' : 'só capa'})…`,
   );
   const idem = `figma-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const jr = await fetch(`${base}/v1/jobs`, {
@@ -451,6 +473,10 @@ async function importProfileViaApi(
         username,
         maxPosts: options.maxPosts,
         expandCarouselImages: options.expandCarouselImages,
+        ...(options.selectionMode ? { selectionMode: options.selectionMode } : {}),
+        ...(options.startIndex != null ? { startIndex: options.startIndex } : {}),
+        ...(options.postCount != null ? { postCount: options.postCount } : {}),
+        ...(options.timelineOrder ? { timelineOrder: options.timelineOrder } : {}),
       },
     }),
   });
@@ -574,10 +600,53 @@ async function importProfileViaApi(
   });
 }
 
+function buildPreviewQueryString(
+  username: string,
+  opts: {
+    maxPosts: number;
+    expandCarouselImages: boolean;
+    selectionMode?: 'recent' | 'single' | 'range';
+    startIndex?: number;
+    postCount?: number;
+    timelineOrder?: 'newest_first' | 'oldest_first';
+    previewListSize?: number;
+  },
+): string {
+  const parts = [
+    `username=${encodeURIComponent(username)}`,
+    `maxPosts=${encodeURIComponent(String(opts.maxPosts))}`,
+    `expandCarouselImages=${opts.expandCarouselImages ? 'true' : 'false'}`,
+  ];
+  if (opts.selectionMode) {
+    parts.push(`selectionMode=${encodeURIComponent(opts.selectionMode)}`);
+  }
+  if (opts.startIndex != null) {
+    parts.push(`startIndex=${encodeURIComponent(String(opts.startIndex))}`);
+  }
+  if (opts.postCount != null) {
+    parts.push(`postCount=${encodeURIComponent(String(opts.postCount))}`);
+  }
+  if (opts.timelineOrder) {
+    parts.push(`timelineOrder=${encodeURIComponent(opts.timelineOrder)}`);
+  }
+  if (opts.previewListSize != null) {
+    parts.push(`previewListSize=${encodeURIComponent(String(opts.previewListSize))}`);
+  }
+  return parts.join('&');
+}
+
 async function previewProfileViaApi(
   base: string,
   username: string,
-  opts: { maxPosts: number; expandCarouselImages: boolean },
+  opts: {
+    maxPosts: number;
+    expandCarouselImages: boolean;
+    selectionMode?: 'recent' | 'single' | 'range';
+    startIndex?: number;
+    postCount?: number;
+    timelineOrder?: 'newest_first' | 'oldest_first';
+    previewListSize?: number;
+  },
 ): Promise<{
   username: string;
   profilePicUrlHd: string | null;
@@ -587,18 +656,22 @@ async function previewProfileViaApi(
   estimatedImportImages: number;
   estimatedPostCovers: number;
   estimatedCarouselExtras: number;
+  postsPreview?: {
+    index: number;
+    shortcode: string;
+    isVideo?: boolean;
+    thumbnailUrl?: string | null;
+    carouselCount?: number;
+  }[];
+  postsAvailable?: number;
+  selectionWarning?: string;
 }> {
   const { session } = await ensureSession(base);
   const token = session.accessToken;
-  const qs = `username=${encodeURIComponent(username)}&maxPosts=${encodeURIComponent(
-    String(opts.maxPosts),
-  )}&expandCarouselImages=${opts.expandCarouselImages ? 'true' : 'false'}`;
-  const res = await fetch(
-    `${base}/v1/instagram/profile-preview?${qs}`,
-    {
-      headers: { authorization: `Bearer ${token}` },
-    },
-  );
+  const qs = buildPreviewQueryString(username, opts);
+  const res = await fetch(`${base}/v1/instagram/profile-preview?${qs}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const data = payload.data as Record<string, unknown> | undefined;
   if (!res.ok || !data) {
@@ -632,6 +705,21 @@ async function previewProfileViaApi(
       Number.isFinite(data.estimatedCarouselExtras)
         ? data.estimatedCarouselExtras
         : 0,
+    postsPreview: Array.isArray(data.postsPreview)
+      ? (data.postsPreview as {
+          index: number;
+          shortcode: string;
+          isVideo?: boolean;
+          thumbnailUrl?: string | null;
+          carouselCount?: number;
+        }[])
+      : undefined,
+    postsAvailable:
+      typeof data.postsAvailable === 'number' && Number.isFinite(data.postsAvailable)
+        ? data.postsAvailable
+        : undefined,
+    selectionWarning:
+      typeof data.selectionWarning === 'string' ? data.selectionWarning : undefined,
   };
 }
 
@@ -737,6 +825,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       await importProfileViaApi(base, username, {
         maxPosts,
         expandCarouselImages,
+        selectionMode: msg.selectionMode,
+        startIndex: msg.startIndex,
+        postCount: msg.postCount,
+        timelineOrder: msg.timelineOrder,
       });
     } catch (err) {
       const text = formatCaught(err);
@@ -776,7 +868,20 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       const preview = await previewProfileViaApi(base, username, {
         maxPosts,
         expandCarouselImages,
+        selectionMode: msg.selectionMode,
+        startIndex: msg.startIndex,
+        postCount: msg.postCount,
+        timelineOrder: msg.timelineOrder,
+        previewListSize: msg.previewListSize,
       });
+      const postsWithThumbs = preview.postsPreview ?? [];
+      const postsMeta = postsWithThumbs.map((item) => ({
+        index: item.index,
+        shortcode: item.shortcode,
+        isVideo: item.isVideo,
+        carouselCount: item.carouselCount,
+        thumbnailUrl: null as string | null,
+      }));
       figma.ui.postMessage({
         type: 'profile-preview-data',
         requestId: msg.requestId,
@@ -786,10 +891,31 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         estimatedImportImages: preview.estimatedImportImages,
         estimatedPostCovers: preview.estimatedPostCovers,
         estimatedCarouselExtras: preview.estimatedCarouselExtras,
+        postsPreview: postsMeta,
+        postsAvailable: preview.postsAvailable,
+        selectionWarning: preview.selectionWarning,
+        thumbsPending: postsWithThumbs.length,
         ...(preview.profilePicDataUrl
           ? { profilePicUrlHd: preview.profilePicDataUrl }
           : {}),
       });
+      for (const item of postsWithThumbs) {
+        const url = item.thumbnailUrl;
+        if (typeof url === 'string' && url.startsWith('data:') && url.length > 0) {
+          figma.ui.postMessage({
+            type: 'profile-preview-thumb',
+            requestId: msg.requestId,
+            shortcode: item.shortcode,
+            thumbnailUrl: url,
+          });
+        }
+      }
+      if (postsWithThumbs.length > 0) {
+        figma.ui.postMessage({
+          type: 'profile-preview-thumbs-done',
+          requestId: msg.requestId,
+        });
+      }
     } catch (err) {
       figma.ui.postMessage({
         type: 'profile-preview-error',

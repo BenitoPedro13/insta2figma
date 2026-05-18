@@ -26,7 +26,7 @@ describe.skipIf(!ENABLED)(
             45_000,
         );
         const ds = new HttpInstagramDataSource({ timeoutMs });
-        const summary = await ds.fetchProfilePostsSample(TARGET, 2);
+        const summary = await ds.fetchProfilePostsSample(TARGET, { maxPosts: 2 });
 
         console.log('summary', summary);
 

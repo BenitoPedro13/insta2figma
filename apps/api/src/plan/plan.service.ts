@@ -8,8 +8,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   QUOTA_EXCEEDED_ERROR_CODE,
+  endSelectionIndex,
+  resolveScrapeSelection,
   type MeResponse,
   type PlanTier,
+  type ScrapeSelectionInput,
 } from '@insta2figma/shared-contracts';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -118,7 +121,7 @@ export class PlanService {
 
   async assertCanCreateJob(
     userId: string,
-    input: { maxPosts?: number; expandCarouselImages?: boolean },
+    input: ScrapeSelectionInput & { expandCarouselImages?: boolean },
   ): Promise<{ planTier: PlanTier }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -127,9 +130,19 @@ export class PlanService {
     const planTier = normalizePlanTier(user.planTier);
     const limits = this.getLimitsForTier(planTier);
 
-    if (input.maxPosts != null && input.maxPosts > limits.maxPosts) {
+    const selection = resolveScrapeSelection(input, {
+      defaultMaxPosts: limits.maxPosts,
+    });
+    const endIndex = endSelectionIndex(selection);
+
+    if (selection.postCount > limits.maxPosts) {
       throw new JobInputPlanException(
-        `O plano ${planTier} permite no máximo ${limits.maxPosts} posts por import.`,
+        `O plano ${planTier} permite importar no máximo ${limits.maxPosts} posts por job.`,
+      );
+    }
+    if (endIndex > limits.maxPosts || selection.fetchCount > limits.maxPosts) {
+      throw new JobInputPlanException(
+        `O plano ${planTier} cobre até a posição #${limits.maxPosts}. O pedido precisa até #${endIndex}.`,
       );
     }
     if (input.expandCarouselImages && !limits.expandCarouselImages) {

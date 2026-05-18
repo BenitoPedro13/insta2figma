@@ -575,3 +575,183 @@ body {
   margin-top: 2px;
   flex-shrink: 0;
 }
+
+.post-preview-panel {
+  margin: 8px 0 12px;
+}
+
+.post-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #ececec;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.post-preview-tile {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #e6e6e6;
+}
+
+.post-preview-tile:hover,
+.post-preview-tile:focus-visible {
+  border-color: #8aa8ff;
+  outline: none;
+}
+
+.post-preview-tile--selected {
+  border-color: #3b5bdb;
+  box-shadow: 0 0 0 1px #3b5bdb;
+}
+
+.post-preview-tile-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.post-preview-tile-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #777;
+}
+
+.post-preview-tile-index {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.post-preview-tile-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #444;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.post-preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #ececec;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.post-preview-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: #333;
+}
+
+.post-preview-row:last-child {
+  border-bottom: 0;
+}
+
+.post-preview-row:hover,
+.post-preview-row:focus-visible {
+  background: #f0f4ff;
+  outline: none;
+}
+
+.post-preview-row--selected {
+  background: #e8efff;
+}
+
+.post-preview-index {
+  width: 28px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+}
+
+.post-preview-thumb {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #e6e6e6;
+  display: grid;
+  place-items: center;
+}
+
+.post-preview-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.post-preview-thumb-placeholder {
+  font-size: 11px;
+  color: #888;
+}
+
+.post-preview-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.post-preview-shortcode {
+  font-size: 11px;
+  color: #444;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-preview-badge {
+  font-size: 10px;
+  color: #666;
+  background: #eee;
+  border-radius: 4px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+}
+
+.import-hint--warn {
+  color: #a65b00;
+}

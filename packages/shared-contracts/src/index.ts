@@ -1,4 +1,48 @@
 import { z } from 'zod';
+import {
+  POST_SELECTION_MODES,
+  POST_TIMELINE_ORDERS,
+  endSelectionIndex,
+  estimateImportImages,
+  orderTimelinePosts,
+  resolveScrapeSelection,
+  slicePostsBySelection,
+  type CarouselPostEstimate,
+  type ImportImageEstimate,
+  type PostSelectionMode,
+  type PostTimelineOrder,
+  type ResolvedScrapeSelection,
+  type ScrapeSelectionInput,
+} from './post-selection.js';
+import {
+  buildIndexedPostPreview,
+  parseTimelineSampleFromUserNode,
+  type InstagramPostPreviewItem,
+  type TimelinePostItem,
+} from './instagram-timeline-parse.js';
+
+export {
+  POST_SELECTION_MODES,
+  POST_TIMELINE_ORDERS,
+  endSelectionIndex,
+  estimateImportImages,
+  orderTimelinePosts,
+  resolveScrapeSelection,
+  slicePostsBySelection,
+  buildIndexedPostPreview,
+  parseTimelineSampleFromUserNode,
+  type CarouselPostEstimate,
+  type ImportImageEstimate,
+  type InstagramPostPreviewItem,
+  type PostSelectionMode,
+  type PostTimelineOrder,
+  type ResolvedScrapeSelection,
+  type ScrapeSelectionInput,
+  type TimelinePostItem,
+};
+
+export const postSelectionModeSchema = z.enum(POST_SELECTION_MODES);
+export const postTimelineOrderSchema = z.enum(POST_TIMELINE_ORDERS);
 
 export const JOB_TYPES = ['SCRAPE_PROFILE', 'SCRAPE_POSTS'] as const;
 export const jobTypeSchema = z.enum(JOB_TYPES);
@@ -20,6 +64,13 @@ export const scrapeProfileInputSchema = z.object({
   maxPosts: z.number().int().min(1).max(50).optional(),
   /** Se true, imagens extra de posts tipo carrossel entram também no upload (URLs em `carouselImageUrls`). */
   expandCarouselImages: z.boolean().optional(),
+  /** `recent` = comportamento legado; `single`/`range` = seleção por posição na timeline. */
+  selectionMode: postSelectionModeSchema.optional(),
+  /** Posição inicial 1-based na ordem escolhida (`timelineOrder`). */
+  startIndex: z.number().int().min(1).max(50).optional(),
+  /** Quantidade de posts no modo `range` (ignorado em `single`). */
+  postCount: z.number().int().min(1).max(50).optional(),
+  timelineOrder: postTimelineOrderSchema.optional(),
 });
 
 export type ScrapeProfileInput = z.infer<typeof scrapeProfileInputSchema>;
@@ -104,7 +155,25 @@ export const scrapeJobScrapingMetaSchema = z.object({
   expandCarouselImages: z.boolean(),
   /** Tamanho de `postsSample` após parse (limitado pelo pedido e pelas edges devolvidas pelo IG). */
   postsInSample: z.number().int().min(0),
+  selectionMode: postSelectionModeSchema.optional(),
+  startIndex: z.number().int().min(1).max(50).optional(),
+  postCount: z.number().int().min(1).max(50).optional(),
+  timelineOrder: postTimelineOrderSchema.optional(),
+  fetchCount: z.number().int().min(1).max(50).optional(),
 });
+
+export const instagramPostPreviewItemSchema = z.object({
+  index: z.number().int().min(1),
+  shortcode: z.string(),
+  isVideo: z.boolean().optional(),
+  takenAt: z.string().nullable().optional(),
+  thumbnailUrl: z.string().nullable().optional(),
+  carouselCount: z.number().int().min(1).optional(),
+});
+
+export type InstagramPostPreviewItemDto = z.infer<
+  typeof instagramPostPreviewItemSchema
+>;
 
 export type ScrapeJobScrapingMeta = z.infer<typeof scrapeJobScrapingMetaSchema>;
 

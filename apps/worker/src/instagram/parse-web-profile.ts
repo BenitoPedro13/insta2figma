@@ -1,7 +1,12 @@
 import type {
-  InstagramPostSummaryItem,
   InstagramProfileSummary,
   ScrapeJobResultSummaryV5,
+  ScrapeSelectionInput,
+} from '@insta2figma/shared-contracts';
+import {
+  parseTimelineSampleFromUserNode,
+  resolveScrapeSelection,
+  slicePostsBySelection,
 } from '@insta2figma/shared-contracts';
 import { InstagramUpstreamError } from './instagram-upstream-error';
 
@@ -17,69 +22,6 @@ function edgeCount(user: Record<string, unknown>, key: string): number {
   if (!edge) return 0;
   const c = edge.count;
   return typeof c === 'number' && Number.isFinite(c) ? c : 0;
-}
-
-function pickThumbnail(node: Record<string, unknown>): string | null {
-  const d = node.display_url;
-  if (typeof d === 'string' && d.length > 0) return d;
-  const t = node.thumbnail_src;
-  if (typeof t === 'string' && t.length > 0) return t;
-  return null;
-}
-
-function isLikelyVideo(node: Record<string, unknown>): boolean {
-  const tn = node.__typename;
-  if (tn === 'GraphVideo') return true;
-  const vu = node.video_url;
-  return typeof vu === 'string' && vu.length > 0;
-}
-
-function parseSidecarCarouselUrls(node: Record<string, unknown>): string[] {
-  const esc = asRecord(node.edge_sidecar_to_children);
-  if (!esc) return [];
-  const edges = esc.edges;
-  if (!Array.isArray(edges)) return [];
-  const urls: string[] = [];
-  for (const e of edges) {
-    const child = asRecord(asRecord(e)?.node);
-    if (!child) continue;
-    const u = pickThumbnail(child);
-    if (u && !urls.includes(u)) urls.push(u);
-  }
-  return urls;
-}
-
-function parseTimelineSample(
-  user: Record<string, unknown>,
-  maxPosts: number,
-): InstagramPostSummaryItem[] {
-  const cap = Math.min(50, Math.max(0, maxPosts));
-  const timeline = asRecord(user.edge_owner_to_timeline_media);
-  if (!timeline) return [];
-
-  const edges = timeline.edges;
-  if (!Array.isArray(edges)) return [];
-
-  const out: InstagramPostSummaryItem[] = [];
-  for (const e of edges) {
-    const er = asRecord(e);
-    const node = er ? asRecord(er.node) : null;
-    if (!node) continue;
-    const shortcode = node.shortcode;
-    if (typeof shortcode !== 'string' || shortcode.length === 0) continue;
-    const sidecar = parseSidecarCarouselUrls(node);
-    const item: InstagramPostSummaryItem = {
-      shortcode,
-      thumbnailUrl: pickThumbnail(node),
-      isVideo: isLikelyVideo(node),
-    };
-    if (sidecar.length > 0) {
-      item.carouselImageUrls = sidecar;
-    }
-    out.push(item);
-    if (out.length >= cap) break;
-  }
-  return out;
 }
 
 function buildProfileSummary(
@@ -130,7 +72,8 @@ function buildProfileSummary(
 export function buildScrapeSummaryV5FromUserNode(
   requestedUsernameNormalized: string,
   userNode: unknown,
-  maxPosts: number,
+  selectionInput: ScrapeSelectionInput,
+  defaults?: { defaultMaxPosts?: number },
 ): ScrapeJobResultSummaryV5 {
   const user = asRecord(userNode);
   if (!user) {
@@ -141,8 +84,10 @@ export function buildScrapeSummaryV5FromUserNode(
     );
   }
 
+  const selection = resolveScrapeSelection(selectionInput, defaults);
   const profile = buildProfileSummary(user);
-  const postsSample = parseTimelineSample(user, maxPosts);
+  const fetched = parseTimelineSampleFromUserNode(userNode, selection.fetchCount);
+  const postsSample = slicePostsBySelection(fetched, selection);
 
   return {
     phase: 5,
@@ -151,4 +96,12 @@ export function buildScrapeSummaryV5FromUserNode(
     profile,
     postsSample,
   };
+}
+
+/** @deprecated Use `parseTimelineSampleFromUserNode` via shared-contracts. */
+export function parseTimelineSample(
+  user: Record<string, unknown>,
+  maxPosts: number,
+) {
+  return parseTimelineSampleFromUserNode(user, maxPosts);
 }

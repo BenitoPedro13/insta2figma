@@ -2,6 +2,7 @@ import type { Job, PrismaClient } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import {
   createJobBodySchema,
+  resolveScrapeSelection,
   type ScrapeJobResultSummaryV5,
 } from '@insta2figma/shared-contracts';
 import { uploadScrapeAssets } from '../storage/upload-scrape-assets';
@@ -77,27 +78,39 @@ export async function processInstagramScrapeJob(
   const body = validated.data;
   const usernameNorm = normalizeInstagramUsername(body.input.username);
 
-  let maxPosts: number =
+  const defaultMaxPosts =
     typeof body.input.maxPosts === 'number'
       ? body.input.maxPosts
       : body.type === 'SCRAPE_PROFILE'
         ? 8
         : 24;
-  maxPosts = Math.min(50, Math.max(1, maxPosts));
+
+  const selection = resolveScrapeSelection(body.input, {
+    defaultMaxPosts,
+  });
 
   try {
     const summary = (await source.fetchProfilePostsSample(
       usernameNorm,
-      maxPosts,
+      body.input,
+      { defaultMaxPosts },
     )) as ScrapeJobResultSummaryV5;
 
     const expandCarousel = body.input.expandCarouselImages === true;
     const summaryWithMeta: ScrapeJobResultSummaryV5 = {
       ...summary,
       scrapingMeta: {
-        requestedMaxPosts: maxPosts,
+        requestedMaxPosts:
+          selection.mode === 'recent'
+            ? selection.postCount
+            : selection.fetchCount,
         expandCarouselImages: expandCarousel,
         postsInSample: summary.postsSample.length,
+        selectionMode: selection.mode,
+        startIndex: selection.startIndex,
+        postCount: selection.postCount,
+        timelineOrder: selection.timelineOrder,
+        fetchCount: selection.fetchCount,
       },
     };
 

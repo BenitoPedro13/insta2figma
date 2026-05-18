@@ -10,7 +10,7 @@ import {
   upsertAfterSuccessfulImport,
   type HistoryEntry,
 } from './lib/historyStorage';
-import { ImportScreen } from './screens/ImportScreen';
+import { ImportScreen, type PostSelectionMode, type PostTimelineOrder } from './screens/ImportScreen';
 import { ListScreen, type ListTab } from './screens/ListScreen';
 
 type View = 'list' | 'import';
@@ -22,6 +22,15 @@ type ProfilePreview = {
   estimatedImportImages: number;
   estimatedPostCovers: number;
   estimatedCarouselExtras: number;
+  postsPreview?: {
+    index: number;
+    shortcode: string;
+    isVideo?: boolean;
+    thumbnailUrl?: string | null;
+    carouselCount?: number;
+  }[];
+  postsAvailable?: number;
+  selectionWarning?: string;
 };
 
 function msgToText(v: unknown): string {
@@ -43,12 +52,17 @@ export function App() {
 
   const [username, setUsername] = useState('');
   const [maxPosts, setMaxPosts] = useState(12);
+  const [selectionMode, setSelectionMode] = useState<PostSelectionMode>('recent');
+  const [startIndex, setStartIndex] = useState(1);
+  const [postCount, setPostCount] = useState(1);
+  const [timelineOrder, setTimelineOrder] = useState<PostTimelineOrder>('newest_first');
   const [expandCarouselImages, setExpandCarouselImages] = useState(false);
   const [status, setStatus] = useState('');
   const [importing, setImporting] = useState(false);
   const lastImportUsername = useRef('');
   const previewReqId = useRef(0);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewThumbsLoading, setPreviewThumbsLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
   const [planTier, setPlanTier] = useState<'free' | 'pro'>('free');
@@ -172,6 +186,14 @@ export function App() {
         if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
         setPreviewLoading(false);
         setPreviewError('');
+        const postsPreview = Array.isArray(pm.postsPreview)
+          ? (pm.postsPreview as ProfilePreview['postsPreview'])
+          : undefined;
+        const thumbsPending =
+          typeof pm.thumbsPending === 'number' && Number.isFinite(pm.thumbsPending)
+            ? pm.thumbsPending
+            : 0;
+        setPreviewThumbsLoading(thumbsPending > 0);
         setPreview({
           username: String(pm.username ?? ''),
           mediaCount:
@@ -196,13 +218,45 @@ export function App() {
               : 0,
           profilePicUrlHd:
             typeof pm.profilePicUrlHd === 'string' ? pm.profilePicUrlHd : undefined,
+          postsPreview,
+          postsAvailable:
+            typeof pm.postsAvailable === 'number' && Number.isFinite(pm.postsAvailable)
+              ? pm.postsAvailable
+              : undefined,
+          selectionWarning:
+            typeof pm.selectionWarning === 'string' ? pm.selectionWarning : undefined,
         });
+        return;
+      }
+      if (pm.type === 'profile-preview-thumb') {
+        const reqId = pm.requestId;
+        if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        const shortcode = typeof pm.shortcode === 'string' ? pm.shortcode : '';
+        const thumbnailUrl =
+          typeof pm.thumbnailUrl === 'string' ? pm.thumbnailUrl : null;
+        if (!shortcode || !thumbnailUrl) return;
+        setPreview((prev) => {
+          if (!prev?.postsPreview) return prev;
+          return {
+            ...prev,
+            postsPreview: prev.postsPreview.map((p) =>
+              p.shortcode === shortcode ? { ...p, thumbnailUrl } : p,
+            ),
+          };
+        });
+        return;
+      }
+      if (pm.type === 'profile-preview-thumbs-done') {
+        const reqId = pm.requestId;
+        if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        setPreviewThumbsLoading(false);
         return;
       }
       if (pm.type === 'profile-preview-error') {
         const reqId = pm.requestId;
         if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
         setPreviewLoading(false);
+        setPreviewThumbsLoading(false);
         setPreview(null);
         setPreviewError(
           typeof pm.message === 'string' ? pm.message : 'Falha no preview do perfil.',
@@ -271,6 +325,7 @@ export function App() {
       const reqId = previewReqId.current + 1;
       previewReqId.current = reqId;
       setPreviewLoading(true);
+      setPreviewThumbsLoading(false);
       setPreviewError('');
       parent.postMessage(
         {
@@ -280,13 +335,29 @@ export function App() {
             username: user,
             maxPosts,
             expandCarouselImages,
+            selectionMode,
+            startIndex,
+            postCount,
+            timelineOrder,
+            previewListSize: maxPostsLimit,
           },
         },
         '*',
       );
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [view, importing, username, maxPosts, expandCarouselImages]);
+  }, [
+    view,
+    importing,
+    username,
+    maxPosts,
+    expandCarouselImages,
+    selectionMode,
+    startIndex,
+    postCount,
+    timelineOrder,
+    maxPostsLimit,
+  ]);
 
   const onImport = useCallback(() => {
     const user = String(username ?? '')
@@ -312,11 +383,25 @@ export function App() {
           username: user,
           maxPosts: posts,
           expandCarouselImages,
+          selectionMode,
+          startIndex,
+          postCount,
+          timelineOrder,
         },
       },
       '*',
     );
-  }, [username, maxPosts, expandCarouselImages, quotaExceeded, maxPostsLimit]);
+  }, [
+    username,
+    maxPosts,
+    expandCarouselImages,
+    quotaExceeded,
+    maxPostsLimit,
+    selectionMode,
+    startIndex,
+    postCount,
+    timelineOrder,
+  ]);
 
   const onToggleFavoriteRow = useCallback(
     (u: string) => {
@@ -356,6 +441,10 @@ export function App() {
             username={username}
             maxPosts={maxPosts}
             maxPostsLimit={maxPostsLimit}
+            selectionMode={selectionMode}
+            startIndex={startIndex}
+            postCount={postCount}
+            timelineOrder={timelineOrder}
             expandCarouselImages={expandCarouselImages}
             allowCarousel={allowCarousel}
             quotaExceeded={quotaExceeded}
@@ -364,9 +453,14 @@ export function App() {
             importing={importing}
             preview={preview}
             previewLoading={previewLoading}
+            previewThumbsLoading={previewThumbsLoading}
             previewError={previewError}
             onUsernameChange={setUsername}
             onMaxPostsChange={setMaxPosts}
+            onSelectionModeChange={setSelectionMode}
+            onStartIndexChange={setStartIndex}
+            onPostCountChange={setPostCount}
+            onTimelineOrderChange={setTimelineOrder}
             onExpandCarouselChange={setExpandCarouselImages}
             onImport={onImport}
             onUpgrade={onUpgrade}

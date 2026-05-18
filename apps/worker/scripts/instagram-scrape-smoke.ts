@@ -37,7 +37,7 @@ async function main(): Promise<void> {
 
   const summary = await ds.fetchProfilePostsSample(
     username.trim().toLowerCase(),
-    3,
+    { maxPosts: 3 },
   );
 
   console.error(

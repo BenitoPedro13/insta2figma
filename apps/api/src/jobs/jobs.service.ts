@@ -93,14 +93,7 @@ export class JobsService {
     }
 
     const data = parsed.data;
-    const input = data.input as {
-      maxPosts?: number;
-      expandCarouselImages?: boolean;
-    };
-    await this.plan.assertCanCreateJob(userId, {
-      maxPosts: input.maxPosts,
-      expandCarouselImages: input.expandCarouselImages,
-    });
+    await this.plan.assertCanCreateJob(userId, data.input);
 
     const periodStart = currentPeriodStartUtc();
     let job: Job;

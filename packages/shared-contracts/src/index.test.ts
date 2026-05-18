@@ -51,6 +51,23 @@ describe('createJobBodySchema', () => {
     });
   });
 
+  it('aceita seleção por posição', () => {
+    const parsed = createJobBodySchema.parse({
+      type: 'SCRAPE_PROFILE',
+      input: {
+        username: 'instagram',
+        selectionMode: 'single',
+        startIndex: 10,
+        timelineOrder: 'newest_first',
+      },
+    });
+    expect(parsed.input).toMatchObject({
+      selectionMode: 'single',
+      startIndex: 10,
+      timelineOrder: 'newest_first',
+    });
+  });
+
   it('rejeita username vazio', () => {
     expect(() =>
       createJobBodySchema.parse({
