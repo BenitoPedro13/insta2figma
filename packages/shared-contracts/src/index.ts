@@ -13,13 +13,13 @@ import {
   type PostTimelineOrder,
   type ResolvedScrapeSelection,
   type ScrapeSelectionInput,
-} from './post-selection.js';
+} from './post-selection';
 import {
   buildIndexedPostPreview,
   parseTimelineSampleFromUserNode,
   type InstagramPostPreviewItem,
   type TimelinePostItem,
-} from './instagram-timeline-parse.js';
+} from './instagram-timeline-parse';
 
 export {
   POST_SELECTION_MODES,

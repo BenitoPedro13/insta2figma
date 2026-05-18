@@ -49,6 +49,7 @@ function main() {
   ensureEnv('apps/worker');
 
   run('pnpm install --force');
+  run('pnpm --filter @insta2figma/shared-contracts build');
   run('pnpm infra:up');
   run('pnpm --filter @insta2figma/api exec prisma generate');
   recoverLegacyFailedMigration();
