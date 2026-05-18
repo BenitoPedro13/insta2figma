@@ -145,3 +145,20 @@ pnpm --filter @insta2figma/api exec prisma studio
 
 Se ao arrancar vires **`SyntaxError` em `node_modules/.../.prisma/client/index.js`**, costuma ser cliente gerado corrompido ou escrita concorrente: `pnpm --filter @insta2figma/api exec prisma generate` na raíz, ou remover `node_modules` e repetir `pnpm install`.
 
+### Migrations — ordem e erro `P3018`
+
+As migrations aplicam-se por **nome da pasta** (timestamp). A ordem correcta é:
+
+1. `20260505210000_init` — cria tabelas
+2. `20260505210001_drop_uuid_defaults` — ajustes de UUID
+3. `20260517120000_polar_billing` — Polar / billing
+
+Se `pnpm bootstrap` falhar com **`relation "assets" does not exist`** e migration `20260505121352`, faz `git pull` (fix já no repo) e:
+
+```bash
+pnpm --filter @insta2figma/api exec prisma migrate reset --force
+pnpm db:migrate:deploy
+```
+
+Em BD local de dev, `migrate reset` é seguro (apaga dados).
+
