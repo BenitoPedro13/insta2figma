@@ -35,7 +35,9 @@ pnpm bootstrap
 Depois basta correr:
 
 ```bash
-pnpm dev:worker
+pnpm dev          # API + worker (raiz do monorepo)
+# ou
+pnpm dev:worker   # só o worker
 ```
 
 ## Ambiente

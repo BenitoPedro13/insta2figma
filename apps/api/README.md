@@ -6,7 +6,20 @@
 
 Variáveis — ver [`.env.example`](./.env.example) (`JWT_SECRET`, `DATABASE_URL`, **`REDIS_URL`**, **`S3_*`** para MinIO / R2 / S3). Se Redis estiver indisponível ao criar job, pode devolver **503** (`QUEUE_UNAVAILABLE`).
 
-> **MVP auth:** `POST /v1/auth/register` e `POST /v1/auth/login` usam só **email** (sem password). Isto é apenas para desenvolvimento; produção deve seguir o fluxo recomendado na arquitetura (OIDC / sessão).
+> **Auth:** o plugin Figma usa `POST /v1/auth/figma` (`figmaUserId` de `figma.currentUser`). `register`/`login` por email continuam disponíveis para testes manuais com `curl`.
+
+### Billing Polar.sh (sandbox)
+
+Variáveis em [`.env.example`](./.env.example) (`POLAR_*`). Endpoints:
+
+| Método | Rota | Auth |
+|--------|------|------|
+| GET | `/v1/me` | Bearer — plano e quotas |
+| POST | `/v1/billing/checkout-session` | Bearer — `{ url }` para checkout Pro |
+| POST | `/v1/billing/portal-session` | Bearer — portal do cliente |
+| POST | `/v1/billing/webhooks/polar` | Assinatura Polar (`POLAR_WEBHOOK_SECRET`) |
+
+Setup Polar, ngrok, cartão de teste e troubleshooting: **[docs/DEV-POLAR-NGROK.md](../../docs/DEV-POLAR-NGROK.md)**.
 
 ## Setup rápido (recomendado)
 
@@ -56,6 +69,10 @@ Se vires **`ERR_CONNECTION_REFUSED`**, o processo Nest não está a ouvir na por
 | GET | `/v1/health` | — |
 | POST | `/v1/auth/register` | — body `{ "email": "..." }` |
 | POST | `/v1/auth/login` | — body `{ "email": "..." }` |
+| POST | `/v1/auth/figma` | — body `{ "figmaUserId": "...", "name?": "..." }` |
+| GET | `/v1/me` | Bearer — `planTier`, quotas, subscrição |
+| POST | `/v1/billing/checkout-session` | Bearer — URL checkout Polar |
+| POST | `/v1/billing/portal-session` | Bearer — URL portal Polar |
 | POST | `/v1/jobs` | Bearer JWT; header opcional `idempotency-key` |
 | GET | `/v1/jobs/:id` | Bearer JWT; query opcional `include=signedAssets` (URLs GET assinadas para `assets` do job, só se `succeeded`) |
 | GET | `/v1/instagram/profile-preview?username=...&maxPosts=12&expandCarouselImages=true` | Bearer JWT; preview leve (avatar, mediaCount, privado + estimativa de imagens) para UX no formulário |

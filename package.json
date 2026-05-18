@@ -10,8 +10,10 @@
     "test": "turbo run test",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "infra:logs": "docker compose logs -f postgres",
+    "infra:logs": "docker compose logs -f",
+    "infra:logs:postgres": "docker compose logs -f postgres",
     "infra:logs:redis": "docker compose logs -f redis",
+    "dev": "concurrently --kill-others-on-fail -n api,worker -c cyan,magenta \"pnpm run dev:api\" \"pnpm run dev:worker\"",
     "db:migrate:dev": "pnpm --filter @insta2figma/api exec prisma migrate dev",
     "db:migrate:deploy": "pnpm --filter @insta2figma/api exec prisma migrate deploy",
     "db:smoke": "pnpm --filter @insta2figma/api run db:smoke",
@@ -21,6 +23,7 @@
     "test:ig": "pnpm --filter @insta2figma/worker run test:integration"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "turbo": "^2.3.3"
   }
 }

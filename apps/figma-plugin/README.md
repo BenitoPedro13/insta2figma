@@ -34,9 +34,16 @@ O `manifest.json` na pasta `dist/` referencia `code.js` e `ui.html` no mesmo dir
 ## Uso local (MVP)
 
 1. Corre **`pnpm bootstrap`** na raiz (onboarding automático).
-2. Arranca **`pnpm dev:api`** e **`pnpm dev:worker`**, com `S3_*` preenchidos (mesmos valores na API e no worker que em [apps/api/.env.example](../../apps/api/.env.example)).
-3. Abre o plugin (passos em «Importar no Figma»). No ecrã de importação, preenche **username**, ajusta posts/carrossel, valida o preview e importa.
-4. O `code.ts` (main) obtém JWT (`register`/`login`), cria job `SCRAPE_PROFILE`, faz polling até `succeeded`, chama **`?include=signedAssets`** e envia as URLs ao canvas.
+2. Arranca **`pnpm dev`** na raiz (API + worker no mesmo terminal) ou `pnpm dev:api` + `pnpm dev:worker`, com `S3_*` preenchidos (mesmos valores na API e no worker que em [apps/api/.env.example](../../apps/api/.env.example)).
+3. Abre o plugin (passos em «Importar no Figma»). Precisas de **sessão iniciada no Figma** (`figma.currentUser`).
+4. No ecrã de importação: **username**, posts/carrossel, preview e import.
+5. O `code.ts` (main) autentica com **`POST /v1/auth/figma`**, guarda JWT em `clientStorage`, chama **`GET /v1/me`** (plano/quotas), cria job `SCRAPE_PROFILE`, polling, **`?include=signedAssets`**, coloca imagens no canvas.
+
+### Upgrade Pro (Polar)
+
+- Banner **Upgrade to Pro** → checkout no browser (`figma.openExternal`).
+- Configuração Polar + ngrok para webhooks: **[docs/DEV-POLAR-NGROK.md](../../docs/DEV-POLAR-NGROK.md)**.
+- Cartão sandbox: `4242 4242 4242 4242`.
 
 As chamadas **`fetch` à API** correm no **contexto principal do plugin** (`code.ts`), não no iframe da UI — assim **`http://127.0.0.1`** é permitido também no **Figma no browser**, sem *mixed content* no iframe. A UI envia mensagens de intenção (`profile-preview`, `import-profile`) e recebe estados via `import-status` / `import-done` / `import-error` / `profile-preview-*`.
 
@@ -44,12 +51,12 @@ No preview, o backend devolve `profilePicDataUrl` + estimativas (`estimatedPostC
 
 ## Configuração interna do plugin (dev)
 
-Atualmente os defaults de conexão/auth ficam no `code.ts`:
+No `code.ts`:
 
-- `DEFAULT_API_BASE`
-- `DEFAULT_SESSION_EMAIL`
+- `DEFAULT_API_BASE` — por omissão `http://127.0.0.1:3333` (API local).
+- Sessão: `POST /v1/auth/figma` com `figma.currentUser.id`; JWT em `insta2figma:session:v1` (`clientStorage`).
 
-Isto remove ruído da UI e alinha ao design. Para produção, mover esta configuração para fluxo de sessão real ou settings controlados.
+Para outro host/porta da API, altera `DEFAULT_API_BASE` e recompila o plugin.
 
 Para MinIO/S3, o download das imagens continua a ser `fetch` no `code.ts`; confirma **`networkAccess`** e domínios assinados quando saíres de dev — ver nota abaixo.
 

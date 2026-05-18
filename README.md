@@ -42,11 +42,25 @@ O script `scripts/setup.mjs` faz:
 5. aplica migrations (`db:migrate:deploy`),
 6. executa smoke test de DB (`db:smoke`).
 
-Depois, arranca a app com:
+Depois, arranca a app com **um único terminal** (logs da API e do worker com prefixos coloridos, estilo Docker Compose):
+
+```bash
+pnpm dev
+```
+
+Equivalente a correr em dois terminais:
 
 ```bash
 pnpm dev:api
 pnpm dev:worker
+```
+
+### Logs da infra Docker (outro terminal)
+
+```bash
+pnpm infra:logs          # postgres + redis + minio (follow)
+pnpm infra:logs:postgres # só Postgres
+pnpm infra:logs:redis    # só Redis
 ```
 
 ## Mapa do monorepo
@@ -78,8 +92,10 @@ O `apps/api/.env` deve incluir **`REDIS_URL`** e, para thumbnails no bucket, **`
 ### API Nest (JWT) + worker BullMQ + object storage
 
 ```bash
-pnpm dev:api       # enfileira jobs e presign opcional (?include=signedAssets)
-pnpm dev:worker    # scrape + upload MinIO quando S3_* está definido
+pnpm dev           # API + worker no mesmo terminal (recomendado)
+# ou
+pnpm dev:api       # só API — enfileira jobs, presign (?include=signedAssets)
+pnpm dev:worker    # só worker — scrape + upload MinIO quando S3_* está definido
 ```
 
 Copia também `apps/worker/.env.example` → `apps/worker/.env` (BD + Redis alinhados à API).
@@ -89,10 +105,24 @@ Worker e política de assets: [apps/worker/README.md](apps/worker/README.md).
 
 Importar no Figma após `pnpm build`: `apps/figma-plugin/dist/manifest.json` — ver [apps/figma-plugin/README.md](apps/figma-plugin/README.md).
 
+### Billing Polar.sh + ngrok (checkout Pro, webhooks)
+
+Opcional para quem testa subscrições. Requer variáveis `POLAR_*` em `apps/api/.env` (ver `.env.example`).
+
+| Passo | O quê |
+|-------|--------|
+| 1 | Conta e produto **Pro** em [sandbox.polar.sh](https://sandbox.polar.sh) |
+| 2 | OAT + `POLAR_ACCESS_TOKEN`, `POLAR_PRODUCT_ID_PRO`, `POLAR_SERVER=sandbox` |
+| 3 | `ngrok http 3333` → webhook `https://<ngrok>/v1/billing/webhooks/polar` |
+| 4 | `POLAR_WEBHOOK_SECRET` no `.env` + reiniciar API |
+| 5 | Plugin Figma → **Upgrade to Pro**; cartão teste `4242 4242 4242 4242` |
+
+Guia completo (scopes do token, troubleshooting, `curl`): **[docs/DEV-POLAR-NGROK.md](docs/DEV-POLAR-NGROK.md)**.
+
 ## Fluxo rápido de validação (repo exemplar)
 
 1. `pnpm bootstrap` (uma vez por máquina/projeto)
-2. `pnpm dev:api` e `pnpm dev:worker`
+2. `pnpm dev` (API + worker)
 3. `pnpm build` (ou build específico do plugin)
 4. Importar `apps/figma-plugin/dist/manifest.json` no Figma
 5. No plugin:
@@ -104,6 +134,7 @@ Importar no Figma após `pnpm build`: `apps/figma-plugin/dist/manifest.json` —
 ## Troubleshooting rápido
 
 - `pnpm bootstrap` falha em Docker: confirmar Docker Desktop ligado e `docker compose version`.
-- `ERR_CONNECTION_REFUSED` no plugin: API não está de pé (`pnpm dev:api`) ou `PORT` diferente.
-- Job fica em `queued`: worker não está de pé (`pnpm dev:worker`) ou Redis indisponível.
+- `ERR_CONNECTION_REFUSED` no plugin: API não está de pé (`pnpm dev` ou `pnpm dev:api`) ou `PORT` diferente.
+- Job fica em `queued`: worker não está de pé (`pnpm dev` ou `pnpm dev:worker`) ou Redis indisponível.
 - Preview sem avatar: endpoint de preview responde sem `profilePicDataUrl` (bloqueio upstream); o fallback de UI usa placeholder.
+- Checkout Polar / plano Pro: ver [docs/DEV-POLAR-NGROK.md](docs/DEV-POLAR-NGROK.md).
