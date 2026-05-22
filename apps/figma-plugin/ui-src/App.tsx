@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AccountBanner } from './components/AccountBanner';
-import { ChromeHeader } from './components/ChromeHeader';
 import { PluginFooter } from './components/PluginFooter';
 import { PluginResizeHandle } from './components/PluginResizeHandle';
 import { PluginSidebar } from './components/PluginSidebar';
-import { PluginTabs, type ShellTab } from './components/PluginTabs';
+import type { ShellTab } from './components/PluginTabs';
 import {
   clearLegacyIframeHistory,
   loadLegacyIframeHistory,
@@ -15,7 +13,6 @@ import {
   type HistoryEntry,
 } from './lib/historyStorage';
 import { ImportScreen, type PostSelectionMode, type PostTimelineOrder } from './screens/ImportScreen';
-import { ListScreen } from './screens/ListScreen';
 
 type ProfilePreview = {
   username: string;
@@ -73,38 +70,13 @@ export function App() {
   const [maxPostsLimit, setMaxPostsLimit] = useState(12);
   const [allowCarousel, setAllowCarousel] = useState(false);
   const [sessionError, setSessionError] = useState('');
+  const [periodEndIso, setPeriodEndIso] = useState<string | null>(null);
 
   const quotaExceeded = jobsRemaining != null && jobsRemaining <= 0;
 
   const onCancel = useCallback(() => {
     parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
   }, []);
-
-  const openImport = useCallback(
-    (opts?: { clearUsername?: boolean; username?: string }) => {
-      setActiveTab('new-import');
-      setStatus('');
-      setListStatus('');
-      if (opts?.clearUsername) {
-        setUsername('');
-        setSelectedUsername(null);
-        return;
-      }
-      if (opts?.username != null && String(opts.username).trim() !== '') {
-        const u = String(opts.username)
-          .trim()
-          .replace(/^@+/, '')
-          .toLowerCase();
-        setUsername(u);
-        setSelectedUsername(u);
-        return;
-      }
-      if (selectedUsername) {
-        setUsername(selectedUsername);
-      }
-    },
-    [selectedUsername],
-  );
 
   const persistEntries = useCallback(
     (updater: HistoryEntry[] | ((prev: HistoryEntry[]) => HistoryEntry[])) => {
@@ -151,6 +123,12 @@ export function App() {
           setAllowCarousel(carousel);
           if (!carousel) setExpandCarouselImages(false);
         }
+        const sub = pm.subscription as Record<string, unknown> | undefined;
+        if (sub && typeof sub.currentPeriodEnd === 'string') {
+          setPeriodEndIso(sub.currentPeriodEnd);
+        } else if (sub && sub.currentPeriodEnd === null) {
+          setPeriodEndIso(null);
+        }
         return;
       }
 
@@ -158,7 +136,7 @@ export function App() {
         setSessionError(
           typeof pm.message === 'string'
             ? pm.message
-            : 'Sessão indisponível. Inicia sessão no Figma.',
+            : 'Session unavailable. Sign in to Figma.',
         );
         return;
       }
@@ -261,13 +239,13 @@ export function App() {
         setPreviewThumbsLoading(false);
         setPreview(null);
         setPreviewError(
-          typeof pm.message === 'string' ? pm.message : 'Falha no preview do perfil.',
+          typeof pm.message === 'string' ? pm.message : 'Could not load profile preview.',
         );
         return;
       }
       if (pm.type === 'import-error') {
         setImporting(false);
-        setStatus(`Erro: ${pm.message != null ? msgToText(pm.message) : 'desconhecido'}`);
+        setStatus(`Error: ${pm.message != null ? msgToText(pm.message) : 'unknown'}`);
         return;
       }
       if (pm.type !== 'import-done') return;
@@ -280,8 +258,8 @@ export function App() {
       };
       const ok = !done.error;
       const summary = ok
-        ? `Colocados ${done.placed ?? 0}/${done.total ?? 0} no canvas.`
-        : 'Colocação: nada importado ou erro.';
+        ? `Placed ${done.placed ?? 0}/${done.total ?? 0} on the canvas.`
+        : 'Nothing was placed on the canvas.';
       setStatus(summary);
       const profilePicUrl =
         typeof done.profilePicUrl === 'string' && done.profilePicUrl.trim() !== ''
@@ -307,12 +285,20 @@ export function App() {
     parent.postMessage({ pluginMessage: { type: 'billing-checkout' } }, '*');
   }, []);
 
-  const onManageSubscription = useCallback(() => {
-    parent.postMessage({ pluginMessage: { type: 'billing-portal' } }, '*');
+  const selectProfile = useCallback((u: string) => {
+    const user = String(u)
+      .trim()
+      .replace(/^@+/, '')
+      .toLowerCase();
+    if (!user) return;
+    setUsername(user);
+    setSelectedUsername(user);
+    setStatus('');
+    setListStatus('');
   }, []);
 
   useEffect(() => {
-    if (activeTab !== 'new-import' || importing) return;
+    if (importing) return;
     const user = String(username ?? '')
       .trim()
       .replace(/^@+/, '')
@@ -367,16 +353,16 @@ export function App() {
       .replace(/^@+/, '')
       .toLowerCase();
     if (!user) {
-      setStatus('Preenche username.');
+      setStatus('Enter a username.');
       return;
     }
     if (quotaExceeded) {
-      setStatus('Quota mensal esgotada. Faz upgrade para Pro.');
+      setStatus('Monthly quota used up. Upgrade to Pro.');
       return;
     }
     lastImportUsername.current = user;
     setImporting(true);
-    setStatus('A arrancar…');
+    setStatus('Starting import…');
     const posts = Math.min(maxPostsLimit, Math.max(1, Math.floor(maxPosts)));
     parent.postMessage(
       {
@@ -415,23 +401,23 @@ export function App() {
   const listTab = activeTab === 'favorites' ? 'favorites' : 'history';
 
   return (
-    <div className="plugin-shell relative">
-      <ChromeHeader title="Insta2Figma" onClose={onCancel} />
-      <AccountBanner
-        planTier={planTier}
-        jobsRemaining={jobsRemaining}
-        jobsLimit={jobsLimit}
-        sessionError={sessionError}
-        onUpgrade={onUpgrade}
-        onManage={onManageSubscription}
-      />
-      <div className="plugin-frame">
+    <div className="plugin-shell relative flex min-h-0 flex-col">
+      <div className="plugin-frame flex min-h-0 flex-1">
         <PluginSidebar />
-        <div className="plugin-main">
-          <PluginTabs active={activeTab} onChange={setActiveTab} />
-          <div className="plugin-content">
-            {activeTab === 'new-import' ? (
+        <div className="plugin-main flex min-h-0 min-w-0 flex-1 flex-col bg-bg-white-0">
+          <div className="plugin-container flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="plugin-content flex min-h-0 flex-1 flex-col overflow-hidden">
               <ImportScreen
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                listTab={listTab}
+                search={search}
+                onSearchChange={setSearch}
+                historyEntries={historyEntries}
+                selectedUsername={selectedUsername}
+                onSelectProfile={selectProfile}
+                onToggleFavorite={onToggleFavoriteRow}
+                listStatus={listStatus}
                 username={username}
                 maxPosts={maxPosts}
                 maxPostsLimit={maxPostsLimit}
@@ -443,6 +429,7 @@ export function App() {
                 allowCarousel={allowCarousel}
                 quotaExceeded={quotaExceeded}
                 planTier={planTier}
+                sessionError={sessionError}
                 status={status}
                 importing={importing}
                 preview={preview}
@@ -459,20 +446,15 @@ export function App() {
                 onImport={onImport}
                 onUpgrade={onUpgrade}
               />
-            ) : (
-              <ListScreen
-                tab={listTab}
-                search={search}
-                onSearchChange={setSearch}
-                entries={historyEntries}
-                selectedUsername={selectedUsername}
-                onOpenImportForProfile={(u) => openImport({ username: u })}
-                onToggleFavorite={onToggleFavoriteRow}
-                listStatus={listStatus}
-              />
-            )}
+            </div>
           </div>
-          <PluginFooter />
+          <PluginFooter
+            planTier={planTier}
+            jobsRemaining={jobsRemaining}
+            jobsLimit={jobsLimit}
+            periodEndIso={periodEndIso}
+            onUpgrade={onUpgrade}
+          />
         </div>
       </div>
       <PluginResizeHandle />

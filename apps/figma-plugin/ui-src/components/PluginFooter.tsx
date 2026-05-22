@@ -1,49 +1,62 @@
-import { RiDiscordLine, RiInstagramLine, RiTwitterXLine } from '@remixicon/react';
+import { RiFlashlightFill, RiTimeLine } from '@remixicon/react';
 
-export function PluginFooter() {
+type PluginFooterProps = {
+  planTier: 'free' | 'pro';
+  jobsRemaining: number | null;
+  jobsLimit: number | null;
+  periodEndIso: string | null;
+  onUpgrade: () => void;
+};
+
+function daysUntilReset(periodEndIso: string | null): number {
+  const end = periodEndIso
+    ? new Date(periodEndIso)
+    : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
+  const ms = end.getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / 86_400_000));
+}
+
+export function PluginFooter({
+  planTier,
+  jobsRemaining,
+  jobsLimit,
+  periodEndIso,
+  onUpgrade,
+}: PluginFooterProps) {
+  const days = daysUntilReset(periodEndIso);
+  const used =
+    jobsLimit != null && jobsRemaining != null
+      ? Math.max(0, jobsLimit - jobsRemaining)
+      : null;
+
+  const quotaLabel =
+    used != null && jobsLimit != null
+      ? `${used}/${jobsLimit} images imported`
+      : planTier === 'pro'
+        ? 'Unlimited imports'
+        : 'Import quota';
+
   return (
-    <footer className="plugin-footer flex shrink-0 items-center gap-2 border-t border-stroke-soft-200 bg-bg-white-0 px-3 py-2 text-paragraph-xs text-text-sub-600">
-      <span className="plugin-footer-label shrink-0">Follow us on</span>
-      <div className="plugin-footer-social flex items-center gap-1.5" aria-label="Redes sociais">
-        <a
-          href="https://instagram.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="plugin-footer-icon grid place-items-center text-text-sub-600 hover:text-text-strong-950"
-          aria-label="Instagram"
-        >
-          <RiInstagramLine size={16} />
-        </a>
-        <a
-          href="https://x.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="plugin-footer-icon grid place-items-center text-text-sub-600 hover:text-text-strong-950"
-          aria-label="X"
-        >
-          <RiTwitterXLine size={16} />
-        </a>
-        <a
-          href="https://discord.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="plugin-footer-icon grid place-items-center text-text-sub-600 hover:text-text-strong-950"
-          aria-label="Discord"
-        >
-          <RiDiscordLine size={16} />
-        </a>
+    <footer className="plugin-footer flex shrink-0 items-center justify-center border-t border-stroke-soft-200 bg-bg-white-0 p-4">
+      <div className="flex flex-wrap items-center justify-center gap-1">
+        <span className="text-label-xs font-medium text-text-sub-600">{quotaLabel}</span>
+        <RiTimeLine className="size-4 shrink-0 text-text-sub-600" aria-hidden />
+        <span className="text-label-xs font-medium text-text-sub-600">
+          Resets in {days} {days === 1 ? 'day' : 'days'}
+        </span>
+        {planTier === 'free' ? (
+          <>
+            <RiFlashlightFill className="size-4 shrink-0 text-text-sub-600" aria-hidden />
+            <button
+              type="button"
+              className="cursor-pointer border-0 bg-transparent p-0 text-label-xs font-medium text-text-strong-950 transition hover:text-feature-base"
+              onClick={onUpgrade}
+            >
+              Upgrade
+            </button>
+          </>
+        ) : null}
       </div>
-      <span className="plugin-footer-powered ml-auto shrink-0">
-        Powered by{' '}
-        <a
-          href="https://mainnet.xyz"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="plugin-footer-brand font-semibold text-feature-base hover:underline"
-        >
-          Mainnet
-        </a>
-      </span>
     </footer>
   );
 }

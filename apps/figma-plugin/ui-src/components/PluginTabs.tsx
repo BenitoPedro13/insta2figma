@@ -5,6 +5,7 @@ export type ShellTab = 'new-import' | 'history' | 'favorites';
 type PluginTabsProps = {
   active: ShellTab;
   onChange: (tab: ShellTab) => void;
+  className?: string;
 };
 
 const TABS: { id: ShellTab; label: string }[] = [
@@ -13,12 +14,15 @@ const TABS: { id: ShellTab; label: string }[] = [
   { id: 'favorites', label: 'Favorites' },
 ];
 
-export function PluginTabs({ active, onChange }: PluginTabsProps) {
+export function PluginTabs({ active, onChange, className }: PluginTabsProps) {
   return (
     <div
-      className="plugin-tabs flex shrink-0 items-center gap-1 border-b border-stroke-soft-200 bg-bg-white-0 px-3 py-2"
+      className={cn(
+        'plugin-tabs flex shrink-0 items-center gap-1 border-b border-stroke-soft-200 bg-bg-white-0 px-4 py-2',
+        className,
+      )}
       role="tablist"
-      aria-label="Secção do plugin"
+      aria-label="Plugin sections"
     >
       {TABS.map((tab) => (
         <button

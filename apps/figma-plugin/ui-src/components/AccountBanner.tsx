@@ -27,9 +27,9 @@ export function AccountBanner({
 
   const quotaText =
     jobsRemaining != null && jobsLimit != null
-      ? `${jobsRemaining} de ${jobsLimit} imports este mês`
+      ? `${jobsRemaining} of ${jobsLimit} imports this month`
       : planTier === 'pro'
-        ? 'Plano Pro — imports ilimitados'
+        ? 'Pro plan — unlimited imports'
         : '';
 
   return (
@@ -64,7 +64,7 @@ export function AccountBanner({
             className="account-manage cursor-pointer border-0 bg-transparent p-1 text-paragraph-xs font-semibold text-feature-base hover:underline"
             onClick={onManage}
           >
-            Gerir subscrição
+            Manage subscription
           </button>
         )}
       </div>

@@ -36,11 +36,11 @@ export function ListScreen({
 
   const emptyCopy =
     tab === 'favorites'
-      ? 'Ainda não tens favoritos. Marca uma estrela no histórico.'
-      : 'Importa um perfil na aba New Import para aparecer aqui.';
+      ? 'No favorites yet. Star an account from History.'
+      : 'Import a profile from New Import to show up here.';
 
   return (
-    <div className="list-screen">
+    <div className="list-screen list-screen--embedded flex min-h-0 flex-1 flex-col">
       <div className="list-search-wrap">
         <span className="list-search-icon" aria-hidden>
           ⌕
@@ -51,7 +51,7 @@ export function ListScreen({
           placeholder="Search"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          aria-label="Pesquisar conta"
+          aria-label="Search accounts"
         />
       </div>
       <div className="list-rule" />
@@ -70,7 +70,7 @@ export function ListScreen({
                     type="button"
                     className={`account-row ${sel ? 'is-selected' : ''}`}
                     onClick={() => onOpenImportForProfile(row.username)}
-                    aria-label={`Importar @{row.username}`}
+                    aria-label={`Open @${row.username}`}
                   >
                     <HistoryAvatar username={row.username} profilePicUrl={row.profilePicUrl} />
                     <span className="account-handle">@{row.username}</span>
@@ -83,7 +83,7 @@ export function ListScreen({
                       ev.stopPropagation();
                       onToggleFavorite(row.username);
                     }}
-                    aria-label={row.favorite ? 'Remover favorito' : 'Adicionar favorito'}
+                    aria-label={row.favorite ? 'Remove favorite' : 'Add favorite'}
                     aria-pressed={row.favorite}
                   >
                     {row.favorite ? '★' : '☆'}

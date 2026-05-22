@@ -96,6 +96,7 @@ type SessionPayload = {
   planTier: 'free' | 'pro';
   quotas: SessionQuotas;
   userId: string;
+  subscription?: { currentPeriodEnd: string | null };
 };
 
 const SAMPLE_JPEG_URL =
@@ -394,10 +395,19 @@ async function fetchMe(base: string, token: string): Promise<SessionPayload> {
     throw new Error(`GET /me ${res.status}: ${parseApiError(payload)}`);
   }
   const quotasRaw = data.quotas as Record<string, unknown> | undefined;
+  const subRaw = data.subscription as Record<string, unknown> | undefined;
   const planTier = data.planTier === 'pro' ? 'pro' : 'free';
   return {
     planTier,
     userId: String(data.userId ?? ''),
+    ...(subRaw && {
+      subscription: {
+        currentPeriodEnd:
+          typeof subRaw.currentPeriodEnd === 'string'
+            ? subRaw.currentPeriodEnd
+            : null,
+      },
+    }),
     quotas: {
       jobsRemaining:
         typeof quotasRaw?.jobsRemaining === 'number'

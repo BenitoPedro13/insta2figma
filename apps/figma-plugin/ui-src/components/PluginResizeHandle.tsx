@@ -84,7 +84,7 @@ export function PluginResizeHandle() {
       className="plugin-resize-handle"
       role="separator"
       aria-orientation="both"
-      aria-label="Redimensionar janela do plugin"
+      aria-label="Resize plugin window"
       onMouseDown={onMouseDown}
     >
       <RiExpandDiagonalLine className="plugin-resize-handle-icon" aria-hidden />

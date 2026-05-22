@@ -19,7 +19,7 @@ export function ChromeHeader({
         type="button"
         className="chrome-close cursor-pointer rounded-md border-0 bg-transparent px-2 py-1 text-lg leading-none text-text-sub-600 transition hover:bg-bg-weak-50 hover:text-text-strong-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-base"
         onClick={onClose}
-        aria-label="Fechar plugin"
+        aria-label="Close plugin"
       >
         ×
       </button>

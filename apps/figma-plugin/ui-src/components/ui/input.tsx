@@ -1,7 +1,10 @@
 // AlignUI Input v0.0.0
 
 import * as React from 'react';
+import { RiAddLine, RiSubtractLine } from '@remixicon/react';
 import { Slot } from '@radix-ui/react-slot';
+
+import { cn } from '@/utils/cn';
 
 import type { PolymorphicComponentProps } from '@/utils/polymorphic';
 import { recursiveCloneChildren } from '@/utils/recursive-clone-children';
@@ -247,6 +250,91 @@ function InputInlineAffix({
 }
 InputInlineAffix.displayName = INPUT_INLINE_AFFIX_NAME;
 
+const INPUT_COUNTER_NAME = 'InputCounter';
+
+type InputCounterProps = {
+  id?: string;
+  value: number;
+  min?: number;
+  max?: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+  className?: string;
+};
+
+function clampCounterValue(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function InputCounter({
+  id,
+  value,
+  min = 1,
+  max = 99,
+  onChange,
+  disabled,
+  className,
+}: InputCounterProps) {
+  const safeValue = clampCounterValue(
+    Number.isFinite(value) ? value : min,
+    min,
+    max,
+  );
+  const atMin = safeValue <= min;
+  const atMax = safeValue >= max;
+
+  const step = (delta: number) => {
+    if (disabled) return;
+    onChange(clampCounterValue(safeValue + delta, min, max));
+  };
+
+  return (
+    <InputRoot size="medium" className={cn(disabled && 'opacity-60', className)}>
+      <InputAffix className="p-0">
+        <button
+          type="button"
+          className={cn(
+            'flex size-10 items-center justify-center border-0 bg-transparent text-text-sub-600 transition',
+            'hover:bg-bg-weak-50 hover:text-text-strong-950 disabled:cursor-not-allowed disabled:opacity-40',
+          )}
+          disabled={disabled || atMin}
+          aria-label="Decrease value"
+          onClick={() => step(-1)}
+        >
+          <RiSubtractLine className="size-4" aria-hidden />
+        </button>
+      </InputAffix>
+      <InputWrapper className="min-w-0 flex-1 justify-center px-0">
+        <Input
+          id={id}
+          type="text"
+          inputMode="numeric"
+          readOnly
+          disabled={disabled}
+          value={String(safeValue)}
+          className="text-center tabular-nums"
+          aria-live="polite"
+        />
+      </InputWrapper>
+      <InputAffix className="p-0">
+        <button
+          type="button"
+          className={cn(
+            'flex size-10 items-center justify-center border-0 bg-transparent text-text-sub-600 transition',
+            'hover:bg-bg-weak-50 hover:text-text-strong-950 disabled:cursor-not-allowed disabled:opacity-40',
+          )}
+          disabled={disabled || atMax}
+          aria-label="Increase value"
+          onClick={() => step(1)}
+        >
+          <RiAddLine className="size-4" aria-hidden />
+        </button>
+      </InputAffix>
+    </InputRoot>
+  );
+}
+InputCounter.displayName = INPUT_COUNTER_NAME;
+
 export {
   InputRoot as Root,
   InputWrapper as Wrapper,
@@ -254,4 +342,5 @@ export {
   InputIcon as Icon,
   InputAffix as Affix,
   InputInlineAffix as InlineAffix,
+  InputCounter as Counter,
 };
