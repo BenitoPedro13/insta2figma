@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccountBanner } from './components/AccountBanner';
 import { ChromeHeader } from './components/ChromeHeader';
+import { PluginFooter } from './components/PluginFooter';
+import { PluginResizeHandle } from './components/PluginResizeHandle';
+import { PluginSidebar } from './components/PluginSidebar';
+import { PluginTabs, type ShellTab } from './components/PluginTabs';
 import {
   clearLegacyIframeHistory,
   loadLegacyIframeHistory,
@@ -11,9 +15,8 @@ import {
   type HistoryEntry,
 } from './lib/historyStorage';
 import { ImportScreen, type PostSelectionMode, type PostTimelineOrder } from './screens/ImportScreen';
-import { ListScreen, type ListTab } from './screens/ListScreen';
+import { ListScreen } from './screens/ListScreen';
 
-type View = 'list' | 'import';
 type ProfilePreview = {
   username: string;
   mediaCount: number;
@@ -43,8 +46,7 @@ function msgToText(v: unknown): string {
 }
 
 export function App() {
-  const [view, setView] = useState<View>('list');
-  const [listTab, setListTab] = useState<ListTab>('history');
+  const [activeTab, setActiveTab] = useState<ShellTab>('new-import');
   const [search, setSearch] = useState('');
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function App() {
 
   const openImport = useCallback(
     (opts?: { clearUsername?: boolean; username?: string }) => {
-      setView('import');
+      setActiveTab('new-import');
       setStatus('');
       setListStatus('');
       if (opts?.clearUsername) {
@@ -291,7 +293,7 @@ export function App() {
             profilePicUrl: profilePicUrl ?? null,
           }),
         );
-        setView('list');
+        setActiveTab('history');
         setListStatus(summary);
       }
     };
@@ -310,7 +312,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== 'import' || importing) return;
+    if (activeTab !== 'new-import' || importing) return;
     const user = String(username ?? '')
       .trim()
       .replace(/^@+/, '')
@@ -347,7 +349,7 @@ export function App() {
     }, 420);
     return () => window.clearTimeout(timer);
   }, [
-    view,
+    activeTab,
     importing,
     username,
     maxPosts,
@@ -410,8 +412,10 @@ export function App() {
     [persistEntries],
   );
 
+  const listTab = activeTab === 'favorites' ? 'favorites' : 'history';
+
   return (
-    <div className="plugin-shell">
+    <div className="plugin-shell relative">
       <ChromeHeader title="Insta2Figma" onClose={onCancel} />
       <AccountBanner
         planTier={planTier}
@@ -421,54 +425,57 @@ export function App() {
         onUpgrade={onUpgrade}
         onManage={onManageSubscription}
       />
-      <div className={`plugin-body ${view === 'list' ? 'plugin-body--flush' : ''}`}>
-        {view === 'list' ? (
-          <ListScreen
-            tab={listTab}
-            onTabChange={setListTab}
-            search={search}
-            onSearchChange={setSearch}
-            entries={historyEntries}
-            selectedUsername={selectedUsername}
-            onOpenImportForProfile={(u) => openImport({ username: u })}
-            onToggleFavorite={onToggleFavoriteRow}
-            onStartImport={() => openImport()}
-            onAddNew={() => openImport({ clearUsername: true })}
-            listStatus={listStatus}
-          />
-        ) : (
-          <ImportScreen
-            username={username}
-            maxPosts={maxPosts}
-            maxPostsLimit={maxPostsLimit}
-            selectionMode={selectionMode}
-            startIndex={startIndex}
-            postCount={postCount}
-            timelineOrder={timelineOrder}
-            expandCarouselImages={expandCarouselImages}
-            allowCarousel={allowCarousel}
-            quotaExceeded={quotaExceeded}
-            planTier={planTier}
-            status={status}
-            importing={importing}
-            preview={preview}
-            previewLoading={previewLoading}
-            previewThumbsLoading={previewThumbsLoading}
-            previewError={previewError}
-            onUsernameChange={setUsername}
-            onMaxPostsChange={setMaxPosts}
-            onSelectionModeChange={setSelectionMode}
-            onStartIndexChange={setStartIndex}
-            onPostCountChange={setPostCount}
-            onTimelineOrderChange={setTimelineOrder}
-            onExpandCarouselChange={setExpandCarouselImages}
-            onImport={onImport}
-            onUpgrade={onUpgrade}
-            onBack={() => setView('list')}
-            onClose={onCancel}
-          />
-        )}
+      <div className="plugin-frame">
+        <PluginSidebar />
+        <div className="plugin-main">
+          <PluginTabs active={activeTab} onChange={setActiveTab} />
+          <div className="plugin-content">
+            {activeTab === 'new-import' ? (
+              <ImportScreen
+                username={username}
+                maxPosts={maxPosts}
+                maxPostsLimit={maxPostsLimit}
+                selectionMode={selectionMode}
+                startIndex={startIndex}
+                postCount={postCount}
+                timelineOrder={timelineOrder}
+                expandCarouselImages={expandCarouselImages}
+                allowCarousel={allowCarousel}
+                quotaExceeded={quotaExceeded}
+                planTier={planTier}
+                status={status}
+                importing={importing}
+                preview={preview}
+                previewLoading={previewLoading}
+                previewThumbsLoading={previewThumbsLoading}
+                previewError={previewError}
+                onUsernameChange={setUsername}
+                onMaxPostsChange={setMaxPosts}
+                onSelectionModeChange={setSelectionMode}
+                onStartIndexChange={setStartIndex}
+                onPostCountChange={setPostCount}
+                onTimelineOrderChange={setTimelineOrder}
+                onExpandCarouselChange={setExpandCarouselImages}
+                onImport={onImport}
+                onUpgrade={onUpgrade}
+              />
+            ) : (
+              <ListScreen
+                tab={listTab}
+                search={search}
+                onSearchChange={setSearch}
+                entries={historyEntries}
+                selectedUsername={selectedUsername}
+                onOpenImportForProfile={(u) => openImport({ username: u })}
+                onToggleFavorite={onToggleFavoriteRow}
+                listStatus={listStatus}
+              />
+            )}
+          </div>
+          <PluginFooter />
+        </div>
       </div>
+      <PluginResizeHandle />
     </div>
   );
 }

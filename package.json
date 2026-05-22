@@ -28,5 +28,8 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "turbo": "^2.3.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@tailwindcss/oxide"]
   }
 }

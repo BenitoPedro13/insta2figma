@@ -26,7 +26,51 @@ function formatCaught(err: unknown): string {
   }
 }
 
-figma.showUI(__html__, { width: 380, height: 520 });
+const UI_SIZE_STORAGE_KEY = 'insta2figma:ui-size:v1';
+const UI_SIZE_DEFAULT = { width: 872, height: 667 };
+const UI_SIZE_MIN = { width: 380, height: 420 };
+const UI_SIZE_MAX = { width: 1200, height: 900 };
+
+function clampUiSize(width: number, height: number): { width: number; height: number } {
+  return {
+    width: Math.min(
+      UI_SIZE_MAX.width,
+      Math.max(UI_SIZE_MIN.width, Math.round(width)),
+    ),
+    height: Math.min(
+      UI_SIZE_MAX.height,
+      Math.max(UI_SIZE_MIN.height, Math.round(height)),
+    ),
+  };
+}
+
+figma.showUI(__html__, {
+  width: UI_SIZE_DEFAULT.width,
+  height: UI_SIZE_DEFAULT.height,
+  themeColors: true,
+});
+
+void (async () => {
+  try {
+    const raw = await figma.clientStorage.getAsync(UI_SIZE_STORAGE_KEY);
+    if (
+      raw &&
+      typeof raw === 'object' &&
+      'width' in raw &&
+      'height' in raw &&
+      typeof (raw as { width: unknown }).width === 'number' &&
+      typeof (raw as { height: unknown }).height === 'number'
+    ) {
+      const size = clampUiSize(
+        (raw as { width: number }).width,
+        (raw as { height: number }).height,
+      );
+      figma.ui.resize(size.width, size.height);
+    }
+  } catch (e) {
+    console.warn('[Insta2Figma] ui-size load', e);
+  }
+})();
 
 void bootstrapSession();
 
@@ -247,6 +291,7 @@ async function placeSignedImages(
 
 type PluginMessage =
   | { type: 'cancel' }
+  | { type: 'ui-resize'; width: number; height: number; persist?: boolean }
   | { type: 'history-request' }
   /** Guardado em `figma.clientStorage` (persiste entre sessões; o `localStorage` do iframe não). */
   | { type: 'history-save'; entries: unknown }
@@ -724,6 +769,19 @@ async function previewProfileViaApi(
 }
 
 figma.ui.onmessage = async (msg: PluginMessage) => {
+  if (msg.type === 'ui-resize') {
+    const size = clampUiSize(msg.width, msg.height);
+    figma.ui.resize(size.width, size.height);
+    if (msg.persist) {
+      try {
+        await figma.clientStorage.setAsync(UI_SIZE_STORAGE_KEY, size);
+      } catch (e) {
+        console.warn('[Insta2Figma] ui-size save', e);
+      }
+    }
+    return;
+  }
+
   if (msg.type === 'session-request') {
     await bootstrapSession();
     return;
