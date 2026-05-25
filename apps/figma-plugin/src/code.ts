@@ -416,6 +416,7 @@ type PluginMessage =
   | { type: 'session-request' }
   | { type: 'billing-checkout' }
   | { type: 'billing-portal' }
+  | { type: 'open-external'; url: string }
   | { type: 'error'; message: unknown };
 
 function normBase(b: string): string {
@@ -974,6 +975,14 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       figma.notify('Portal de cliente aberto no browser.');
     } catch (err) {
       figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
+    }
+    return;
+  }
+
+  if (msg.type === 'open-external') {
+    const url = typeof msg.url === 'string' ? msg.url.trim() : '';
+    if (url && /^https?:\/\//i.test(url)) {
+      figma.openExternal(url);
     }
     return;
   }

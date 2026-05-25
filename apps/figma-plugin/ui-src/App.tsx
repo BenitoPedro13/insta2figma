@@ -401,6 +401,14 @@ export function App() {
     parent.postMessage({ pluginMessage: { type: 'billing-checkout' } }, '*');
   }, []);
 
+  const onManage = useCallback(() => {
+    parent.postMessage({ pluginMessage: { type: 'billing-portal' } }, '*');
+  }, []);
+
+  const onOpenExternal = useCallback((url: string) => {
+    parent.postMessage({ pluginMessage: { type: 'open-external', url } }, '*');
+  }, []);
+
   const selectProfile = useCallback((u: string) => {
     const user = String(u)
       .trim()
@@ -735,6 +743,8 @@ export function App() {
                 onExpandCarouselChange={setExpandCarouselImages}
                 onImport={onImport}
                 onUpgrade={onUpgrade}
+                onManage={onManage}
+                onOpenExternal={onOpenExternal}
               />
             </div>
           </div>

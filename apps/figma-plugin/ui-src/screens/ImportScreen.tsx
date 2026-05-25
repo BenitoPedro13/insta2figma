@@ -89,6 +89,8 @@ type ImportScreenProps = {
   onExpandCarouselChange: (v: boolean) => void;
   onImport: () => void;
   onUpgrade: () => void;
+  onManage: () => void;
+  onOpenExternal: (url: string) => void;
 };
 
 export function ImportScreen({
@@ -139,6 +141,8 @@ export function ImportScreen({
   onExpandCarouselChange,
   onImport,
   onUpgrade,
+  onManage,
+  onOpenExternal,
 }: ImportScreenProps) {
   const onSubmit = useCallback(
     (e: FormEvent) => {
@@ -213,7 +217,13 @@ export function ImportScreen({
     <div className="new-import-screen flex min-h-0 flex-1 flex-col">
       <div className="new-import-layout flex min-h-0 flex-1 flex-row">
         <div className="new-import-left flex w-[466px] shrink-0 flex-col border-r border-stroke-soft-200 bg-bg-white-0">
-          <PanelHeader planTier={planTier} sessionError={sessionError} />
+          <PanelHeader
+            planTier={planTier}
+            sessionError={sessionError}
+            onUpgrade={onUpgrade}
+            onManage={onManage}
+            onOpenExternal={onOpenExternal}
+          />
           <PluginTabs active={activeTab} onChange={onTabChange} />
           {isImportTab ? (
             <form
