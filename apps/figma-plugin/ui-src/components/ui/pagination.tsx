@@ -111,9 +111,8 @@ const PaginationItem = React.forwardRef<HTMLButtonElement, PaginationItemProps>(
       <Component
         ref={forwardedRef}
         className={cn(item({ class: className }), {
-          'bg-bg-weak-50 text-text-strong-950': current,
+          'text-text-strong-950': current,
         })}
-        aria-current={current ? 'page' : undefined}
         {...rest}
       >
         {children}

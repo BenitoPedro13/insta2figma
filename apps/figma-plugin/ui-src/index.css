@@ -778,17 +778,12 @@ body,
   flex-shrink: 0;
 }
 
-.pro-upgrade-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-}
-
 .pro-upgrade-overlay-backdrop {
-  cursor: pointer;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
-.pro-upgrade-panel {
+.pro-upgrade-overlay-panel {
   box-shadow: var(--shadow-regular-md);
 }
 

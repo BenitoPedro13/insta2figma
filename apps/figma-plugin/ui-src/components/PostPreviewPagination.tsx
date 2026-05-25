@@ -1,86 +1,101 @@
 import { RiArrowLeftSLine, RiArrowRightSLine } from '@remixicon/react';
 import * as Pagination from './ui/pagination';
-import {
-  buildPreviewPageNumbers,
-  isPreviewPageLocked,
-} from '../lib/previewPagination';
 
 type PostPreviewPaginationProps = {
-  planTier: 'free' | 'pro';
   currentPage: number;
-  pagesLoaded: number;
-  hasNextPage: boolean;
-  disabled?: boolean;
+  totalPages: number;
+  maxAccessiblePage: number;
   onPageChange: (page: number) => void;
-  onUpgradeRequired: () => void;
+  onBlockedAdvance: () => void;
 };
 
+function buildVisiblePages(current: number, total: number): number[] {
+  if (total <= 5) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+
+  const pages = new Set<number>([1, total, current]);
+  if (current > 1) pages.add(current - 1);
+  if (current < total) pages.add(current + 1);
+
+  return [...pages].sort((a, b) => a - b);
+}
+
 export function PostPreviewPagination({
-  planTier,
   currentPage,
-  pagesLoaded,
-  hasNextPage,
-  disabled = false,
+  totalPages,
+  maxAccessiblePage,
   onPageChange,
-  onUpgradeRequired,
+  onBlockedAdvance,
 }: PostPreviewPaginationProps) {
-  const pageNumbers = buildPreviewPageNumbers({
-    planTier,
-    currentPage,
-    pagesLoaded,
-    hasNextPage,
-  });
+  if (totalPages <= 1) return null;
+
+  const visiblePages = buildVisiblePages(currentPage, totalPages);
 
   const tryPage = (page: number) => {
-    if (disabled) return;
-    if (isPreviewPageLocked(planTier, page)) {
-      onUpgradeRequired();
+    if (page < 1 || page > totalPages) return;
+    if (page > maxAccessiblePage) {
+      onBlockedAdvance();
       return;
     }
     onPageChange(page);
   };
 
-  const prevPage = currentPage - 1;
-  const nextPage = currentPage + 1;
-  const canPrev = currentPage > 1 && !disabled;
-  const canNext = hasNextPage && !disabled;
+  const tryNext = () => {
+    if (currentPage >= totalPages) return;
+    if (currentPage + 1 > maxAccessiblePage) {
+      onBlockedAdvance();
+      return;
+    }
+    onPageChange(currentPage + 1);
+  };
 
   return (
-    <div className="post-preview-pagination flex shrink-0 justify-center border-t border-stroke-soft-200 bg-bg-white-0 px-3 py-3">
-      <Pagination.Root variant="group" aria-label="Preview pagination">
+    <div className="post-preview-pagination shrink-0 border-t border-stroke-soft-200 bg-bg-white-0 px-3 py-2">
+      <Pagination.Root variant="group" aria-label="Post preview pages">
         <Pagination.NavButton
           type="button"
           aria-label="Previous page"
-          disabled={!canPrev}
-          onClick={() => {
-            if (!canPrev) return;
-            tryPage(prevPage);
-          }}
+          disabled={currentPage <= 1}
+          onClick={() => tryPage(currentPage - 1)}
         >
-          <Pagination.NavIcon as={RiArrowLeftSLine} aria-hidden />
+          <Pagination.NavIcon as={RiArrowLeftSLine} />
         </Pagination.NavButton>
 
-        {pageNumbers.map((page) => (
-          <Pagination.Item
-            key={page}
-            type="button"
-            current={page === currentPage}
-            onClick={() => tryPage(page)}
-          >
-            {page}
-          </Pagination.Item>
-        ))}
+        {visiblePages.map((page, index) => {
+          const prev = visiblePages[index - 1];
+          const showGap = prev != null && page - prev > 1;
+
+          return (
+            <span key={page} className="contents">
+              {showGap ? (
+                <span
+                  className="flex h-8 min-w-10 items-center justify-center text-label-sm text-text-soft-400"
+                  aria-hidden
+                >
+                  …
+                </span>
+              ) : null}
+              <Pagination.Item
+                type="button"
+                current={page === currentPage}
+                aria-label={`Page ${page}`}
+                aria-current={page === currentPage ? 'page' : undefined}
+                onClick={() => tryPage(page)}
+              >
+                {page}
+              </Pagination.Item>
+            </span>
+          );
+        })}
 
         <Pagination.NavButton
           type="button"
           aria-label="Next page"
-          disabled={!canNext}
-          onClick={() => {
-            if (!canNext) return;
-            tryPage(nextPage);
-          }}
+          disabled={currentPage >= totalPages}
+          onClick={tryNext}
         >
-          <Pagination.NavIcon as={RiArrowRightSLine} aria-hidden />
+          <Pagination.NavIcon as={RiArrowRightSLine} />
         </Pagination.NavButton>
       </Pagination.Root>
     </div>

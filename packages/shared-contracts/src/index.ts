@@ -19,15 +19,15 @@ import {
   type ScrapeSelectionInput,
 } from './post-selection';
 import {
+  PREVIEW_PAGE_SIZE,
   buildIndexedPostPreview,
-  extractInstagramUserId,
-  extractTimelinePageInfo,
   parseTimelineSampleFromUserNode,
   type InstagramPostPreviewItem,
   type TimelinePostItem,
 } from './instagram-timeline-parse';
 
 export {
+  PREVIEW_PAGE_SIZE,
   POST_SELECTION_MODES,
   POST_TIMELINE_ORDERS,
   buildContiguousIndices,
@@ -40,8 +40,6 @@ export {
   slicePostsBySelection,
   toggleSelectedIndex,
   buildIndexedPostPreview,
-  extractInstagramUserId,
-  extractTimelinePageInfo,
   parseTimelineSampleFromUserNode,
   type CarouselPostEstimate,
   type ImportImageEstimate,

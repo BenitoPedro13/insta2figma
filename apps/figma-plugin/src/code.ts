@@ -394,8 +394,10 @@ type PluginMessage =
       postCount?: number;
       timelineOrder?: 'newest_first' | 'oldest_first';
       previewListSize?: number;
-      previewPage?: number;
       selectedIndices?: number[];
+      previewPage?: number;
+      after?: string;
+      userId?: string;
     }
   | { type: 'create-shapes'; count: number }
   | { type: 'place-images'; urls: string[] }
@@ -482,7 +484,11 @@ async function fetchMe(base: string, token: string): Promise<SessionPayload> {
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const data = payload.data as Record<string, unknown> | undefined;
   if (!res.ok || !data) {
-    throw new Error(`GET /me ${res.status}: ${parseApiError(payload)}`);
+    const err = new Error(`GET /me ${res.status}: ${parseApiError(payload)}`) as Error & {
+      status?: number;
+    };
+    err.status = res.status;
+    throw err;
   }
   const quotasRaw = data.quotas as Record<string, unknown> | undefined;
   const subRaw = data.subscription as Record<string, unknown> | undefined;
@@ -537,8 +543,22 @@ async function ensureSession(base: string): Promise<{
       figmaUser.name ?? undefined,
     );
   }
-  const me = await fetchMe(base, stored.accessToken);
-  return { session: stored, me };
+
+  try {
+    const me = await fetchMe(base, stored.accessToken);
+    return { session: stored, me };
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 401) throw err;
+
+    stored = await authFigmaUser(
+      base,
+      figmaUserId,
+      figmaUser.name ?? undefined,
+    );
+    const me = await fetchMe(base, stored.accessToken);
+    return { session: stored, me };
+  }
 }
 
 async function bootstrapSession(): Promise<void> {
@@ -755,8 +775,10 @@ function buildPreviewQueryString(
     postCount?: number;
     timelineOrder?: 'newest_first' | 'oldest_first';
     previewListSize?: number;
-    previewPage?: number;
     selectedIndices?: number[];
+    previewPage?: number;
+    after?: string;
+    userId?: string;
   },
 ): string {
   const parts = [
@@ -779,13 +801,19 @@ function buildPreviewQueryString(
   if (opts.previewListSize != null) {
     parts.push(`previewListSize=${encodeURIComponent(String(opts.previewListSize))}`);
   }
-  if (opts.previewPage != null) {
-    parts.push(`previewPage=${encodeURIComponent(String(opts.previewPage))}`);
-  }
   if (opts.selectedIndices?.length) {
     parts.push(
       `selectedIndices=${encodeURIComponent(opts.selectedIndices.join(','))}`,
     );
+  }
+  if (opts.previewPage != null) {
+    parts.push(`previewPage=${encodeURIComponent(String(opts.previewPage))}`);
+  }
+  if (opts.after) {
+    parts.push(`after=${encodeURIComponent(opts.after)}`);
+  }
+  if (opts.userId) {
+    parts.push(`userId=${encodeURIComponent(opts.userId)}`);
   }
   return parts.join('&');
 }
@@ -801,8 +829,10 @@ async function previewProfileViaApi(
     postCount?: number;
     timelineOrder?: 'newest_first' | 'oldest_first';
     previewListSize?: number;
-    previewPage?: number;
     selectedIndices?: number[];
+    previewPage?: number;
+    after?: string;
+    userId?: string;
   },
 ): Promise<{
   username: string;
@@ -824,8 +854,10 @@ async function previewProfileViaApi(
   selectionWarning?: string;
   previewPage?: number;
   previewPageSize?: number;
+  previewTotalPages?: number;
   hasNextPreviewPage?: boolean;
-  previewPagesLoaded?: number;
+  nextPreviewCursor?: string | null;
+  instagramUserId?: string | null;
 }> {
   const { session } = await ensureSession(base);
   const token = session.accessToken;
@@ -889,12 +921,16 @@ async function previewProfileViaApi(
       typeof data.previewPageSize === 'number' && Number.isFinite(data.previewPageSize)
         ? data.previewPageSize
         : undefined,
-    hasNextPreviewPage: data.hasNextPreviewPage === true,
-    previewPagesLoaded:
-      typeof data.previewPagesLoaded === 'number' &&
-      Number.isFinite(data.previewPagesLoaded)
-        ? data.previewPagesLoaded
+    previewTotalPages:
+      typeof data.previewTotalPages === 'number' &&
+      Number.isFinite(data.previewTotalPages)
+        ? data.previewTotalPages
         : undefined,
+    hasNextPreviewPage: data.hasNextPreviewPage === true,
+    nextPreviewCursor:
+      typeof data.nextPreviewCursor === 'string' ? data.nextPreviewCursor : null,
+    instagramUserId:
+      typeof data.instagramUserId === 'string' ? data.instagramUserId : null,
   };
 }
 
@@ -1064,10 +1100,9 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         postCount: msg.postCount,
         timelineOrder: msg.timelineOrder,
         previewListSize: msg.previewListSize,
-        previewPage:
-          typeof msg.previewPage === 'number' && Number.isFinite(msg.previewPage)
-            ? Math.max(1, Math.floor(msg.previewPage))
-            : 1,
+        previewPage: msg.previewPage,
+        after: msg.after,
+        userId: msg.userId,
       });
       const postsWithThumbs = preview.postsPreview ?? [];
       const postsMeta = postsWithThumbs.map((item) => ({
@@ -1091,8 +1126,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         selectionWarning: preview.selectionWarning,
         previewPage: preview.previewPage,
         previewPageSize: preview.previewPageSize,
+        previewTotalPages: preview.previewTotalPages,
         hasNextPreviewPage: preview.hasNextPreviewPage,
-        previewPagesLoaded: preview.previewPagesLoaded,
+        nextPreviewCursor: preview.nextPreviewCursor,
+        instagramUserId: preview.instagramUserId,
         thumbsPending: postsWithThumbs.length,
         ...(preview.profilePicDataUrl
           ? { profilePicUrlHd: preview.profilePicDataUrl }

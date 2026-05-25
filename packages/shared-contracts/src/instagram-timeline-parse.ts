@@ -97,29 +97,6 @@ export function parseTimelineSampleFromUserNode(
   return out;
 }
 
-export function extractTimelinePageInfo(userNode: unknown): {
-  endCursor: string | null;
-  hasNextPage: boolean;
-} {
-  const user = asRecord(userNode);
-  const timeline = asRecord(user?.edge_owner_to_timeline_media);
-  const pageInfo = asRecord(timeline?.page_info);
-  const endCursor =
-    typeof pageInfo?.end_cursor === 'string' && pageInfo.end_cursor.length > 0
-      ? pageInfo.end_cursor
-      : null;
-  return {
-    endCursor,
-    hasNextPage: pageInfo?.has_next_page === true,
-  };
-}
-
-export function extractInstagramUserId(userNode: unknown): string | null {
-  const user = asRecord(userNode);
-  const id = user?.id;
-  return typeof id === 'string' && id.length > 0 ? id : null;
-}
-
 export type InstagramPostPreviewItem = {
   index: number;
   shortcode: string;
@@ -129,15 +106,18 @@ export type InstagramPostPreviewItem = {
   carouselCount?: number;
 };
 
+export const PREVIEW_PAGE_SIZE = 12;
+
 export function buildIndexedPostPreview(
   posts: TimelinePostItem[],
   timelineOrder: 'newest_first' | 'oldest_first',
-  indexOffset = 0,
+  opts?: { indexStart?: number },
 ): InstagramPostPreviewItem[] {
+  const indexStart = Math.max(1, opts?.indexStart ?? 1);
   const ordered =
     timelineOrder === 'oldest_first' ? [...posts].reverse() : posts;
   return ordered.map((post, i) => ({
-    index: indexOffset + i + 1,
+    index: indexStart + i,
     shortcode: post.shortcode,
     isVideo: post.isVideo,
     takenAt: null,

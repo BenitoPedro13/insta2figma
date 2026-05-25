@@ -1,17 +1,17 @@
 import { RiCheckLine, RiCloseLine } from '@remixicon/react';
 import * as Button from './ui/button';
 
-const PRO_BENEFITS = [
-  'Infinite pagination',
-  '1000 images per month',
-  'Special support in less than 24h',
-] as const;
-
 type ProUpgradeOverlayProps = {
   open: boolean;
   onClose: () => void;
   onUpgrade: () => void;
 };
+
+const PRO_BENEFITS = [
+  'Infinite pagination',
+  '1000 images per month',
+  'Special support in less than 24h',
+] as const;
 
 export function ProUpgradeOverlay({
   open,
@@ -33,7 +33,7 @@ export function ProUpgradeOverlay({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="pro-upgrade-panel relative w-full max-w-[320px] rounded-2xl border border-stroke-soft-200 bg-bg-white-0 p-5 shadow-regular-md">
+      <div className="pro-upgrade-overlay-panel relative w-full max-w-[320px] rounded-2xl border border-stroke-soft-200 bg-bg-white-0 p-5 shadow-regular-md">
         <button
           type="button"
           className="absolute right-3 top-3 flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-text-sub-600 transition hover:bg-bg-weak-50"
@@ -43,17 +43,14 @@ export function ProUpgradeOverlay({
           <RiCloseLine className="size-5" aria-hidden />
         </button>
 
-        <p className="pro-upgrade-badge m-0 mb-2 inline-block rounded-full bg-feature-lighter px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-feature-base">
-          Pro
-        </p>
-        <h2
+        <p
           id="pro-upgrade-title"
-          className="m-0 pr-8 text-title-h6 font-semibold text-text-strong-950"
+          className="m-0 pr-8 text-label-md font-semibold text-text-strong-950"
         >
-          Unlock the full profile preview
-        </h2>
+          Upgrade to Pro
+        </p>
         <p className="mt-2 mb-4 text-paragraph-sm text-text-sub-600">
-          Free plan preview stops at page 3. Upgrade to browse the entire feed.
+          Browse the full profile preview and unlock higher limits.
         </p>
 
         <ul className="pro-upgrade-benefits m-0 flex list-none flex-col gap-2.5 p-0">
@@ -72,7 +69,10 @@ export function ProUpgradeOverlay({
             mode="filled"
             size="medium"
             className="w-full"
-            onClick={onUpgrade}
+            onClick={() => {
+              onClose();
+              onUpgrade();
+            }}
           >
             Upgrade to Pro
           </Button.Root>

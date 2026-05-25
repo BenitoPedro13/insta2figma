@@ -2,6 +2,7 @@ import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import type { RequestUser } from '../auth/jwt.strategy';
+import { PlanService } from '../plan/plan.service';
 import { InstagramPreviewService } from './instagram-preview.service';
 import type { PostSelectionMode, PostTimelineOrder } from '@insta2figma/shared-contracts';
 
@@ -35,12 +36,15 @@ function parseTimelineOrder(raw: string | undefined): PostTimelineOrder | undefi
 
 @Controller('instagram')
 export class InstagramController {
-  constructor(private readonly preview: InstagramPreviewService) {}
+  constructor(
+    private readonly preview: InstagramPreviewService,
+    private readonly plan: PlanService,
+  ) {}
 
   @Get('profile-preview')
   @UseGuards(AuthGuard('jwt'))
-  getProfilePreview(
-    @Req() _req: AuthedRequest,
+  async getProfilePreview(
+    @Req() req: AuthedRequest,
     @Query('username') username?: string,
     @Query('maxPosts') maxPostsRaw?: string,
     @Query('expandCarouselImages') expandCarouselRaw?: string,
@@ -49,8 +53,10 @@ export class InstagramController {
     @Query('postCount') postCountRaw?: string,
     @Query('timelineOrder') timelineOrderRaw?: string,
     @Query('previewListSize') previewListSizeRaw?: string,
-    @Query('previewPage') previewPageRaw?: string,
     @Query('selectedIndices') selectedIndicesRaw?: string,
+    @Query('previewPage') previewPageRaw?: string,
+    @Query('after') after?: string,
+    @Query('userId') userId?: string,
   ) {
     const maxPosts = parseIntClamped(maxPostsRaw, 12);
     const expandCarouselImages =
@@ -66,10 +72,9 @@ export class InstagramController {
     const previewListSize = previewListSizeRaw
       ? parseIntClamped(previewListSizeRaw, maxPosts)
       : undefined;
-    const previewPage = previewPageRaw
-      ? parseIntClamped(previewPageRaw, 1, 999)
-      : undefined;
     const selectedIndices = parseSelectedIndices(selectedIndicesRaw);
+    const previewPage = parseIntClamped(previewPageRaw, 1, 999);
+    const planTier = await this.plan.getPlanTierForUser(req.user.userId);
 
     return this.preview.getProfilePreview(String(username ?? ''), {
       maxPosts,
@@ -79,8 +84,11 @@ export class InstagramController {
       postCount,
       timelineOrder,
       previewListSize,
-      previewPage,
       selectedIndices,
+      previewPage,
+      after,
+      userId,
+      planTier,
     });
   }
 }

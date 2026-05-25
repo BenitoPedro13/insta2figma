@@ -7,7 +7,6 @@ import {
 } from 'react';
 import { cn } from '../utils/cn';
 import { Skeleton } from './Skeleton';
-import { PostPreviewPagination } from './PostPreviewPagination';
 
 export type PostPreviewItem = {
   index: number;
@@ -22,13 +21,6 @@ type PostPreviewListProps = {
   selectedIndices: number[];
   onToggleIndex: (index: number) => void;
   thumbsLoading?: boolean;
-  planTier: 'free' | 'pro';
-  previewPage: number;
-  previewPagesLoaded: number;
-  hasNextPreviewPage: boolean;
-  paginationDisabled?: boolean;
-  onPreviewPageChange: (page: number) => void;
-  onUpgradeRequired: () => void;
 };
 
 type SelectionBounds = {
@@ -202,13 +194,6 @@ export function PostPreviewList({
   selectedIndices,
   onToggleIndex,
   thumbsLoading = false,
-  planTier,
-  previewPage,
-  previewPagesLoaded,
-  hasNextPreviewPage,
-  paginationDisabled = false,
-  onPreviewPageChange,
-  onUpgradeRequired,
 }: PostPreviewListProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -249,15 +234,6 @@ export function PostPreviewList({
           ) : null}
         </div>
       </div>
-      <PostPreviewPagination
-        planTier={planTier}
-        currentPage={previewPage}
-        pagesLoaded={previewPagesLoaded}
-        hasNextPage={hasNextPreviewPage}
-        disabled={paginationDisabled}
-        onPageChange={onPreviewPageChange}
-        onUpgradeRequired={onUpgradeRequired}
-      />
     </div>
   );
 }

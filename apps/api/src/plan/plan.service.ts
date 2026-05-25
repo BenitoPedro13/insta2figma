@@ -160,4 +160,12 @@ export class PlanService {
 
     return { planTier };
   }
+
+  async getPlanTierForUser(userId: string): Promise<PlanTier> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Utilizador não encontrado.');
+    }
+    return normalizePlanTier(user.planTier);
+  }
 }
