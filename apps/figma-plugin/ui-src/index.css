@@ -375,8 +375,8 @@ body,
 }
 
 .post-count-input:focus {
-  border-color: var(--color-primary-base);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-base) 18%, transparent);
+  border-color: var(--color-static-black);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-static-black) 18%, transparent);
 }
 
 .post-count-input:disabled {

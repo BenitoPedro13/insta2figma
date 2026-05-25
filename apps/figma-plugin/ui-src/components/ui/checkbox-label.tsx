@@ -8,6 +8,7 @@ type CheckboxLabelProps = {
   disabled?: boolean;
   onCheckedChange?: (checked: boolean) => void;
   className?: string;
+  tone?: 'primary' | 'neutral';
 };
 
 export function CheckboxLabel({
@@ -17,6 +18,7 @@ export function CheckboxLabel({
   disabled,
   onCheckedChange,
   className,
+  tone = 'primary',
 }: CheckboxLabelProps) {
   return (
     <label
@@ -29,6 +31,7 @@ export function CheckboxLabel({
       <Checkbox.Root
         checked={checked}
         disabled={disabled}
+        tone={tone}
         onCheckedChange={(v) => onCheckedChange?.(v === true)}
         className="mt-0.5"
       />

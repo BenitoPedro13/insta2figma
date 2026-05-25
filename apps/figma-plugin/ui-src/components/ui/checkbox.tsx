@@ -39,10 +39,40 @@ function IconIndeterminate({ ...rest }: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+type CheckboxTone = 'primary' | 'neutral';
+
 const Checkbox = React.forwardRef<
   React.ComponentRef<typeof CheckboxPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
->(({ className, checked, ...rest }, forwardedRef) => {
+  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root> & {
+    tone?: CheckboxTone;
+  }
+>(({ className, checked, tone = 'primary', ...rest }, forwardedRef) => {
+  const fillChecked =
+    tone === 'neutral'
+      ? {
+          focus: 'group-focus/checkbox:fill-static-black',
+          hoverChecked: 'group-hover/checkbox:group-data-[state=checked]/checkbox:fill-neutral-800',
+          hoverIndeterminate:
+            'group-hover/checkbox:group-data-[state=indeterminate]/checkbox:fill-neutral-800',
+          focusChecked: 'group-focus/checkbox:group-data-[state=checked]/checkbox:fill-neutral-900',
+          focusIndeterminate:
+            'group-focus/checkbox:group-data-[state=indeterminate]/checkbox:fill-neutral-900',
+          checked: 'group-data-[state=checked]/checkbox:fill-static-black',
+          indeterminate: 'group-data-[state=indeterminate]/checkbox:fill-static-black',
+        }
+      : {
+          focus: 'group-focus/checkbox:fill-primary-base',
+          hoverChecked:
+            'group-hover/checkbox:group-data-[state=checked]/checkbox:fill-primary-darker',
+          hoverIndeterminate:
+            'group-hover/checkbox:group-data-[state=indeterminate]/checkbox:fill-primary-darker',
+          focusChecked: 'group-focus/checkbox:group-data-[state=checked]/checkbox:fill-primary-dark',
+          focusIndeterminate:
+            'group-focus/checkbox:group-data-[state=indeterminate]/checkbox:fill-primary-dark',
+          checked: 'group-data-[state=checked]/checkbox:fill-primary-base',
+          indeterminate: 'group-data-[state=indeterminate]/checkbox:fill-primary-base',
+        };
+
   const filterId = React.useId();
 
   const TOTAL_LENGTH_CHECK = 11.313708305358887;
@@ -75,14 +105,14 @@ const Checkbox = React.forwardRef<
           className={cn(
             'fill-bg-soft-200 transition duration-200 ease-out',
             'group-hover/checkbox:fill-bg-sub-300',
-            'group-focus/checkbox:fill-primary-base',
+            fillChecked.focus,
             'group-disabled/checkbox:fill-bg-soft-200',
-            'group-hover/checkbox:group-data-[state=checked]/checkbox:fill-primary-darker',
-            'group-hover/checkbox:group-data-[state=indeterminate]/checkbox:fill-primary-darker',
-            'group-focus/checkbox:group-data-[state=checked]/checkbox:fill-primary-dark',
-            'group-focus/checkbox:group-data-[state=indeterminate]/checkbox:fill-primary-dark',
-            'group-data-[state=checked]/checkbox:fill-primary-base',
-            'group-data-[state=indeterminate]/checkbox:fill-primary-base',
+            fillChecked.hoverChecked,
+            fillChecked.hoverIndeterminate,
+            fillChecked.focusChecked,
+            fillChecked.focusIndeterminate,
+            fillChecked.checked,
+            fillChecked.indeterminate,
             'group-disabled/checkbox:group-data-[state=checked]/checkbox:fill-bg-soft-200',
             'group-disabled/checkbox:group-data-[state=indeterminate]/checkbox:fill-bg-soft-200',
           )}

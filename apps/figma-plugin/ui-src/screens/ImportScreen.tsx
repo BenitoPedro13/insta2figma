@@ -283,12 +283,14 @@ export function ImportScreen({
                 <CheckboxLabel
                   label="Import carousel images"
                   checked={expandCarouselImages}
+                  tone="neutral"
                   onCheckedChange={onExpandCarouselChange}
                 />
                 <CheckboxLabel
                   label="Ignore Reels"
                   hint="Coming soon"
                   checked={false}
+                  tone="neutral"
                   disabled
                 />
               </div>

@@ -20,7 +20,7 @@ const SliderRoot = React.forwardRef<
   SliderRootProps
 >(({ className, accent = 'free', children, ...rest }, forwardedRef) => {
   const rangeClass =
-    accent === 'pro' ? 'bg-feature-base' : 'bg-static-black';
+    accent === 'pro' ? 'bg-feature-base' : 'bg-success-base';
 
   return (
     <SliderPrimitive.Root
@@ -66,7 +66,7 @@ const SliderThumb = React.forwardRef<
     forwardedRef,
   ) => {
     const dotClass =
-      accent === 'pro' ? 'bg-feature-base' : 'bg-static-black';
+      accent === 'pro' ? 'bg-feature-base' : 'bg-success-base';
 
     const handle = (
       <span

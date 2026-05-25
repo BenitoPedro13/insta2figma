@@ -238,6 +238,7 @@ export function PostCountSlider({
           <Switch.Root
             checked={rangeMode}
             disabled={rangeSwitchDisabled}
+            tone="neutral"
             onCheckedChange={handleRangeModeToggle}
             aria-label="Range mode"
           />

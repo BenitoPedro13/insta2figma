@@ -5,10 +5,14 @@ import * as SwitchPrimitives from '@radix-ui/react-switch';
 
 import { cn } from '@/utils/cn';
 
+type SwitchTone = 'primary' | 'neutral';
+
 const Switch = React.forwardRef<
   React.ComponentRef<typeof SwitchPrimitives.Root>,
-  React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
->(({ className, disabled, ...rest }, forwardedRef) => {
+  React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root> & {
+    tone?: SwitchTone;
+  }
+>(({ className, disabled, tone = 'primary', ...rest }, forwardedRef) => {
   return (
     <SwitchPrimitives.Root
       className={cn(
@@ -26,9 +30,17 @@ const Switch = React.forwardRef<
             'group-hover/switch:bg-bg-sub-300',
             'group-focus-visible/switch:bg-bg-sub-300',
             'group-active/switch:bg-bg-soft-200',
-            'group-data-[state=checked]/switch:bg-primary-base',
-            'group-hover:data-[state=checked]/switch:bg-primary-darker',
-            'group-active:data-[state=checked]/switch:bg-primary-base',
+            tone === 'neutral'
+              ? [
+                  'group-data-[state=checked]/switch:bg-static-black',
+                  'group-hover:data-[state=checked]/switch:bg-neutral-800',
+                  'group-active:data-[state=checked]/switch:bg-static-black',
+                ]
+              : [
+                  'group-data-[state=checked]/switch:bg-primary-base',
+                  'group-hover:data-[state=checked]/switch:bg-primary-darker',
+                  'group-active:data-[state=checked]/switch:bg-primary-base',
+                ],
             'group-focus/switch:outline-none',
           ],
           disabled && ['bg-bg-white-0 p-[3px] ring-1 ring-inset ring-stroke-soft-200'],
