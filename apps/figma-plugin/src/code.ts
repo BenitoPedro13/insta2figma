@@ -1,4 +1,13 @@
 import { JOB_TYPES } from '@insta2figma/shared-contracts';
+import {
+  importStatusAuth,
+  importStatusAvatar,
+  importStatusPlacing,
+  importStatusPostsFound,
+  importStatusQueue,
+  importStatusSigning,
+  importStatusWaiting,
+} from './importStatusCopy';
 
 function assertWorkspaceContractsLinked(): void {
   if (JOB_TYPES.length !== 2) {
@@ -225,43 +234,119 @@ function pickProfilePicUrlFromJobResultSummary(resultSummary: unknown): string |
     : undefined;
 }
 
-/** Coloca imagens em grelha (URLs presign MinIO/S3). `profilePicUrl`: CDN ou `data:` para o histórico (não vai para o canvas). */
+type SignedImageAsset = {
+  url: string;
+  storageKey?: string;
+};
+
+function parseThumbSlugFromStorageKey(
+  storageKey: string,
+): { postKey: string; slot: number } | null {
+  const match = storageKey.match(/\/thumbs\/([^/]+)\.[a-z0-9]+$/i);
+  if (!match) return null;
+  const slug = match[1];
+  const slotMatch = slug.match(/^(.+)_(\d+)$/);
+  if (slotMatch) {
+    return {
+      postKey: slotMatch[1],
+      slot: Number.parseInt(slotMatch[2], 10) || 0,
+    };
+  }
+  return { postKey: slug, slot: 0 };
+}
+
+function groupAssetsIntoPostRows(assets: SignedImageAsset[]): SignedImageAsset[][] {
+  const postOrder: string[] = [];
+  const byPost = new Map<
+    string,
+    { asset: SignedImageAsset; slot: number; sequence: number }[]
+  >();
+
+  assets.forEach((asset, sequence) => {
+    const parsed = asset.storageKey
+      ? parseThumbSlugFromStorageKey(asset.storageKey)
+      : null;
+    const postKey = parsed?.postKey ?? `__row_${sequence}`;
+    const slot = parsed?.slot ?? 0;
+    if (!byPost.has(postKey)) {
+      postOrder.push(postKey);
+      byPost.set(postKey, []);
+    }
+    byPost.get(postKey)!.push({ asset, slot, sequence });
+  });
+
+  return postOrder.map((postKey) => {
+    const row = byPost.get(postKey)!;
+    row.sort((a, b) => a.slot - b.slot || a.sequence - b.sequence);
+    return row.map((item) => item.asset);
+  });
+}
+
+/** Coloca imagens no canvas. Carrossel expandido → filas por post; senão → grid 3 colunas. */
 async function placeSignedImages(
-  urls: string[],
-  opts?: { profilePicUrl?: string },
+  assets: SignedImageAsset[],
+  opts?: {
+    profilePicUrl?: string;
+    username?: string;
+    expandCarouselImages?: boolean;
+  },
 ): Promise<void> {
   const size = 280;
   const gap = 16;
-  const maxRowWidth = 1400;
-  let x = 0;
+  const rowGap = 24;
+  const gridCols = 3;
   let y = 0;
-  let rowH = 0;
   const nodes: SceneNode[] = [];
   let ok = 0;
+  const usernameNorm = String(opts?.username ?? '')
+    .trim()
+    .replace(/^@+/, '')
+    .toLowerCase();
+  const usePostRows = opts?.expandCarouselImages === true;
+  const layoutRows = usePostRows
+    ? groupAssetsIntoPostRows(assets)
+    : [assets];
+  let gridIndex = 0;
 
-  for (const url of urls) {
-    try {
-      const bytes = await fetchImageBytes(url);
-      const image = figma.createImage(bytes);
-      const rect = figma.createRectangle();
-      rect.resize(size, size);
-      rect.fills = [
-        { type: 'IMAGE', scaleMode: 'FILL', imageHash: image.hash },
-      ];
-      if (x + size > maxRowWidth && x > 0) {
-        x = 0;
-        y += rowH + gap;
-        rowH = 0;
+  for (const row of layoutRows) {
+    let rowX = 0;
+    let placedInRow = 0;
+    for (const asset of row) {
+      try {
+        const bytes = await fetchImageBytes(asset.url);
+        const image = figma.createImage(bytes);
+        const rect = figma.createRectangle();
+        rect.resize(size, size);
+        rect.fills = [
+          { type: 'IMAGE', scaleMode: 'FILL', imageHash: image.hash },
+        ];
+        ok += 1;
+        if (usernameNorm) {
+          rect.name = `@${usernameNorm} - #${ok}`;
+        }
+
+        if (usePostRows) {
+          rect.x = rowX;
+          rect.y = y;
+          rowX += size + gap;
+        } else {
+          const col = gridIndex % gridCols;
+          const gridRow = Math.floor(gridIndex / gridCols);
+          rect.x = col * (size + gap);
+          rect.y = gridRow * (size + gap);
+          gridIndex += 1;
+        }
+
+        figma.currentPage.appendChild(rect);
+        nodes.push(rect);
+        placedInRow += 1;
+      } catch (e) {
+        console.warn('[Insta2Figma] skip URL', asset.url.slice(0, 80), e);
       }
-      rect.x = x;
-      rect.y = y;
-      x += size + gap;
-      rowH = Math.max(rowH, size);
-      figma.currentPage.appendChild(rect);
-      nodes.push(rect);
-      ok += 1;
-    } catch (e) {
-      console.warn('[Insta2Figma] skip URL', url.slice(0, 80), e);
+    }
+
+    if (usePostRows && placedInRow > 0) {
+      y += size + rowGap;
     }
   }
 
@@ -272,7 +357,7 @@ async function placeSignedImages(
     figma.ui.postMessage({
       type: 'import-done',
       placed: 0,
-      total: urls.length,
+      total: assets.length,
       error: true,
     });
     return;
@@ -280,11 +365,13 @@ async function placeSignedImages(
 
   figma.currentPage.selection = nodes;
   figma.viewport.scrollAndZoomIntoView(nodes);
-  figma.notify(`Insta2Figma: ${ok} imagem(ns) no canvas.`);
+  figma.notify(
+    `✅ ${ok} ${ok === 1 ? 'image' : 'images'} placed on the canvas.`,
+  );
   figma.ui.postMessage({
     type: 'import-done',
     placed: ok,
-    total: urls.length,
+    total: assets.length,
     error: false,
     ...(opts?.profilePicUrl ? { profilePicUrl: opts.profilePicUrl } : {}),
   });
@@ -302,11 +389,12 @@ type PluginMessage =
       username: string;
       maxPosts?: number;
       expandCarouselImages?: boolean;
-      selectionMode?: 'recent' | 'single' | 'range';
+      selectionMode?: 'recent' | 'single' | 'range' | 'multi';
       startIndex?: number;
       postCount?: number;
       timelineOrder?: 'newest_first' | 'oldest_first';
       previewListSize?: number;
+      selectedIndices?: number[];
     }
   | { type: 'create-shapes'; count: number }
   | { type: 'place-images'; urls: string[] }
@@ -315,10 +403,11 @@ type PluginMessage =
       username: string;
       maxPosts?: number;
       expandCarouselImages?: boolean;
-      selectionMode?: 'recent' | 'single' | 'range';
+      selectionMode?: 'recent' | 'single' | 'range' | 'multi';
       startIndex?: number;
       postCount?: number;
       timelineOrder?: 'newest_first' | 'oldest_first';
+      selectedIndices?: number[];
     }
   | { type: 'session-request' }
   | { type: 'billing-checkout' }
@@ -496,24 +585,23 @@ async function importProfileViaApi(
   options: {
     maxPosts: number;
     expandCarouselImages: boolean;
-    selectionMode?: 'recent' | 'single' | 'range';
+    selectionMode?: 'recent' | 'single' | 'range' | 'multi';
     startIndex?: number;
     postCount?: number;
     timelineOrder?: 'newest_first' | 'oldest_first';
+    selectedIndices?: number[];
   },
 ): Promise<void> {
   const notifyStatus = (text: string) => {
     figma.ui.postMessage({ type: 'import-status', text });
   };
 
-  notifyStatus('A autenticar…');
+  notifyStatus(importStatusAuth());
   const { session, me } = await ensureSession(base);
   const token = session.accessToken;
   figma.ui.postMessage({ type: 'session-data', ...me });
 
-  notifyStatus(
-    `A criar job (${options.selectionMode ?? 'recent'} · carrossel: ${options.expandCarouselImages ? 'todas as imagens' : 'só capa'})…`,
-  );
+  notifyStatus(importStatusQueue());
   const idem = `figma-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const jr = await fetch(`${base}/v1/jobs`, {
     method: 'POST',
@@ -532,6 +620,9 @@ async function importProfileViaApi(
         ...(options.startIndex != null ? { startIndex: options.startIndex } : {}),
         ...(options.postCount != null ? { postCount: options.postCount } : {}),
         ...(options.timelineOrder ? { timelineOrder: options.timelineOrder } : {}),
+        ...(options.selectedIndices?.length
+          ? { selectedIndices: options.selectedIndices }
+          : {}),
       },
     }),
   });
@@ -542,18 +633,17 @@ async function importProfileViaApi(
     const err = jobBody.error as { code?: string; message?: string } | undefined;
     if (err?.code === 'QUOTA_EXCEEDED') {
       throw new Error(
-        err.message ??
-          'Quota mensal esgotada. Faz upgrade para Pro para continuar.',
+        err.message ?? 'Monthly quota used up. Upgrade to Pro to continue.',
       );
     }
-    throw new Error(`${jr.status}: ${parseApiError(jobBody)}`);
+    throw new Error('Could not start the import. Try again in a moment.');
   }
   const jobId = data?.id ?? legacyId;
   if (!jobId) {
-    throw new Error('Sem id no job.');
+    throw new Error('Could not start the import. Try again in a moment.');
   }
 
-  notifyStatus(`Job ${jobId} — a aguardar…`);
+  notifyStatus(importStatusWaiting(1));
   let lastResultSummary: unknown = undefined;
   let status = '';
   for (let i = 0; i < 120; i++) {
@@ -564,10 +654,10 @@ async function importProfileViaApi(
     const gj = (await gr.json().catch(() => ({}))) as Record<string, unknown>;
     const gData = gj.data as Record<string, unknown> | undefined;
     if (!gr.ok) {
-      throw new Error(`GET job ${gr.status}`);
+      throw new Error('Could not check import progress. Try again in a moment.');
     }
     status = String(gData?.status ?? gj.status ?? '');
-    notifyStatus(`${status} (${i})`);
+    notifyStatus(importStatusWaiting(i + 1));
     if (status === 'succeeded') {
       lastResultSummary = gData?.resultSummary;
       const rs = lastResultSummary;
@@ -575,29 +665,23 @@ async function importProfileViaApi(
         const sm = (rs as Record<string, unknown>).scrapingMeta;
         if (sm !== null && typeof sm === 'object' && !Array.isArray(sm)) {
           const smb = sm as Record<string, unknown>;
-          const req = smb.requestedMaxPosts;
           const sample = smb.postsInSample;
-          const expanded = smb.expandCarouselImages === true;
-          if (typeof req === 'number' && typeof sample === 'number') {
-            notifyStatus(
-              `Job OK — pedido ${req} posts, carrossel ${expanded ? 'expandido' : 'só capa'}, amostra com ${sample} post(s).`,
-            );
+          if (typeof sample === 'number' && Number.isFinite(sample) && sample > 0) {
+            notifyStatus(importStatusPostsFound(Math.floor(sample)));
           }
         }
       }
       break;
     }
     if (status === 'failed') {
-      const err = String(gData?.errorCode ?? '').trim();
-      const msgErr = String(gData?.errorMessage ?? '').trim();
-      throw new Error(`Job falhou: ${err} ${msgErr}`);
+      throw new Error('Import did not finish. Try again in a moment.');
     }
   }
   if (status !== 'succeeded') {
-    throw new Error('Timeout a aguardar job.');
+    throw new Error('Import is taking longer than expected. Try again in a moment.');
   }
 
-  notifyStatus('A obter URLs assinadas…');
+  notifyStatus(importStatusSigning());
   const sr = await fetch(
     `${base}/v1/jobs/${encodeURIComponent(jobId)}?include=signedAssets`,
     { headers: { authorization: `Bearer ${token}` } },
@@ -607,7 +691,7 @@ async function importProfileViaApi(
     | { signedAssets?: { url?: string; storageKey?: string }[] }
     | undefined;
   if (!sr.ok) {
-    throw new Error(`${sr.status}: ${JSON.stringify(sj)}`);
+    throw new Error('Could not prepare your images. Try again in a moment.');
   }
   const fromData = sData?.signedAssets;
   const fromRoot = sj.signedAssets as
@@ -627,30 +711,35 @@ async function importProfileViaApi(
     typeof profileAsset?.url === 'string' && profileAsset.url.trim() !== ''
       ? profileAsset.url.trim()
       : undefined;
-  const urls = list
+  const imageAssets: SignedImageAsset[] = list
     .filter((a) =>
       typeof a?.storageKey === 'string'
         ? !/\/profile\.[a-z0-9]+$/i.test(String(a.storageKey))
         : true,
     )
-    .map((a) => (a?.url ? String(a.url) : ''))
-    .filter(Boolean);
+    .map((a) => ({
+      url: a?.url ? String(a.url) : '',
+      ...(typeof a?.storageKey === 'string' ? { storageKey: a.storageKey } : {}),
+    }))
+    .filter((a) => a.url.length > 0);
 
-  if (urls.length === 0) {
-    throw new Error('Nenhuma imagem guardada — verifica MinIO/worker.');
+  if (imageAssets.length === 0) {
+    throw new Error('No images came back from the import. Try again in a moment.');
   }
 
-  notifyStatus(`A colocar ${urls.length} imagem(ns) no canvas…`);
+  notifyStatus(importStatusPlacing(imageAssets.length));
   const rawProfilePic = pickProfilePicUrlFromJobResultSummary(lastResultSummary);
   let profilePicForHistory: string | undefined;
   if (profileUrlFromSignedAssets) {
     profilePicForHistory = profileUrlFromSignedAssets;
   } else if (rawProfilePic) {
-    notifyStatus('A sincronizar foto do perfil…');
+    notifyStatus(importStatusAvatar());
     profilePicForHistory =
       (await fetchInstagramAvatarAsDataUrl(rawProfilePic)) ?? rawProfilePic;
   }
-  await placeSignedImages(urls, {
+  await placeSignedImages(imageAssets, {
+    username,
+    expandCarouselImages: options.expandCarouselImages,
     ...(profilePicForHistory ? { profilePicUrl: profilePicForHistory } : {}),
   });
 }
@@ -660,11 +749,12 @@ function buildPreviewQueryString(
   opts: {
     maxPosts: number;
     expandCarouselImages: boolean;
-    selectionMode?: 'recent' | 'single' | 'range';
+    selectionMode?: 'recent' | 'single' | 'range' | 'multi';
     startIndex?: number;
     postCount?: number;
     timelineOrder?: 'newest_first' | 'oldest_first';
     previewListSize?: number;
+    selectedIndices?: number[];
   },
 ): string {
   const parts = [
@@ -687,6 +777,11 @@ function buildPreviewQueryString(
   if (opts.previewListSize != null) {
     parts.push(`previewListSize=${encodeURIComponent(String(opts.previewListSize))}`);
   }
+  if (opts.selectedIndices?.length) {
+    parts.push(
+      `selectedIndices=${encodeURIComponent(opts.selectedIndices.join(','))}`,
+    );
+  }
   return parts.join('&');
 }
 
@@ -696,11 +791,12 @@ async function previewProfileViaApi(
   opts: {
     maxPosts: number;
     expandCarouselImages: boolean;
-    selectionMode?: 'recent' | 'single' | 'range';
+    selectionMode?: 'recent' | 'single' | 'range' | 'multi';
     startIndex?: number;
     postCount?: number;
     timelineOrder?: 'newest_first' | 'oldest_first';
     previewListSize?: number;
+    selectedIndices?: number[];
   },
 ): Promise<{
   username: string;
@@ -897,6 +993,9 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         startIndex: msg.startIndex,
         postCount: msg.postCount,
         timelineOrder: msg.timelineOrder,
+        selectedIndices: Array.isArray(msg.selectedIndices)
+          ? msg.selectedIndices.filter((n) => typeof n === 'number').map((n) => Math.floor(n))
+          : undefined,
       });
     } catch (err) {
       const text = formatCaught(err);
@@ -1000,7 +1099,9 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       return;
     }
     try {
-      await placeSignedImages(msg.urls);
+      await placeSignedImages(
+        msg.urls.map((url) => ({ url: String(url) })),
+      );
     } catch (err) {
       const text = formatCaught(err);
       figma.notify(text, { error: true });

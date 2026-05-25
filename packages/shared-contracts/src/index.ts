@@ -2,11 +2,15 @@ import { z } from 'zod';
 import {
   POST_SELECTION_MODES,
   POST_TIMELINE_ORDERS,
+  buildContiguousIndices,
   endSelectionIndex,
   estimateImportImages,
+  normalizeSelectedIndices,
   orderTimelinePosts,
   resolveScrapeSelection,
+  selectionInputFromIndices,
   slicePostsBySelection,
+  toggleSelectedIndex,
   type CarouselPostEstimate,
   type ImportImageEstimate,
   type PostSelectionMode,
@@ -24,11 +28,15 @@ import {
 export {
   POST_SELECTION_MODES,
   POST_TIMELINE_ORDERS,
+  buildContiguousIndices,
   endSelectionIndex,
   estimateImportImages,
+  normalizeSelectedIndices,
   orderTimelinePosts,
   resolveScrapeSelection,
+  selectionInputFromIndices,
   slicePostsBySelection,
+  toggleSelectedIndex,
   buildIndexedPostPreview,
   parseTimelineSampleFromUserNode,
   type CarouselPostEstimate,
@@ -71,6 +79,8 @@ export const scrapeProfileInputSchema = z.object({
   /** Quantidade de posts no modo `range` (ignorado em `single`). */
   postCount: z.number().int().min(1).max(50).optional(),
   timelineOrder: postTimelineOrderSchema.optional(),
+  /** Posições 1-based no modo `multi`. */
+  selectedIndices: z.array(z.number().int().min(1).max(50)).min(1).max(50).optional(),
 });
 
 export type ScrapeProfileInput = z.infer<typeof scrapeProfileInputSchema>;

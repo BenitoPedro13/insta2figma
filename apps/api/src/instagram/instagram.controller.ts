@@ -15,8 +15,16 @@ function parseIntClamped(raw: string | undefined, fallback: number, max = 50): n
 
 function parseSelectionMode(raw: string | undefined): PostSelectionMode | undefined {
   const v = String(raw ?? '').trim();
-  if (v === 'recent' || v === 'single' || v === 'range') return v;
+  if (v === 'recent' || v === 'single' || v === 'range' || v === 'multi') return v;
   return undefined;
+}
+
+function parseSelectedIndices(raw: string | undefined): number[] | undefined {
+  const text = String(raw ?? '').trim();
+  if (!text) return undefined;
+  const parts = text.split(',').map((part) => Number.parseInt(part.trim(), 10));
+  const out = parts.filter((n) => Number.isFinite(n) && n >= 1 && n <= 50);
+  return out.length > 0 ? out : undefined;
 }
 
 function parseTimelineOrder(raw: string | undefined): PostTimelineOrder | undefined {
@@ -41,6 +49,7 @@ export class InstagramController {
     @Query('postCount') postCountRaw?: string,
     @Query('timelineOrder') timelineOrderRaw?: string,
     @Query('previewListSize') previewListSizeRaw?: string,
+    @Query('selectedIndices') selectedIndicesRaw?: string,
   ) {
     const maxPosts = parseIntClamped(maxPostsRaw, 12);
     const expandCarouselImages =
@@ -56,6 +65,7 @@ export class InstagramController {
     const previewListSize = previewListSizeRaw
       ? parseIntClamped(previewListSizeRaw, maxPosts)
       : undefined;
+    const selectedIndices = parseSelectedIndices(selectedIndicesRaw);
 
     return this.preview.getProfilePreview(String(username ?? ''), {
       maxPosts,
@@ -65,6 +75,7 @@ export class InstagramController {
       postCount,
       timelineOrder,
       previewListSize,
+      selectedIndices,
     });
   }
 }

@@ -8,12 +8,18 @@ import {
   loadLegacyIframeHistory,
   parseHistoryPayload,
   sortHistory,
+  removeFromHistory,
   toggleFavorite,
   upsertAfterSuccessfulImport,
   type HistoryEntry,
 } from './lib/historyStorage';
 import { computePreviewEstimates } from './lib/previewEstimates';
 import { ImportScreen, type PostSelectionMode, type PostTimelineOrder } from './screens/ImportScreen';
+import {
+  buildContiguousIndices,
+  selectionInputFromIndices,
+  toggleSelectedIndex,
+} from '@insta2figma/shared-contracts';
 
 type ProfilePreview = {
   username: string;
@@ -52,6 +58,7 @@ export function App() {
 
   const [username, setUsername] = useState('');
   const [maxPosts, setMaxPosts] = useState(0);
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [selectionMode, setSelectionMode] = useState<PostSelectionMode>('recent');
   const [startIndex, setStartIndex] = useState(1);
   const [postCount, setPostCount] = useState(1);
@@ -61,6 +68,7 @@ export function App() {
   const [importing, setImporting] = useState(false);
   const lastImportUsername = useRef('');
   const previewReqId = useRef(0);
+  const previewFetchedForUsername = useRef('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewThumbsLoading, setPreviewThumbsLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
@@ -161,6 +169,11 @@ export function App() {
       if (pm.type === 'profile-preview-data') {
         const reqId = pm.requestId;
         if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        const loadedUser = String(pm.username ?? '')
+          .trim()
+          .replace(/^@+/, '')
+          .toLowerCase();
+        if (loadedUser) previewFetchedForUsername.current = loadedUser;
         setPreviewLoading(false);
         setPreviewError('');
         const postsPreview = Array.isArray(pm.postsPreview)
@@ -232,6 +245,7 @@ export function App() {
       if (pm.type === 'profile-preview-error') {
         const reqId = pm.requestId;
         if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        previewFetchedForUsername.current = '';
         setPreviewLoading(false);
         setPreviewThumbsLoading(false);
         setPreview(null);
@@ -242,7 +256,9 @@ export function App() {
       }
       if (pm.type === 'import-error') {
         setImporting(false);
-        setStatus(`Error: ${pm.message != null ? msgToText(pm.message) : 'unknown'}`);
+        const raw =
+          pm.message != null ? msgToText(pm.message) : 'Something went wrong.';
+        setStatus(raw);
         return;
       }
       if (pm.type !== 'import-done') return;
@@ -254,9 +270,11 @@ export function App() {
         profilePicUrl?: unknown;
       };
       const ok = !done.error;
+      const placed = done.placed ?? 0;
+      const total = done.total ?? 0;
       const summary = ok
-        ? `Placed ${done.placed ?? 0}/${done.total ?? 0} on the canvas.`
-        : 'Nothing was placed on the canvas.';
+        ? `All done — ${placed} of ${total} images on the canvas.`
+        : 'Nothing made it to the canvas this time.';
       setStatus(summary);
       const profilePicUrl =
         typeof done.profilePicUrl === 'string' && done.profilePicUrl.trim() !== ''
@@ -268,8 +286,6 @@ export function App() {
             profilePicUrl: profilePicUrl ?? null,
           }),
         );
-        setActiveTab('history');
-        setListStatus(summary);
       }
     };
     window.addEventListener('message', onMsg);
@@ -288,6 +304,7 @@ export function App() {
       .replace(/^@+/, '')
       .toLowerCase();
     if (!user) return;
+    setActiveTab('new-import');
     setUsername(user);
     setSelectedUsername(user);
     setStatus('');
@@ -301,14 +318,27 @@ export function App() {
       .replace(/^@+/, '')
       .toLowerCase();
     if (!user) {
+      previewFetchedForUsername.current = '';
       setPreviewLoading(false);
       setPreview(null);
       setPreviewError('');
+      setSelectedIndices([]);
+      setMaxPosts(0);
+      setStartIndex(1);
+      setPostCount(1);
+      setSelectionMode('recent');
+      return;
+    }
+    if (
+      previewFetchedForUsername.current === user &&
+      preview?.username.toLowerCase() === user
+    ) {
       return;
     }
     const timer = window.setTimeout(() => {
       const reqId = previewReqId.current + 1;
       previewReqId.current = reqId;
+      previewFetchedForUsername.current = user;
       setPreviewLoading(true);
       setPreviewThumbsLoading(false);
       setPreviewError('');
@@ -331,7 +361,7 @@ export function App() {
       );
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [importing, username, maxPostsLimit]);
+  }, [importing, username, preview?.username, maxPostsLimit]);
 
   /** Slider / selection — local estimate only; no Instagram refetch. */
   useEffect(() => {
@@ -344,10 +374,8 @@ export function App() {
     if (user !== preview.username.toLowerCase()) return;
 
     const next = computePreviewEstimates(preview.postsPreview, {
-      maxPosts,
-      selectionMode,
-      startIndex,
-      postCount,
+      selectedIndices,
+      rangeMode: selectionMode === 'range',
       timelineOrder,
       expandCarouselImages,
       postsAvailable: preview.postsAvailable,
@@ -372,13 +400,58 @@ export function App() {
     preview?.username,
     preview?.postsPreview,
     preview?.postsAvailable,
-    maxPosts,
+    selectedIndices,
     selectionMode,
-    startIndex,
-    postCount,
     timelineOrder,
     expandCarouselImages,
   ]);
+
+  const onMaxPostsChange = useCallback((count: number) => {
+    setSelectionMode('recent');
+    setMaxPosts(count);
+    setSelectedIndices(buildContiguousIndices(1, count));
+  }, []);
+
+  const onRangeChange = useCallback((start: number, length: number) => {
+    setSelectionMode('range');
+    setStartIndex(start);
+    setPostCount(length);
+    setSelectedIndices(buildContiguousIndices(start, length));
+  }, []);
+
+  const onSelectionModeChange = useCallback(
+    (mode: PostSelectionMode) => {
+      if (mode === 'range') {
+        const length = Math.max(1, selectedIndices.length || maxPosts || 1);
+        const start = selectedIndices[0] ?? 1;
+        setStartIndex(start);
+        setPostCount(length);
+        setSelectedIndices(buildContiguousIndices(start, length));
+      } else {
+        const count = selectedIndices.length;
+        setMaxPosts(count);
+        setSelectedIndices(buildContiguousIndices(1, count));
+      }
+      setSelectionMode(mode);
+    },
+    [maxPosts, selectedIndices],
+  );
+
+  const onTogglePostIndex = useCallback((index: number) => {
+    setSelectedIndices((prev) => {
+      const next = toggleSelectedIndex(prev, index);
+      setMaxPosts(next.length);
+      if (next.length > 0) {
+        setStartIndex(next[0]!);
+        setPostCount(next.length);
+      } else {
+        setStartIndex(1);
+        setPostCount(0);
+      }
+      setSelectionMode((mode) => (mode === 'range' ? 'multi' : mode));
+      return next;
+    });
+  }, []);
 
   const onImport = useCallback(() => {
     const user = String(username ?? '')
@@ -393,52 +466,50 @@ export function App() {
       setStatus('Monthly quota used up. Upgrade to Pro.');
       return;
     }
-    if (selectionMode === 'range') {
-      if (postCount < 1) {
-        setStatus('Select a post range on the slider.');
-        return;
-      }
-    } else if (maxPosts < 1) {
-      setStatus('Select how many posts to import on the slider.');
+    if (selectedIndices.length < 1) {
+      setStatus('Select at least one post.');
       return;
     }
     lastImportUsername.current = user;
+    previewReqId.current += 1;
     setImporting(true);
-    setStatus('Starting import…');
-    const posts =
-      selectionMode === 'range'
-        ? Math.min(maxPostsLimit, startIndex + postCount - 1)
-        : Math.min(maxPostsLimit, Math.floor(maxPosts));
+    setStatus('Kicking things off…');
+    const scrapeInput = selectionInputFromIndices(selectedIndices, {
+      rangeMode: selectionMode === 'range',
+      timelineOrder,
+    });
     parent.postMessage(
       {
         pluginMessage: {
           type: 'import-profile',
           username: user,
-          maxPosts: Math.max(1, posts),
           expandCarouselImages,
-          selectionMode,
-          startIndex,
-          postCount,
-          timelineOrder,
+          ...scrapeInput,
         },
       },
       '*',
     );
   }, [
     username,
-    maxPosts,
+    selectedIndices,
     expandCarouselImages,
     quotaExceeded,
-    maxPostsLimit,
     selectionMode,
-    startIndex,
-    postCount,
     timelineOrder,
   ]);
 
   const onToggleFavoriteRow = useCallback(
     (u: string) => {
       persistEntries((prev) => toggleFavorite(prev, u));
+    },
+    [persistEntries],
+  );
+
+  const onRemoveFromHistoryRow = useCallback(
+    (u: string) => {
+      const key = u.trim().toLowerCase();
+      persistEntries((prev) => removeFromHistory(prev, key));
+      setSelectedUsername((sel) => (sel === key ? null : sel));
     },
     [persistEntries],
   );
@@ -462,10 +533,12 @@ export function App() {
                 selectedUsername={selectedUsername}
                 onSelectProfile={selectProfile}
                 onToggleFavorite={onToggleFavoriteRow}
+                onRemoveFromHistory={onRemoveFromHistoryRow}
                 listStatus={listStatus}
                 username={username}
                 maxPosts={maxPosts}
                 maxPostsLimit={maxPostsLimit}
+                selectedIndices={selectedIndices}
                 selectionMode={selectionMode}
                 startIndex={startIndex}
                 postCount={postCount}
@@ -481,10 +554,12 @@ export function App() {
                 previewThumbsLoading={previewThumbsLoading}
                 previewError={previewError}
                 onUsernameChange={setUsername}
-                onMaxPostsChange={setMaxPosts}
-                onSelectionModeChange={setSelectionMode}
+                onMaxPostsChange={onMaxPostsChange}
+                onSelectionModeChange={onSelectionModeChange}
                 onStartIndexChange={setStartIndex}
                 onPostCountChange={setPostCount}
+                onRangeChange={onRangeChange}
+                onTogglePostIndex={onTogglePostIndex}
                 onTimelineOrderChange={setTimelineOrder}
                 onExpandCarouselChange={setExpandCarouselImages}
                 onImport={onImport}

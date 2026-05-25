@@ -1,3 +1,4 @@
+import { RiCloseLine } from '@remixicon/react';
 import { HistoryAvatar } from '../components/HistoryAvatar';
 import type { HistoryEntry } from '../lib/historyStorage';
 
@@ -11,6 +12,7 @@ type ListScreenProps = {
   selectedUsername: string | null;
   onOpenImportForProfile: (username: string) => void;
   onToggleFavorite: (username: string) => void;
+  onRemoveFromHistory: (username: string) => void;
   listStatus: string;
 };
 
@@ -28,6 +30,7 @@ export function ListScreen({
   selectedUsername,
   onOpenImportForProfile,
   onToggleFavorite,
+  onRemoveFromHistory,
   listStatus,
 }: ListScreenProps) {
   const filtered = entries
@@ -75,19 +78,33 @@ export function ListScreen({
                     <HistoryAvatar username={row.username} profilePicUrl={row.profilePicUrl} />
                     <span className="account-handle">@{row.username}</span>
                   </button>
-                  <button
-                    type="button"
-                    className={`account-star ${row.favorite ? 'is-on' : ''}`}
-                    onClick={(ev) => {
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                      onToggleFavorite(row.username);
-                    }}
-                    aria-label={row.favorite ? 'Remove favorite' : 'Add favorite'}
-                    aria-pressed={row.favorite}
-                  >
-                    {row.favorite ? '★' : '☆'}
-                  </button>
+                  <div className="account-item-actions">
+                    <button
+                      type="button"
+                      className={`account-star ${row.favorite ? 'is-on' : ''}`}
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        onToggleFavorite(row.username);
+                      }}
+                      aria-label={row.favorite ? 'Remove favorite' : 'Add favorite'}
+                      aria-pressed={row.favorite}
+                    >
+                      {row.favorite ? '★' : '☆'}
+                    </button>
+                    <button
+                      type="button"
+                      className="account-remove"
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        onRemoveFromHistory(row.username);
+                      }}
+                      aria-label={`Remove @${row.username} from history`}
+                    >
+                      <RiCloseLine size={18} aria-hidden />
+                    </button>
+                  </div>
                 </li>
               );
             })}

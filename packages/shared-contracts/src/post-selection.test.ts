@@ -42,6 +42,16 @@ describe('resolveScrapeSelection', () => {
     expect(endSelectionIndex(sel)).toBe(14);
     expect(sel.fetchCount).toBe(14);
   });
+
+  it('modo multi usa o maior índice como fetchCount', () => {
+    const sel = resolveScrapeSelection({
+      selectionMode: 'multi',
+      selectedIndices: [1, 3, 7],
+    });
+    expect(sel.selectedIndices).toEqual([1, 3, 7]);
+    expect(sel.fetchCount).toBe(7);
+    expect(endSelectionIndex(sel)).toBe(7);
+  });
 });
 
 describe('slicePostsBySelection', () => {
@@ -63,6 +73,14 @@ describe('slicePostsBySelection', () => {
       timelineOrder: 'oldest_first',
     });
     expect(slicePostsBySelection(items, sel)).toEqual(['e']);
+  });
+
+  it('modo multi escolhe posições específicas', () => {
+    const sel = resolveScrapeSelection({
+      selectionMode: 'multi',
+      selectedIndices: [1, 3, 5],
+    });
+    expect(slicePostsBySelection(items, sel)).toEqual(['a', 'c', 'e']);
   });
 });
 

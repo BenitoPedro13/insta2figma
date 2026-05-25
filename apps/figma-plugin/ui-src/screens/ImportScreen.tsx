@@ -18,10 +18,11 @@ import * as FancyButton from "../components/ui/fancy-button";
 import * as Input from "../components/ui/input";
 import * as Button from "../components/ui/button";
 import { CheckboxLabel } from "../components/ui/checkbox-label";
+import { ImportStatusLine } from "../components/ImportStatusLine";
 import { cn } from "../utils/cn";
+import type { PostSelectionMode, PostTimelineOrder } from "@insta2figma/shared-contracts";
 
-export type PostSelectionMode = "recent" | "single" | "range";
-export type PostTimelineOrder = "newest_first" | "oldest_first";
+export type { PostSelectionMode, PostTimelineOrder };
 
 type ImportScreenProps = {
   activeTab: ShellTab;
@@ -33,10 +34,12 @@ type ImportScreenProps = {
   selectedUsername: string | null;
   onSelectProfile: (username: string) => void;
   onToggleFavorite: (username: string) => void;
+  onRemoveFromHistory: (username: string) => void;
   listStatus: string;
   username: string;
   maxPosts: number;
   maxPostsLimit: number;
+  selectedIndices: number[];
   selectionMode: PostSelectionMode;
   startIndex: number;
   postCount: number;
@@ -67,6 +70,8 @@ type ImportScreenProps = {
   onSelectionModeChange: (v: PostSelectionMode) => void;
   onStartIndexChange: (v: number) => void;
   onPostCountChange: (v: number) => void;
+  onRangeChange: (start: number, length: number) => void;
+  onTogglePostIndex: (index: number) => void;
   onTimelineOrderChange: (v: PostTimelineOrder) => void;
   onExpandCarouselChange: (v: boolean) => void;
   onImport: () => void;
@@ -83,10 +88,12 @@ export function ImportScreen({
   selectedUsername,
   onSelectProfile,
   onToggleFavorite,
+  onRemoveFromHistory,
   listStatus,
   username,
   maxPosts,
   maxPostsLimit,
+  selectedIndices,
   selectionMode,
   startIndex,
   postCount,
@@ -106,6 +113,8 @@ export function ImportScreen({
   onSelectionModeChange,
   onStartIndexChange,
   onPostCountChange,
+  onRangeChange,
+  onTogglePostIndex,
   onTimelineOrderChange,
   onExpandCarouselChange,
   onImport,
@@ -117,16 +126,6 @@ export function ImportScreen({
       onImport();
     },
     [onImport],
-  );
-
-  const onPickPostIndex = useCallback(
-    (index: number) => {
-      onStartIndexChange(index);
-      if (selectionMode === "recent") {
-        onSelectionModeChange("single");
-      }
-    },
-    [onSelectionModeChange, onStartIndexChange, selectionMode],
   );
 
   const trimmedUsername = username.trim();
@@ -156,9 +155,7 @@ export function ImportScreen({
     }
   }, [profileFound, rangeMode, onSelectionModeChange]);
 
-  const canImport =
-    !quotaExceeded &&
-    (rangeMode ? postCount >= 1 : maxPosts >= 1);
+  const canImport = !quotaExceeded && selectedIndices.length >= 1;
 
   const handleRangeModeChange = useCallback(
     (enabled: boolean) => {
@@ -169,14 +166,19 @@ export function ImportScreen({
 
   const handleRangeSliderChange = useCallback(
     (start: number, length: number) => {
-      onStartIndexChange(start);
-      onPostCountChange(length);
+      onRangeChange(start, length);
     },
-    [onStartIndexChange, onPostCountChange],
+    [onRangeChange],
   );
 
   const showUsernameLookup = usernameLookupStatus !== "idle";
   const isImportTab = activeTab === "new-import";
+
+  const profilePreviewLabel = (() => {
+    if (previewLoading && !preview?.username) return "Checking profile…";
+    if (preview?.username) return `@${preview.username}`;
+    return "Enter an Instagram to appear here";
+  })();
 
   return (
     <div className="new-import-screen flex min-h-0 flex-1 flex-col">
@@ -257,42 +259,7 @@ export function ImportScreen({
                 </div>
               </div>
 
-              <div className="profile-preview">
-                <span className="profile-preview-avatar" aria-hidden>
-                  {preview?.profilePicUrlHd ? (
-                    <img
-                      src={preview.profilePicUrlHd}
-                      alt=""
-                      className="profile-preview-avatar-img"
-                    />
-                  ) : (
-                    username.slice(0, 1).toUpperCase() || "?"
-                  )}
-                </span>
-                <div className="profile-preview-meta">
-                  <p className="profile-preview-main">
-                    {previewLoading
-                      ? previewThumbsLoading
-                        ? "Loading thumbnails…"
-                        : "Checking profile…"
-                      : preview
-                        ? `@${preview.username} · ${preview.mediaCount} posts`
-                        : username.trim()
-                          ? "No preview yet."
-                          : "Enter a username to preview."}
-                  </p>
-                  {preview?.isPrivate ? (
-                    <p className="profile-preview-sub">
-                      Private account — posts may not be available to import.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-
               <div className="new-import-field flex flex-col gap-2">
-                <label className="new-import-label text-label-sm text-text-strong-950">
-                  How many posts?
-                </label>
                 <PostCountSlider
                   profilePostCount={
                     preview?.mediaCount != null ? preview.mediaCount : null
@@ -302,18 +269,14 @@ export function ImportScreen({
                   profileFound={profileFound}
                   rangeMode={rangeMode}
                   onRangeModeChange={handleRangeModeChange}
-                  postCount={maxPosts}
+                  postCount={selectedIndices.length}
                   onPostCountChange={onMaxPostsChange}
                   rangeStart={startIndex}
                   rangeLength={postCount}
                   onRangeChange={handleRangeSliderChange}
                   disabled={importing}
                 />
-                <p className="m-0 text-paragraph-xs text-text-sub-600">
-                  {preview
-                    ? `Estimate: ${preview.estimatedImportImages} image(s) · Covers ${preview.estimatedPostCovers} · Carousel +${preview.estimatedCarouselExtras}`
-                    : "Enter a username, then drag from 0 to choose how many posts."}
-                </p>
+                
               </div>
 
               <div className="new-import-checks">
@@ -366,9 +329,7 @@ export function ImportScreen({
                 ) : null}
               </div>
               {status ? (
-                <p className="status-line text-paragraph-xs text-text-sub-600">
-                  {status}
-                </p>
+                <ImportStatusLine text={status} active={importing} />
               ) : null}
             </form>
           ) : (
@@ -380,41 +341,51 @@ export function ImportScreen({
               selectedUsername={selectedUsername}
               onOpenImportForProfile={onSelectProfile}
               onToggleFavorite={onToggleFavorite}
+              onRemoveFromHistory={onRemoveFromHistory}
               listStatus={listStatus}
             />
           )}
         </div>
 
-        <div className="new-import-right" aria-live="polite">
-          {preview?.postsPreview && preview.postsPreview.length > 0 ? (
-            <PostPreviewList
-              items={preview.postsPreview}
-              timelineOrder={timelineOrder}
-              selectionMode={selectionMode}
-              startIndex={startIndex}
-              postCount={selectionMode === "recent" ? maxPosts : postCount}
-              postsAvailable={
-                preview.postsAvailable ?? preview.postsPreview.length
-              }
-              selectionWarning={preview.selectionWarning}
-              onSelectIndex={onPickPostIndex}
-            />
-          ) : (
-            <div className="new-import-preview-empty flex h-full w-full flex-col items-center justify-center p-6 text-center">
-              <p className="new-import-preview-title m-0 text-label-sm font-semibold text-text-strong-950">
-                Preview
+        <div className="new-import-right flex min-h-0 min-w-0 flex-1 flex-col" aria-live="polite">
+          <div className="profile-preview profile-preview--header">
+            <span className="profile-preview-avatar" aria-hidden>
+              {preview?.profilePicUrlHd ? (
+                <img
+                  src={preview.profilePicUrlHd}
+                  alt=""
+                  className="profile-preview-avatar-img"
+                />
+              ) : null}
+            </span>
+            <div className="profile-preview-meta">
+              <p
+                className={cn(
+                  "profile-preview-main",
+                  !preview?.username && "font-normal text-text-sub-600",
+                )}
+              >
+                {profilePreviewLabel}
               </p>
-              <p className="new-import-preview-copy mt-1.5 max-w-[240px] text-paragraph-xs text-text-sub-600">
-                {username.trim()
-                  ? previewLoading
-                    ? "Loading preview…"
-                    : previewError
-                      ? previewError
-                      : "No posts in preview yet."
-                  : "Enter an Instagram username to see a preview here."}
-              </p>
+              {preview?.isPrivate ? (
+                <p className="profile-preview-sub">
+                  Private account — posts may not be available to import.
+                </p>
+              ) : null}
             </div>
-          )}
+          </div>
+
+          <div className="new-import-right-body flex min-h-0 flex-1 flex-col overflow-hidden">
+            {preview?.postsPreview && preview.postsPreview.length > 0 ? (
+              <PostPreviewList
+                items={preview.postsPreview}
+                selectedIndices={selectedIndices}
+                onToggleIndex={onTogglePostIndex}
+              />
+            ) : (
+              <div className="new-import-preview-empty flex h-full w-full" aria-hidden />
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -1,3 +1,10 @@
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { cn } from '../utils/cn';
 
 export type PostPreviewItem = {
@@ -10,51 +17,71 @@ export type PostPreviewItem = {
 
 type PostPreviewListProps = {
   items: PostPreviewItem[];
-  timelineOrder: 'newest_first' | 'oldest_first';
-  selectionMode: 'recent' | 'single' | 'range';
-  startIndex: number;
-  postCount: number;
-  postsAvailable: number;
-  selectionWarning?: string;
-  onSelectIndex: (index: number) => void;
+  selectedIndices: number[];
+  onToggleIndex: (index: number) => void;
 };
 
-function formatOrderLabel(order: 'newest_first' | 'oldest_first'): string {
-  return order === 'newest_first' ? 'newest → oldest' : 'oldest → newest';
+type SelectionBounds = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  count: number;
+};
+
+function formatPostCount(count: number): string {
+  return count === 1 ? '1 post' : `${count} posts`;
 }
 
-function isIndexSelected(
-  index: number,
-  mode: PostPreviewListProps['selectionMode'],
-  startIndex: number,
-  postCount: number,
-): boolean {
-  if (mode === 'recent') return index <= postCount;
-  if (mode === 'single') return index === startIndex;
-  return index >= startIndex && index < startIndex + postCount;
+function PostPreviewSelectionOverlay({ bounds }: { bounds: SelectionBounds }) {
+  return (
+    <div
+      className="post-preview-selection-overlay pointer-events-none absolute z-20"
+      style={{
+        top: bounds.top,
+        left: bounds.left,
+        width: bounds.width,
+        height: bounds.height,
+      }}
+      aria-hidden
+    >
+      <div className="post-preview-selection-box" />
+      <span className="post-preview-selection-handle post-preview-selection-handle--tl" />
+      <span className="post-preview-selection-handle post-preview-selection-handle--tr" />
+      <span className="post-preview-selection-handle post-preview-selection-handle--bl" />
+      <span className="post-preview-selection-handle post-preview-selection-handle--br" />
+      <span className="post-preview-selection-label">
+        {formatPostCount(bounds.count)}
+      </span>
+    </div>
+  );
 }
 
 function PostPreviewTile({
   item,
   selected,
-  onSelect,
+  tileRef,
+  onToggle,
 }: {
   item: PostPreviewItem;
   selected: boolean;
-  onSelect: () => void;
+  tileRef: (el: HTMLButtonElement | null) => void;
+  onToggle: () => void;
 }) {
   const hasImage =
     typeof item.thumbnailUrl === 'string' && item.thumbnailUrl.length > 0;
 
   return (
     <button
+      ref={tileRef}
       type="button"
       className={cn(
-        'post-preview-tile relative aspect-square w-full overflow-hidden rounded-none border-2 border-transparent bg-bg-soft-200 p-0 outline-none transition',
-        'hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary-base focus-visible:ring-offset-1',
-        selected && 'post-preview-tile--selected z-10 border-static-white shadow-[0_0_0_1px_var(--color-static-white)]',
+        'post-preview-tile relative aspect-square w-full overflow-hidden rounded-none border border-transparent bg-bg-soft-200 p-0 outline-none transition',
+        'hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#0D99FE] focus-visible:ring-offset-1',
+        selected && 'post-preview-tile--selected z-10',
       )}
-      onClick={onSelect}
+      onClick={onToggle}
+      aria-pressed={selected}
       title={`#${item.index} · ${item.shortcode}`}
     >
       {hasImage ? (
@@ -77,44 +104,130 @@ function PostPreviewTile({
   );
 }
 
+function useSelectionBounds(
+  gridRef: RefObject<HTMLDivElement | null>,
+  tileRefs: RefObject<Map<number, HTMLButtonElement>>,
+  items: PostPreviewItem[],
+  selectedIndices: number[],
+) {
+  const [bounds, setBounds] = useState<SelectionBounds | null>(null);
+
+  const measure = useCallback(() => {
+    const grid = gridRef.current;
+    if (!grid || selectedIndices.length === 0) {
+      setBounds(null);
+      return;
+    }
+
+    const selected = new Set(selectedIndices);
+    const selectedElements: HTMLButtonElement[] = [];
+    for (const item of items) {
+      if (!selected.has(item.index)) continue;
+      const el = tileRefs.current?.get(item.index);
+      if (el) selectedElements.push(el);
+    }
+
+    if (selectedElements.length === 0) {
+      setBounds(null);
+      return;
+    }
+
+    let minLeft = Number.POSITIVE_INFINITY;
+    let minTop = Number.POSITIVE_INFINITY;
+    let maxRight = Number.NEGATIVE_INFINITY;
+    let maxBottom = Number.NEGATIVE_INFINITY;
+
+    for (const el of selectedElements) {
+      const left = el.offsetLeft;
+      const top = el.offsetTop;
+      const right = left + el.offsetWidth;
+      const bottom = top + el.offsetHeight;
+      minLeft = Math.min(minLeft, left);
+      minTop = Math.min(minTop, top);
+      maxRight = Math.max(maxRight, right);
+      maxBottom = Math.max(maxBottom, bottom);
+    }
+
+    setBounds({
+      left: minLeft,
+      top: minTop,
+      width: maxRight - minLeft,
+      height: maxBottom - minTop,
+      count: selectedElements.length,
+    });
+  }, [gridRef, tileRefs, items, selectedIndices.join(',')]);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure]);
+
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    const scrollParent = grid?.closest('.post-preview-scroll');
+    if (!scrollParent) return;
+
+    const onChange = () => measure();
+    scrollParent.addEventListener('scroll', onChange, { passive: true });
+    window.addEventListener('resize', onChange);
+
+    const observer =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(onChange)
+        : null;
+    if (grid && observer) observer.observe(grid);
+
+    return () => {
+      scrollParent.removeEventListener('scroll', onChange);
+      window.removeEventListener('resize', onChange);
+      observer?.disconnect();
+    };
+  }, [gridRef, measure]);
+
+  return bounds;
+}
+
 export function PostPreviewList({
   items,
-  timelineOrder,
-  selectionMode,
-  startIndex,
-  postCount,
-  postsAvailable,
-  selectionWarning,
-  onSelectIndex,
+  selectedIndices,
+  onToggleIndex,
 }: PostPreviewListProps) {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const tileRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const selectedSet = new Set(selectedIndices);
+  const selectionBounds = useSelectionBounds(
+    gridRef,
+    tileRefs,
+    items,
+    selectedIndices,
+  );
+
+  const setTileRef = useCallback((index: number, el: HTMLButtonElement | null) => {
+    if (el) {
+      tileRefs.current.set(index, el);
+    } else {
+      tileRefs.current.delete(index);
+    }
+  }, []);
+
   if (items.length === 0) return null;
 
   return (
     <div className="post-preview-panel flex h-full min-h-0 flex-col">
-      <div className="shrink-0 px-3 pt-3">
-        <p className="m-0 text-label-sm font-semibold text-text-strong-950">Post preview</p>
-        <p className="mt-1 text-paragraph-xs text-text-sub-600">
-          Order: {formatOrderLabel(timelineOrder)} · {postsAvailable} visible. Click a tile to
-          pick a position.
-        </p>
-        {selectionWarning ? (
-          <p className="mt-1 text-paragraph-xs text-warning-dark">{selectionWarning}</p>
-        ) : null}
-      </div>
-      <div className="post-preview-grid min-h-0 flex-1 overflow-y-auto p-3 pt-2">
-        {items.map((item) => (
-          <PostPreviewTile
-            key={item.shortcode}
-            item={item}
-            selected={isIndexSelected(
-              item.index,
-              selectionMode,
-              startIndex,
-              postCount,
-            )}
-            onSelect={() => onSelectIndex(item.index)}
-          />
-        ))}
+      <div className="post-preview-scroll min-h-0 flex-1 overflow-y-auto p-3">
+        <div ref={gridRef} className="post-preview-grid relative">
+          {items.map((item) => (
+            <PostPreviewTile
+              key={item.shortcode}
+              item={item}
+              selected={selectedSet.has(item.index)}
+              tileRef={(el) => setTileRef(item.index, el)}
+              onToggle={() => onToggleIndex(item.index)}
+            />
+          ))}
+          {selectionBounds ? (
+            <PostPreviewSelectionOverlay bounds={selectionBounds} />
+          ) : null}
+        </div>
       </div>
     </div>
   );

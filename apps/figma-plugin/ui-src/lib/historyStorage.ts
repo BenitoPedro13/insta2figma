@@ -109,3 +109,12 @@ export function toggleFavorite(entries: HistoryEntry[], usernameNorm: string): H
   next[idx] = { ...next[idx], favorite: !next[idx].favorite };
   return next;
 }
+
+export function removeFromHistory(
+  entries: HistoryEntry[],
+  usernameNorm: string,
+): HistoryEntry[] {
+  const key = usernameNorm.trim().toLowerCase();
+  if (!key) return entries;
+  return entries.filter((e) => e.username !== key);
+}
