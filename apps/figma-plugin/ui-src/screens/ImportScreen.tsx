@@ -22,6 +22,7 @@ import * as Button from "../components/ui/button";
 import { CheckboxLabel } from "../components/ui/checkbox-label";
 import { ImportStatusLine } from "../components/ImportStatusLine";
 import { cn } from "../utils/cn";
+import { PREVIEW_PAGE_SIZE } from "../lib/previewPagination";
 import type { PostSelectionMode, PostTimelineOrder } from "@insta2figma/shared-contracts";
 
 export type { PostSelectionMode, PostTimelineOrder };
@@ -67,6 +68,11 @@ type ImportScreenProps = {
   previewLoading: boolean;
   previewThumbsLoading: boolean;
   previewError: string;
+  previewPage: number;
+  previewPagesLoaded: number;
+  hasNextPreviewPage: boolean;
+  onPreviewPageChange: (page: number) => void;
+  onPreviewUpgradeRequired: () => void;
   onUsernameChange: (v: string) => void;
   onMaxPostsChange: (v: number) => void;
   onSelectionModeChange: (v: PostSelectionMode) => void;
@@ -110,6 +116,11 @@ export function ImportScreen({
   previewLoading,
   previewThumbsLoading,
   previewError,
+  previewPage,
+  previewPagesLoaded,
+  hasNextPreviewPage,
+  onPreviewPageChange,
+  onPreviewUpgradeRequired,
   onUsernameChange,
   onMaxPostsChange,
   onSelectionModeChange,
@@ -186,7 +197,9 @@ export function ImportScreen({
     showProfileHeaderSkeleton ||
     Boolean(preview?.username && !preview.profilePicUrlHd);
   const showPreviewSkeletonGrid =
-    previewLoading && !(preview?.postsPreview && preview.postsPreview.length > 0);
+    previewLoading &&
+    (!(preview?.postsPreview && preview.postsPreview.length > 0) ||
+      !preview?.username);
 
   return (
     <div className="new-import-screen flex min-h-0 flex-1 flex-col">
@@ -286,11 +299,11 @@ export function ImportScreen({
                 />
                 <div className="new-import-status-slot" aria-live="polite">
                   <p className="new-import-status new-import-status--visible m-0 text-paragraph-xs text-text-sub-600">
-                    <RiInformationFill
+                    {/* <RiInformationFill
                       size={16}
                       className="new-import-status-icon text-text-soft-400"
                       aria-hidden
-                    />
+                    /> */}
                     {profileFound &&
                     preview?.mediaCount != null &&
                     Number.isFinite(preview.mediaCount) ? (
@@ -412,13 +425,20 @@ export function ImportScreen({
 
           <div className="new-import-right-body flex min-h-0 flex-1 flex-col overflow-hidden">
             {showPreviewSkeletonGrid ? (
-              <PostPreviewSkeletonGrid count={maxPostsLimit} />
+              <PostPreviewSkeletonGrid count={PREVIEW_PAGE_SIZE} />
             ) : preview?.postsPreview && preview.postsPreview.length > 0 ? (
               <PostPreviewList
                 items={preview.postsPreview}
                 selectedIndices={selectedIndices}
                 onToggleIndex={onTogglePostIndex}
                 thumbsLoading={previewThumbsLoading}
+                planTier={planTier}
+                previewPage={previewPage}
+                previewPagesLoaded={previewPagesLoaded}
+                hasNextPreviewPage={hasNextPreviewPage}
+                paginationDisabled={previewLoading}
+                onPreviewPageChange={onPreviewPageChange}
+                onUpgradeRequired={onPreviewUpgradeRequired}
               />
             ) : (
               <div className="new-import-preview-empty flex h-full w-full" aria-hidden />

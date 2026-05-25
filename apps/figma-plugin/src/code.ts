@@ -394,6 +394,7 @@ type PluginMessage =
       postCount?: number;
       timelineOrder?: 'newest_first' | 'oldest_first';
       previewListSize?: number;
+      previewPage?: number;
       selectedIndices?: number[];
     }
   | { type: 'create-shapes'; count: number }
@@ -754,6 +755,7 @@ function buildPreviewQueryString(
     postCount?: number;
     timelineOrder?: 'newest_first' | 'oldest_first';
     previewListSize?: number;
+    previewPage?: number;
     selectedIndices?: number[];
   },
 ): string {
@@ -777,6 +779,9 @@ function buildPreviewQueryString(
   if (opts.previewListSize != null) {
     parts.push(`previewListSize=${encodeURIComponent(String(opts.previewListSize))}`);
   }
+  if (opts.previewPage != null) {
+    parts.push(`previewPage=${encodeURIComponent(String(opts.previewPage))}`);
+  }
   if (opts.selectedIndices?.length) {
     parts.push(
       `selectedIndices=${encodeURIComponent(opts.selectedIndices.join(','))}`,
@@ -796,6 +801,7 @@ async function previewProfileViaApi(
     postCount?: number;
     timelineOrder?: 'newest_first' | 'oldest_first';
     previewListSize?: number;
+    previewPage?: number;
     selectedIndices?: number[];
   },
 ): Promise<{
@@ -816,6 +822,10 @@ async function previewProfileViaApi(
   }[];
   postsAvailable?: number;
   selectionWarning?: string;
+  previewPage?: number;
+  previewPageSize?: number;
+  hasNextPreviewPage?: boolean;
+  previewPagesLoaded?: number;
 }> {
   const { session } = await ensureSession(base);
   const token = session.accessToken;
@@ -871,6 +881,20 @@ async function previewProfileViaApi(
         : undefined,
     selectionWarning:
       typeof data.selectionWarning === 'string' ? data.selectionWarning : undefined,
+    previewPage:
+      typeof data.previewPage === 'number' && Number.isFinite(data.previewPage)
+        ? data.previewPage
+        : undefined,
+    previewPageSize:
+      typeof data.previewPageSize === 'number' && Number.isFinite(data.previewPageSize)
+        ? data.previewPageSize
+        : undefined,
+    hasNextPreviewPage: data.hasNextPreviewPage === true,
+    previewPagesLoaded:
+      typeof data.previewPagesLoaded === 'number' &&
+      Number.isFinite(data.previewPagesLoaded)
+        ? data.previewPagesLoaded
+        : undefined,
   };
 }
 
@@ -1040,6 +1064,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         postCount: msg.postCount,
         timelineOrder: msg.timelineOrder,
         previewListSize: msg.previewListSize,
+        previewPage:
+          typeof msg.previewPage === 'number' && Number.isFinite(msg.previewPage)
+            ? Math.max(1, Math.floor(msg.previewPage))
+            : 1,
       });
       const postsWithThumbs = preview.postsPreview ?? [];
       const postsMeta = postsWithThumbs.map((item) => ({
@@ -1061,6 +1089,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         postsPreview: postsMeta,
         postsAvailable: preview.postsAvailable,
         selectionWarning: preview.selectionWarning,
+        previewPage: preview.previewPage,
+        previewPageSize: preview.previewPageSize,
+        hasNextPreviewPage: preview.hasNextPreviewPage,
+        previewPagesLoaded: preview.previewPagesLoaded,
         thumbsPending: postsWithThumbs.length,
         ...(preview.profilePicDataUrl
           ? { profilePicUrlHd: preview.profilePicDataUrl }

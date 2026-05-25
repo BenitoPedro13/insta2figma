@@ -14,6 +14,7 @@ import {
   type HistoryEntry,
 } from './lib/historyStorage';
 import { computePreviewEstimates } from './lib/previewEstimates';
+import { ProUpgradeOverlay } from './components/ProUpgradeOverlay';
 import { ImportScreen, type PostSelectionMode, type PostTimelineOrder } from './screens/ImportScreen';
 import {
   buildContiguousIndices,
@@ -38,6 +39,9 @@ type ProfilePreview = {
   }[];
   postsAvailable?: number;
   selectionWarning?: string;
+  previewPage?: number;
+  previewPagesLoaded?: number;
+  hasNextPreviewPage?: boolean;
 };
 
 function msgToText(v: unknown): string {
@@ -69,10 +73,17 @@ export function App() {
   const lastImportUsername = useRef('');
   const previewReqId = useRef(0);
   const previewFetchedForUsername = useRef('');
+  const previewPostsByIndexRef = useRef(
+    new Map<number, NonNullable<ProfilePreview['postsPreview']>[number]>(),
+  );
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewThumbsLoading, setPreviewThumbsLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [previewPagesLoaded, setPreviewPagesLoaded] = useState(0);
+  const [hasNextPreviewPage, setHasNextPreviewPage] = useState(false);
+  const [proUpgradeOpen, setProUpgradeOpen] = useState(false);
   const [planTier, setPlanTier] = useState<'free' | 'pro'>('free');
   const [jobsRemaining, setJobsRemaining] = useState<number | null>(null);
   const [jobsLimit, setJobsLimit] = useState<number | null>(null);
@@ -184,6 +195,23 @@ export function App() {
             ? pm.thumbsPending
             : 0;
         setPreviewThumbsLoading(thumbsPending > 0);
+        const page =
+          typeof pm.previewPage === 'number' && Number.isFinite(pm.previewPage)
+            ? Math.max(1, Math.floor(pm.previewPage))
+            : 1;
+        setPreviewPage(page);
+        setPreviewPagesLoaded(
+          typeof pm.previewPagesLoaded === 'number' &&
+            Number.isFinite(pm.previewPagesLoaded)
+            ? pm.previewPagesLoaded
+            : 1,
+        );
+        setHasNextPreviewPage(pm.hasNextPreviewPage === true);
+        if (postsPreview?.length) {
+          for (const item of postsPreview) {
+            previewPostsByIndexRef.current.set(item.index, item);
+          }
+        }
         setPreview({
           username: String(pm.username ?? ''),
           mediaCount:
@@ -215,6 +243,13 @@ export function App() {
               : undefined,
           selectionWarning:
             typeof pm.selectionWarning === 'string' ? pm.selectionWarning : undefined,
+          previewPage: page,
+          previewPagesLoaded:
+            typeof pm.previewPagesLoaded === 'number' &&
+            Number.isFinite(pm.previewPagesLoaded)
+              ? pm.previewPagesLoaded
+              : 1,
+          hasNextPreviewPage: pm.hasNextPreviewPage === true,
         });
         return;
       }
@@ -227,11 +262,14 @@ export function App() {
         if (!shortcode || !thumbnailUrl) return;
         setPreview((prev) => {
           if (!prev?.postsPreview) return prev;
+          const nextPosts = prev.postsPreview.map((p) =>
+            p.shortcode === shortcode ? { ...p, thumbnailUrl } : p,
+          );
+          const updated = nextPosts.find((p) => p.shortcode === shortcode);
+          if (updated) previewPostsByIndexRef.current.set(updated.index, updated);
           return {
             ...prev,
-            postsPreview: prev.postsPreview.map((p) =>
-              p.shortcode === shortcode ? { ...p, thumbnailUrl } : p,
-            ),
+            postsPreview: nextPosts,
           };
         });
         return;
@@ -311,6 +349,61 @@ export function App() {
     setListStatus('');
   }, []);
 
+  const requestProfilePreview = useCallback(
+    (page: number) => {
+      const user = String(username ?? '')
+        .trim()
+        .replace(/^@+/, '')
+        .toLowerCase();
+      if (!user) return;
+
+      const reqId = previewReqId.current + 1;
+      previewReqId.current = reqId;
+      if (page === 1) previewFetchedForUsername.current = user;
+      setPreviewLoading(true);
+      setPreviewThumbsLoading(false);
+      setPreviewError('');
+      setPreview((prev) =>
+        prev
+          ? {
+              ...prev,
+              postsPreview: [],
+            }
+          : prev,
+      );
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'profile-preview',
+            requestId: reqId,
+            username: user,
+            maxPosts: Math.max(1, maxPostsLimit),
+            expandCarouselImages: false,
+            selectionMode: 'recent',
+            startIndex: 1,
+            postCount: maxPostsLimit,
+            timelineOrder: 'newest_first',
+            previewPage: page,
+          },
+        },
+        '*',
+      );
+    },
+    [username, maxPostsLimit],
+  );
+
+  const onPreviewPageChange = useCallback(
+    (page: number) => {
+      setPreviewPage(page);
+      requestProfilePreview(page);
+    },
+    [requestProfilePreview],
+  );
+
+  const onPreviewUpgradeRequired = useCallback(() => {
+    setProUpgradeOpen(true);
+  }, []);
+
   useEffect(() => {
     if (importing) return;
     const user = String(username ?? '')
@@ -319,9 +412,13 @@ export function App() {
       .toLowerCase();
     if (!user) {
       previewFetchedForUsername.current = '';
+      previewPostsByIndexRef.current.clear();
       setPreviewLoading(false);
       setPreview(null);
       setPreviewError('');
+      setPreviewPage(1);
+      setPreviewPagesLoaded(0);
+      setHasNextPreviewPage(false);
       setSelectedIndices([]);
       setMaxPosts(0);
       setStartIndex(1);
@@ -336,32 +433,12 @@ export function App() {
       return;
     }
     const timer = window.setTimeout(() => {
-      const reqId = previewReqId.current + 1;
-      previewReqId.current = reqId;
-      previewFetchedForUsername.current = user;
-      setPreviewLoading(true);
-      setPreviewThumbsLoading(false);
-      setPreviewError('');
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'profile-preview',
-            requestId: reqId,
-            username: user,
-            maxPosts: Math.max(1, maxPostsLimit),
-            expandCarouselImages: false,
-            selectionMode: 'recent',
-            startIndex: 1,
-            postCount: maxPostsLimit,
-            timelineOrder: 'newest_first',
-            previewListSize: maxPostsLimit,
-          },
-        },
-        '*',
-      );
+      previewPostsByIndexRef.current.clear();
+      setPreviewPage(1);
+      requestProfilePreview(1);
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [importing, username, preview?.username, maxPostsLimit]);
+  }, [importing, username, preview?.username, requestProfilePreview]);
 
   /** Slider / selection — local estimate only; no Instagram refetch. */
   useEffect(() => {
@@ -373,7 +450,10 @@ export function App() {
     if (!user || !preview?.username) return;
     if (user !== preview.username.toLowerCase()) return;
 
-    const next = computePreviewEstimates(preview.postsPreview, {
+    const cachedPosts = Array.from(previewPostsByIndexRef.current.values()).sort(
+      (a, b) => a.index - b.index,
+    );
+    const next = computePreviewEstimates(cachedPosts.length ? cachedPosts : preview.postsPreview, {
       selectedIndices,
       rangeMode: selectionMode === 'range',
       timelineOrder,
@@ -553,6 +633,11 @@ export function App() {
                 previewLoading={previewLoading}
                 previewThumbsLoading={previewThumbsLoading}
                 previewError={previewError}
+                previewPage={previewPage}
+                previewPagesLoaded={previewPagesLoaded}
+                hasNextPreviewPage={hasNextPreviewPage}
+                onPreviewPageChange={onPreviewPageChange}
+                onPreviewUpgradeRequired={onPreviewUpgradeRequired}
                 onUsernameChange={setUsername}
                 onMaxPostsChange={onMaxPostsChange}
                 onSelectionModeChange={onSelectionModeChange}
@@ -576,6 +661,14 @@ export function App() {
           />
         </div>
       </div>
+      <ProUpgradeOverlay
+        open={proUpgradeOpen}
+        onClose={() => setProUpgradeOpen(false)}
+        onUpgrade={() => {
+          setProUpgradeOpen(false);
+          onUpgrade();
+        }}
+      />
       <PluginResizeHandle />
     </div>
   );

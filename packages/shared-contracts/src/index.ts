@@ -20,6 +20,8 @@ import {
 } from './post-selection';
 import {
   buildIndexedPostPreview,
+  extractInstagramUserId,
+  extractTimelinePageInfo,
   parseTimelineSampleFromUserNode,
   type InstagramPostPreviewItem,
   type TimelinePostItem,
@@ -38,6 +40,8 @@ export {
   slicePostsBySelection,
   toggleSelectedIndex,
   buildIndexedPostPreview,
+  extractInstagramUserId,
+  extractTimelinePageInfo,
   parseTimelineSampleFromUserNode,
   type CarouselPostEstimate,
   type ImportImageEstimate,

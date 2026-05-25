@@ -49,6 +49,7 @@ export class InstagramController {
     @Query('postCount') postCountRaw?: string,
     @Query('timelineOrder') timelineOrderRaw?: string,
     @Query('previewListSize') previewListSizeRaw?: string,
+    @Query('previewPage') previewPageRaw?: string,
     @Query('selectedIndices') selectedIndicesRaw?: string,
   ) {
     const maxPosts = parseIntClamped(maxPostsRaw, 12);
@@ -65,6 +66,9 @@ export class InstagramController {
     const previewListSize = previewListSizeRaw
       ? parseIntClamped(previewListSizeRaw, maxPosts)
       : undefined;
+    const previewPage = previewPageRaw
+      ? parseIntClamped(previewPageRaw, 1, 999)
+      : undefined;
     const selectedIndices = parseSelectedIndices(selectedIndicesRaw);
 
     return this.preview.getProfilePreview(String(username ?? ''), {
@@ -75,6 +79,7 @@ export class InstagramController {
       postCount,
       timelineOrder,
       previewListSize,
+      previewPage,
       selectedIndices,
     });
   }

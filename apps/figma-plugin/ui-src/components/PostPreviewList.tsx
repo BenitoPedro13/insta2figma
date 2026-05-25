@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { cn } from '../utils/cn';
 import { Skeleton } from './Skeleton';
+import { PostPreviewPagination } from './PostPreviewPagination';
 
 export type PostPreviewItem = {
   index: number;
@@ -21,6 +22,13 @@ type PostPreviewListProps = {
   selectedIndices: number[];
   onToggleIndex: (index: number) => void;
   thumbsLoading?: boolean;
+  planTier: 'free' | 'pro';
+  previewPage: number;
+  previewPagesLoaded: number;
+  hasNextPreviewPage: boolean;
+  paginationDisabled?: boolean;
+  onPreviewPageChange: (page: number) => void;
+  onUpgradeRequired: () => void;
 };
 
 type SelectionBounds = {
@@ -95,16 +103,12 @@ function PostPreviewTile({
         <Skeleton className="h-full w-full rounded-none" />
       ) : (
         <span className="flex h-full w-full items-center justify-center text-paragraph-xs font-semibold text-text-sub-600">
-          {item.isVideo ? '▶' : '#'}
-          {item.index}
+          {item.isVideo ? '▶' : null}
         </span>
       )}
-      <span className="absolute bottom-1 left-1 rounded-none bg-overlay-gray px-1 py-px text-[10px] font-semibold leading-tight text-text-white-0">
-        #{item.index}
-      </span>
       {item.carouselCount != null && item.carouselCount > 1 ? (
-        <span className="absolute right-1 top-1 rounded-none bg-bg-white-0 px-1 py-px text-[9px] font-semibold text-text-sub-600">
-          {item.carouselCount}
+        <span className="post-preview-carousel-badge" aria-hidden>
+          1/{item.carouselCount}
         </span>
       ) : null}
     </button>
@@ -198,6 +202,13 @@ export function PostPreviewList({
   selectedIndices,
   onToggleIndex,
   thumbsLoading = false,
+  planTier,
+  previewPage,
+  previewPagesLoaded,
+  hasNextPreviewPage,
+  paginationDisabled = false,
+  onPreviewPageChange,
+  onUpgradeRequired,
 }: PostPreviewListProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -238,6 +249,15 @@ export function PostPreviewList({
           ) : null}
         </div>
       </div>
+      <PostPreviewPagination
+        planTier={planTier}
+        currentPage={previewPage}
+        pagesLoaded={previewPagesLoaded}
+        hasNextPage={hasNextPreviewPage}
+        disabled={paginationDisabled}
+        onPageChange={onPreviewPageChange}
+        onUpgradeRequired={onUpgradeRequired}
+      />
     </div>
   );
 }
