@@ -151,7 +151,7 @@ export function ImportScreen({
   const trimmedUsername = username.trim();
   const usernameLookupStatus = (() => {
     if (!trimmedUsername) return "idle" as const;
-    if (previewLoading) return "searching" as const;
+    if (previewLoading && !preview?.username) return "searching" as const;
     if (preview?.username) return "found" as const;
     if (previewError) return "not-found" as const;
     return "idle" as const;

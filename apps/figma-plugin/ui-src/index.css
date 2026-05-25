@@ -818,7 +818,7 @@ body,
   background: rgb(0 0 0 / 0.35);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  color: var(--color-text-white-0);
+  color: #ffffff;
   font-size: 10px;
   font-weight: 600;
   line-height: 1.2;

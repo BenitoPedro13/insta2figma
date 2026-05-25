@@ -73,6 +73,7 @@ export function App() {
   const [importing, setImporting] = useState(false);
   const lastImportUsername = useRef('');
   const previewReqId = useRef(0);
+  const previewPageReqId = useRef(0);
   const previewFetchedForUsername = useRef('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewThumbsLoading, setPreviewThumbsLoading] = useState(false);
@@ -182,7 +183,11 @@ export function App() {
       }
       if (pm.type === 'profile-preview-data') {
         const reqId = pm.requestId;
-        if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        const requestKind =
+          pm.requestKind === 'page' ? ('page' as const) : ('initial' as const);
+        const expectedReqId =
+          requestKind === 'page' ? previewPageReqId.current : previewReqId.current;
+        if (typeof reqId !== 'number' || reqId !== expectedReqId) return;
         const loadedUser = String(pm.username ?? '')
           .trim()
           .replace(/^@+/, '')
@@ -203,7 +208,7 @@ export function App() {
             ? pm.nextPreviewCursor
             : null;
 
-        if (page === 1) {
+        if (requestKind === 'initial' && page === 1) {
           if (loadedUser) previewFetchedForUsername.current = loadedUser;
           setPreviewLoading(false);
           setPreviewPageLoading(false);
@@ -272,7 +277,11 @@ export function App() {
       }
       if (pm.type === 'profile-preview-thumb') {
         const reqId = pm.requestId;
-        if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        const requestKind =
+          pm.requestKind === 'page' ? ('page' as const) : ('initial' as const);
+        const expectedReqId =
+          requestKind === 'page' ? previewPageReqId.current : previewReqId.current;
+        if (typeof reqId !== 'number' || reqId !== expectedReqId) return;
         const shortcode = typeof pm.shortcode === 'string' ? pm.shortcode : '';
         const thumbnailUrl =
           typeof pm.thumbnailUrl === 'string' ? pm.thumbnailUrl : null;
@@ -300,13 +309,29 @@ export function App() {
       }
       if (pm.type === 'profile-preview-thumbs-done') {
         const reqId = pm.requestId;
-        if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        const requestKind =
+          pm.requestKind === 'page' ? ('page' as const) : ('initial' as const);
+        const expectedReqId =
+          requestKind === 'page' ? previewPageReqId.current : previewReqId.current;
+        if (typeof reqId !== 'number' || reqId !== expectedReqId) return;
         setPreviewThumbsLoading(false);
         return;
       }
       if (pm.type === 'profile-preview-error') {
         const reqId = pm.requestId;
-        if (typeof reqId !== 'number' || reqId !== previewReqId.current) return;
+        const requestKind =
+          pm.requestKind === 'page' ? ('page' as const) : ('initial' as const);
+        const expectedReqId =
+          requestKind === 'page' ? previewPageReqId.current : previewReqId.current;
+        if (typeof reqId !== 'number' || reqId !== expectedReqId) return;
+        if (requestKind === 'page') {
+          setPreviewPageLoading(false);
+          setPreviewThumbsLoading(false);
+          setPreviewError(
+            typeof pm.message === 'string' ? pm.message : 'Could not load profile preview.',
+          );
+          return;
+        }
         previewFetchedForUsername.current = '';
         setPreviewLoading(false);
         setPreviewPageLoading(false);
@@ -363,6 +388,7 @@ export function App() {
   }, [persistEntries]);
 
   const resetPreviewPagination = useCallback(() => {
+    previewPageReqId.current += 1;
     setPreviewPage(1);
     setPreviewTotalPages(1);
     setPreviewPageLoading(false);
@@ -407,10 +433,7 @@ export function App() {
       setSelectionMode('recent');
       return;
     }
-    if (
-      previewFetchedForUsername.current === user &&
-      preview?.username.toLowerCase() === user
-    ) {
+    if (previewFetchedForUsername.current === user) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -441,7 +464,7 @@ export function App() {
       );
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [importing, username, preview?.username, maxPostsLimit, resetPreviewPagination]);
+  }, [importing, username, maxPostsLimit, resetPreviewPagination]);
 
   const fetchPreviewPage = useCallback(
     (page: number) => {
@@ -466,14 +489,16 @@ export function App() {
       const after = pageCursors[page];
       if (!after || !instagramUserId) return;
 
-      const reqId = previewReqId.current + 1;
-      previewReqId.current = reqId;
+      setPreviewPage(page);
+      const reqId = previewPageReqId.current + 1;
+      previewPageReqId.current = reqId;
       setPreviewPageLoading(true);
       setPreviewThumbsLoading(false);
       parent.postMessage(
         {
           pluginMessage: {
             type: 'profile-preview',
+            requestKind: 'page',
             requestId: reqId,
             username: user,
             maxPosts: Math.max(1, maxPostsLimit),

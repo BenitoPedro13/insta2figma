@@ -385,6 +385,7 @@ type PluginMessage =
   | { type: 'history-save'; entries: unknown }
   | {
       type: 'profile-preview';
+      requestKind?: 'initial' | 'page';
       requestId: number;
       username: string;
       maxPosts?: number;
@@ -1104,6 +1105,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         after: msg.after,
         userId: msg.userId,
       });
+      const requestKind = msg.requestKind === 'page' ? 'page' : 'initial';
       const postsWithThumbs = preview.postsPreview ?? [];
       const postsMeta = postsWithThumbs.map((item) => ({
         index: item.index,
@@ -1114,6 +1116,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       }));
       figma.ui.postMessage({
         type: 'profile-preview-data',
+        requestKind,
         requestId: msg.requestId,
         username: preview.username,
         mediaCount: preview.mediaCount,
@@ -1124,7 +1127,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         postsPreview: postsMeta,
         postsAvailable: preview.postsAvailable,
         selectionWarning: preview.selectionWarning,
-        previewPage: preview.previewPage,
+        previewPage: preview.previewPage ?? msg.previewPage ?? 1,
         previewPageSize: preview.previewPageSize,
         previewTotalPages: preview.previewTotalPages,
         hasNextPreviewPage: preview.hasNextPreviewPage,
@@ -1140,6 +1143,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         if (typeof url === 'string' && url.startsWith('data:') && url.length > 0) {
           figma.ui.postMessage({
             type: 'profile-preview-thumb',
+            requestKind,
             requestId: msg.requestId,
             shortcode: item.shortcode,
             thumbnailUrl: url,
@@ -1149,12 +1153,14 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       if (postsWithThumbs.length > 0) {
         figma.ui.postMessage({
           type: 'profile-preview-thumbs-done',
+          requestKind,
           requestId: msg.requestId,
         });
       }
     } catch (err) {
       figma.ui.postMessage({
         type: 'profile-preview-error',
+        requestKind: msg.requestKind === 'page' ? 'page' : 'initial',
         requestId: msg.requestId,
         message: formatCaught(err),
       });
