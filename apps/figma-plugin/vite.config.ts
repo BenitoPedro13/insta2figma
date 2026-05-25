@@ -23,6 +23,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': uiRoot,
+      '@insta2figma/shared-contracts': resolve(
+        pkgRoot,
+        '../../packages/shared-contracts/src/index.ts',
+      ),
     },
   },
   build: {

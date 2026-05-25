@@ -50,31 +50,94 @@ body,
   min-width: 0;
 }
 
+/* Alinhado ao PanelHeader (100px) e ao PluginFooter */
+:root {
+  --plugin-header-height: 100px;
+  --plugin-footer-height: 52px;
+  --plugin-sidebar-width: 40px;
+}
+
 .plugin-sidebar {
-  width: 32px;
+  width: var(--plugin-sidebar-width);
   flex-shrink: 0;
+  min-height: 0;
+  height: 100%;
   border-right: 1px solid var(--color-stroke-soft-200);
-  background: var(--color-bg-weak-50);
+  background: var(--color-bg-white-0);
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  padding: 8px 0 12px;
+}
+
+/* Hachura diagonal única -60° (linhas 1px stroke-soft-200, passo 8px) */
+.plugin-sidebar-hatch {
+  flex-shrink: 0;
+  width: 100%;
+  --hatch-line: var(--color-stroke-soft-200);
+  background-color: var(--color-bg-white-0);
+  background-image: repeating-linear-gradient(
+    -60deg,
+    var(--hatch-line) 0,
+    var(--hatch-line) 1px,
+    transparent 1px,
+    transparent 8px
+  );
+}
+
+.plugin-sidebar-hatch--top {
+  height: var(--plugin-header-height);
+  border-bottom: 1px solid var(--color-stroke-soft-200);
+}
+
+.plugin-sidebar-hatch--bottom {
+  height: var(--plugin-footer-height);
+  border-top: 1px solid var(--color-stroke-soft-200);
+}
+
+.plugin-sidebar-ruler {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+  background: var(--color-bg-white-0);
 }
 
 .plugin-sidebar-track {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  flex-direction: column-reverse;
-  align-items: center;
-  gap: 28px;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
   width: 100%;
+  padding: 0 2px;
 }
 
 .plugin-sidebar-mark {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  min-height: 0;
+}
+
+.plugin-sidebar-mark-label {
+  flex-shrink: 0;
   font-size: 9px;
   line-height: 1;
-  color: var(--color-text-soft-400);
+  color: var(--color-stroke-sub-300);
   writing-mode: vertical-rl;
   transform: rotate(180deg);
+}
+
+.plugin-sidebar-mark-tick {
+  flex: 1;
+  min-width: 4px;
+  height: 1px;
+  background: var(--color-stroke-sub-300);
+  transform: scaleX(0.6);
+  transform-origin: left center;
 }
 
 .plugin-main {
@@ -282,6 +345,10 @@ body,
   to {
     transform: rotate(360deg);
   }
+}
+
+.post-count-slider-track {
+  padding: 0 6px 4px;
 }
 
 .new-import-checks {

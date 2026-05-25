@@ -1,6 +1,5 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, type FormEvent } from "react";
 import {
-  RiArrowDownSLine,
   RiCheckLine,
   RiInformationFill,
   RiInstagramFill,
@@ -14,11 +13,11 @@ import {
 } from "../components/PostPreviewList";
 import type { HistoryEntry } from "../lib/historyStorage";
 import { ListScreen, type ListTab } from "./ListScreen";
+import { PostCountSlider } from "../components/PostCountSlider";
 import * as FancyButton from "../components/ui/fancy-button";
 import * as Input from "../components/ui/input";
 import * as Button from "../components/ui/button";
 import { CheckboxLabel } from "../components/ui/checkbox-label";
-import { CounterField } from "../components/ui/counter-field";
 import { cn } from "../utils/cn";
 
 export type PostSelectionMode = "recent" | "single" | "range";
@@ -43,7 +42,6 @@ type ImportScreenProps = {
   postCount: number;
   timelineOrder: PostTimelineOrder;
   expandCarouselImages: boolean;
-  allowCarousel: boolean;
   quotaExceeded: boolean;
   planTier: "free" | "pro";
   sessionError?: string;
@@ -94,7 +92,6 @@ export function ImportScreen({
   postCount,
   timelineOrder,
   expandCarouselImages,
-  allowCarousel,
   quotaExceeded,
   planTier,
   sessionError,
@@ -114,8 +111,6 @@ export function ImportScreen({
   onImport,
   onUpgrade,
 }: ImportScreenProps) {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-
   const onSubmit = useCallback(
     (e: FormEvent) => {
       e.preventDefault();
@@ -134,23 +129,6 @@ export function ImportScreen({
     [onSelectionModeChange, onStartIndexChange, selectionMode],
   );
 
-  const ctaLabel = (() => {
-    if (importing) return "Importing…";
-    const estimated = preview?.estimatedImportImages;
-    if (
-      typeof estimated === "number" &&
-      Number.isFinite(estimated) &&
-      estimated > 0
-    ) {
-      return `Import ${estimated} ${estimated === 1 ? "image" : "images"}`;
-    }
-    if (selectionMode === "single") return `Import post #${startIndex}`;
-    if (selectionMode === "range") {
-      return `Import posts #${startIndex}–#${startIndex + postCount - 1}`;
-    }
-    return `Import Feed (${maxPosts} posts)`;
-  })();
-
   const trimmedUsername = username.trim();
   const usernameLookupStatus = (() => {
     if (!trimmedUsername) return "idle" as const;
@@ -159,6 +137,44 @@ export function ImportScreen({
     if (previewError) return "not-found" as const;
     return "idle" as const;
   })();
+  const profileFound = usernameLookupStatus === "found";
+
+  const ctaLabel = (() => {
+    if (importing) return "Importing…";
+    const images = preview?.estimatedImportImages;
+    if (typeof images === "number" && Number.isFinite(images) && images > 0) {
+      return `Import ${images} ${images === 1 ? "image" : "images"}`;
+    }
+    return "Import images";
+  })();
+
+  const rangeMode = selectionMode === "range";
+
+  useEffect(() => {
+    if (!profileFound && rangeMode) {
+      onSelectionModeChange("recent");
+    }
+  }, [profileFound, rangeMode, onSelectionModeChange]);
+
+  const canImport =
+    !quotaExceeded &&
+    (rangeMode ? postCount >= 1 : maxPosts >= 1);
+
+  const handleRangeModeChange = useCallback(
+    (enabled: boolean) => {
+      onSelectionModeChange(enabled ? "range" : "recent");
+    },
+    [onSelectionModeChange],
+  );
+
+  const handleRangeSliderChange = useCallback(
+    (start: number, length: number) => {
+      onStartIndexChange(start);
+      onPostCountChange(length);
+    },
+    [onStartIndexChange, onPostCountChange],
+  );
+
   const showUsernameLookup = usernameLookupStatus !== "idle";
   const isImportTab = activeTab === "new-import";
 
@@ -178,7 +194,7 @@ export function ImportScreen({
                   htmlFor="username"
                   className="new-import-label text-label-sm  text-text-strong-950"
                 >
-                  What Instagram?
+                  What user?
                 </label>
                 <Input.Root size="medium">
                   <Input.Wrapper>
@@ -274,133 +290,44 @@ export function ImportScreen({
               </div>
 
               <div className="new-import-field flex flex-col gap-2">
-                <label
-                  htmlFor="max-posts-main"
-                  className="new-import-label text-label-sm text-text-strong-950"
-                >
-                  Number of posts
+                <label className="new-import-label text-label-sm text-text-strong-950">
+                  How many posts?
                 </label>
-                <Input.Counter
-                  id="max-posts-main"
-                  value={maxPosts}
-                  min={1}
-                  max={maxPostsLimit}
-                  onChange={onMaxPostsChange}
+                <PostCountSlider
+                  profilePostCount={
+                    preview?.mediaCount != null ? preview.mediaCount : null
+                  }
+                  planMaxPosts={maxPostsLimit}
+                  planTier={planTier}
+                  profileFound={profileFound}
+                  rangeMode={rangeMode}
+                  onRangeModeChange={handleRangeModeChange}
+                  postCount={maxPosts}
+                  onPostCountChange={onMaxPostsChange}
+                  rangeStart={startIndex}
+                  rangeLength={postCount}
+                  onRangeChange={handleRangeSliderChange}
+                  disabled={importing}
                 />
                 <p className="m-0 text-paragraph-xs text-text-sub-600">
                   {preview
                     ? `Estimate: ${preview.estimatedImportImages} image(s) · Covers ${preview.estimatedPostCovers} · Carousel +${preview.estimatedCarouselExtras}`
-                    : "How many recent posts to import."}
+                    : "Enter a username, then drag from 0 to choose how many posts."}
                 </p>
               </div>
 
               <div className="new-import-checks">
+                <CheckboxLabel
+                  label="Import carousel images"
+                  checked={expandCarouselImages}
+                  onCheckedChange={onExpandCarouselChange}
+                />
                 <CheckboxLabel
                   label="Ignore Reels"
                   hint="Coming soon"
                   checked={false}
                   disabled
                 />
-                <CheckboxLabel
-                  label="Import carousel images"
-                  hint={!allowCarousel ? "Available on Pro" : undefined}
-                  checked={expandCarouselImages}
-                  disabled={!allowCarousel}
-                  onCheckedChange={onExpandCarouselChange}
-                />
-              </div>
-
-              <div className="new-import-advanced">
-                <button
-                  type="button"
-                  className="new-import-advanced-toggle"
-                  aria-expanded={advancedOpen}
-                  onClick={() => setAdvancedOpen((o) => !o)}
-                >
-                  <span className="text-label-sm font-semibold text-text-strong-950">
-                    Advanced
-                  </span>
-                  <RiArrowDownSLine
-                    className={cn(
-                      "new-import-advanced-chevron",
-                      advancedOpen && "is-open",
-                    )}
-                    aria-hidden
-                  />
-                </button>
-                {advancedOpen ? (
-                  <div className="new-import-advanced-panel">
-                    <div className="field">
-                      <label
-                        htmlFor="selection-mode"
-                        className="text-label-sm text-text-sub-600"
-                      >
-                        Selection mode
-                      </label>
-                      <select
-                        id="selection-mode"
-                        className="new-import-select"
-                        value={selectionMode}
-                        onChange={(e) =>
-                          onSelectionModeChange(
-                            e.target.value as PostSelectionMode,
-                          )
-                        }
-                      >
-                        <option value="recent">
-                          Recent posts (from #1 onward)
-                        </option>
-                        <option value="single">Single post by position</option>
-                        <option value="range">Range by position</option>
-                      </select>
-                    </div>
-                    <div className="field">
-                      <label
-                        htmlFor="timeline-order"
-                        className="text-label-sm text-text-sub-600"
-                      >
-                        Timeline order
-                      </label>
-                      <select
-                        id="timeline-order"
-                        className="new-import-select"
-                        value={timelineOrder}
-                        onChange={(e) =>
-                          onTimelineOrderChange(
-                            e.target.value as PostTimelineOrder,
-                          )
-                        }
-                      >
-                        <option value="newest_first">
-                          Newest first (#1 = latest post)
-                        </option>
-                        <option value="oldest_first">
-                          Oldest first (#1 = oldest visible post)
-                        </option>
-                      </select>
-                    </div>
-                    {selectionMode !== "recent" ? (
-                      <CounterField
-                        id="start-index"
-                        label="Start position (#)"
-                        value={startIndex}
-                        min={1}
-                        max={maxPostsLimit}
-                        onChange={onStartIndexChange}
-                      />
-                    ) : null}
-                    {selectionMode === "range" ? (
-                      <CounterField
-                        id="post-count"
-                        label="Number of posts in range"
-                        value={postCount}
-                        min={1}
-                        max={maxPostsLimit}
-                        onChange={onPostCountChange}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
               </div>
 
               {quotaExceeded ? (
@@ -413,13 +340,17 @@ export function ImportScreen({
               <div className="new-import-actions">
                 <FancyButton.Root
                   type="submit"
-                  variant="primary"
+                  variant="neutral"
                   size="medium"
                   className="w-full"
-                  disabled={importing || quotaExceeded}
+                  disabled={importing || !canImport}
                 >
                   <FancyButton.Icon as={RiInstagramFill} />
-                  {quotaExceeded ? "Quota used up" : ctaLabel}
+                  {quotaExceeded
+                    ? "Quota used up"
+                    : !canImport
+                      ? "Select images to import"
+                      : ctaLabel}
                 </FancyButton.Root>
                 {quotaExceeded ? (
                   <Button.Root

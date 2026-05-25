@@ -266,6 +266,13 @@ function clampCounterValue(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function parseDigits(raw: string): number | null {
+  const digits = raw.replace(/\D/g, '');
+  if (digits === '') return null;
+  const n = Number.parseInt(digits, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
 function InputCounter({
   id,
   value,
@@ -280,8 +287,22 @@ function InputCounter({
     min,
     max,
   );
+  const [text, setText] = React.useState(String(safeValue));
+
+  React.useEffect(() => {
+    setText(String(safeValue));
+  }, [safeValue]);
+
   const atMin = safeValue <= min;
   const atMax = safeValue >= max;
+
+  const commitText = (raw: string) => {
+    const parsed = parseDigits(raw);
+    const next =
+      parsed == null ? min : clampCounterValue(parsed, min, max);
+    setText(String(next));
+    onChange(next);
+  };
 
   const step = (delta: number) => {
     if (disabled) return;
@@ -309,11 +330,42 @@ function InputCounter({
           id={id}
           type="text"
           inputMode="numeric"
-          readOnly
+          pattern="[0-9]*"
           disabled={disabled}
-          value={String(safeValue)}
+          value={text}
           className="text-center tabular-nums"
           aria-live="polite"
+          aria-valuemin={min}
+          aria-valuemax={max}
+          aria-valuenow={safeValue}
+          onChange={(e) => {
+            const next = e.target.value.replace(/\D/g, '');
+            setText(next);
+            const parsed = parseDigits(next);
+            if (parsed != null) {
+              onChange(clampCounterValue(parsed, min, max));
+            }
+          }}
+          onBlur={() => commitText(text)}
+          onKeyDown={(e) => {
+            if (
+              e.key === 'Backspace' ||
+              e.key === 'Delete' ||
+              e.key === 'Tab' ||
+              e.key === 'ArrowLeft' ||
+              e.key === 'ArrowRight' ||
+              e.key === 'Home' ||
+              e.key === 'End' ||
+              e.key === 'Enter'
+            ) {
+              if (e.key === 'Enter') {
+                (e.target as HTMLInputElement).blur();
+              }
+              return;
+            }
+            if (e.ctrlKey || e.metaKey) return;
+            if (!/^\d$/.test(e.key)) e.preventDefault();
+          }}
         />
       </InputWrapper>
       <InputAffix className="p-0">

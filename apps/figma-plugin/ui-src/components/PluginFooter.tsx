@@ -37,7 +37,7 @@ export function PluginFooter({
         : 'Import quota';
 
   return (
-    <footer className="plugin-footer flex shrink-0 items-center justify-center border-t border-stroke-soft-200 bg-bg-white-0 p-4">
+    <footer className="plugin-footer flex h-[var(--plugin-footer-height)] shrink-0 items-center justify-center border-t border-stroke-soft-200 bg-bg-white-0 px-4">
       <div className="flex flex-wrap items-center justify-center gap-1">
         <span className="text-label-xs font-medium text-text-sub-600">{quotaLabel}</span>
         <RiTimeLine className="size-4 shrink-0 text-text-sub-600" aria-hidden />

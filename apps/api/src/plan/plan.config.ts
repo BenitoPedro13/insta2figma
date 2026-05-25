@@ -26,7 +26,7 @@ export function getPlanLimits(
   return {
     jobsPerMonth: env.freeJobsPerMonth,
     maxPosts: env.freeMaxPosts,
-    expandCarouselImages: false,
+    expandCarouselImages: true,
   };
 }
 

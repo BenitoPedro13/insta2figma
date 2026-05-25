@@ -12,6 +12,7 @@ import {
   upsertAfterSuccessfulImport,
   type HistoryEntry,
 } from './lib/historyStorage';
+import { computePreviewEstimates } from './lib/previewEstimates';
 import { ImportScreen, type PostSelectionMode, type PostTimelineOrder } from './screens/ImportScreen';
 
 type ProfilePreview = {
@@ -50,7 +51,7 @@ export function App() {
   const [listStatus, setListStatus] = useState('');
 
   const [username, setUsername] = useState('');
-  const [maxPosts, setMaxPosts] = useState(12);
+  const [maxPosts, setMaxPosts] = useState(0);
   const [selectionMode, setSelectionMode] = useState<PostSelectionMode>('recent');
   const [startIndex, setStartIndex] = useState(1);
   const [postCount, setPostCount] = useState(1);
@@ -68,7 +69,6 @@ export function App() {
   const [jobsRemaining, setJobsRemaining] = useState<number | null>(null);
   const [jobsLimit, setJobsLimit] = useState<number | null>(null);
   const [maxPostsLimit, setMaxPostsLimit] = useState(12);
-  const [allowCarousel, setAllowCarousel] = useState(false);
   const [sessionError, setSessionError] = useState('');
   const [periodEndIso, setPeriodEndIso] = useState<string | null>(null);
 
@@ -119,9 +119,6 @@ export function App() {
               : 12;
           setMaxPostsLimit(mp);
           setMaxPosts((prev) => Math.min(prev, mp));
-          const carousel = q.expandCarouselImages === true;
-          setAllowCarousel(carousel);
-          if (!carousel) setExpandCarouselImages(false);
         }
         const sub = pm.subscription as Record<string, unknown> | undefined;
         if (sub && typeof sub.currentPeriodEnd === 'string') {
@@ -321,12 +318,12 @@ export function App() {
             type: 'profile-preview',
             requestId: reqId,
             username: user,
-            maxPosts,
-            expandCarouselImages,
-            selectionMode,
-            startIndex,
-            postCount,
-            timelineOrder,
+            maxPosts: Math.max(1, maxPostsLimit),
+            expandCarouselImages: false,
+            selectionMode: 'recent',
+            startIndex: 1,
+            postCount: maxPostsLimit,
+            timelineOrder: 'newest_first',
             previewListSize: maxPostsLimit,
           },
         },
@@ -334,17 +331,53 @@ export function App() {
       );
     }, 420);
     return () => window.clearTimeout(timer);
+  }, [importing, username, maxPostsLimit]);
+
+  /** Slider / selection — local estimate only; no Instagram refetch. */
+  useEffect(() => {
+    if (importing || previewLoading) return;
+    const user = String(username ?? '')
+      .trim()
+      .replace(/^@+/, '')
+      .toLowerCase();
+    if (!user || !preview?.username) return;
+    if (user !== preview.username.toLowerCase()) return;
+
+    const next = computePreviewEstimates(preview.postsPreview, {
+      maxPosts,
+      selectionMode,
+      startIndex,
+      postCount,
+      timelineOrder,
+      expandCarouselImages,
+      postsAvailable: preview.postsAvailable,
+    });
+
+    setPreview((prev) => {
+      if (!prev) return prev;
+      if (
+        prev.estimatedImportImages === next.estimatedImportImages &&
+        prev.estimatedPostCovers === next.estimatedPostCovers &&
+        prev.estimatedCarouselExtras === next.estimatedCarouselExtras &&
+        prev.selectionWarning === next.selectionWarning
+      ) {
+        return prev;
+      }
+      return { ...prev, ...next };
+    });
   }, [
-    activeTab,
     importing,
+    previewLoading,
     username,
+    preview?.username,
+    preview?.postsPreview,
+    preview?.postsAvailable,
     maxPosts,
-    expandCarouselImages,
     selectionMode,
     startIndex,
     postCount,
     timelineOrder,
-    maxPostsLimit,
+    expandCarouselImages,
   ]);
 
   const onImport = useCallback(() => {
@@ -360,16 +393,28 @@ export function App() {
       setStatus('Monthly quota used up. Upgrade to Pro.');
       return;
     }
+    if (selectionMode === 'range') {
+      if (postCount < 1) {
+        setStatus('Select a post range on the slider.');
+        return;
+      }
+    } else if (maxPosts < 1) {
+      setStatus('Select how many posts to import on the slider.');
+      return;
+    }
     lastImportUsername.current = user;
     setImporting(true);
     setStatus('Starting import…');
-    const posts = Math.min(maxPostsLimit, Math.max(1, Math.floor(maxPosts)));
+    const posts =
+      selectionMode === 'range'
+        ? Math.min(maxPostsLimit, startIndex + postCount - 1)
+        : Math.min(maxPostsLimit, Math.floor(maxPosts));
     parent.postMessage(
       {
         pluginMessage: {
           type: 'import-profile',
           username: user,
-          maxPosts: posts,
+          maxPosts: Math.max(1, posts),
           expandCarouselImages,
           selectionMode,
           startIndex,
@@ -426,7 +471,6 @@ export function App() {
                 postCount={postCount}
                 timelineOrder={timelineOrder}
                 expandCarouselImages={expandCarouselImages}
-                allowCarousel={allowCarousel}
                 quotaExceeded={quotaExceeded}
                 planTier={planTier}
                 sessionError={sessionError}
