@@ -14,6 +14,8 @@ import {
 import type { HistoryEntry } from "../lib/historyStorage";
 import { ListScreen, type ListTab } from "./ListScreen";
 import { PostCountSlider } from "../components/PostCountSlider";
+import { PostPreviewSkeletonGrid } from "../components/PostPreviewSkeletonGrid";
+import { Skeleton } from "../components/Skeleton";
 import * as FancyButton from "../components/ui/fancy-button";
 import * as Input from "../components/ui/input";
 import * as Button from "../components/ui/button";
@@ -175,10 +177,16 @@ export function ImportScreen({
   const isImportTab = activeTab === "new-import";
 
   const profilePreviewLabel = (() => {
-    if (previewLoading && !preview?.username) return "Checking profile…";
     if (preview?.username) return `@${preview.username}`;
     return "Enter an Instagram to appear here";
   })();
+
+  const showProfileHeaderSkeleton = previewLoading && !preview?.username;
+  const showAvatarSkeleton =
+    showProfileHeaderSkeleton ||
+    Boolean(preview?.username && !preview.profilePicUrlHd);
+  const showPreviewSkeletonGrid =
+    previewLoading && !(preview?.postsPreview && preview.postsPreview.length > 0);
 
   return (
     <div className="new-import-screen flex min-h-0 flex-1 flex-col">
@@ -208,7 +216,7 @@ export function ImportScreen({
                       onChange={(e) => onUsernameChange(e.target.value)}
                       placeholder="@profile"
                       autoComplete="off"
-                      
+                      className="text-paragraph-md"
                     />
                   </Input.Wrapper>
                 </Input.Root>
@@ -276,7 +284,26 @@ export function ImportScreen({
                   onRangeChange={handleRangeSliderChange}
                   disabled={importing}
                 />
-                
+                <div className="new-import-status-slot" aria-live="polite">
+                  <p className="new-import-status new-import-status--visible m-0 text-paragraph-xs text-text-sub-600">
+                    <RiInformationFill
+                      size={16}
+                      className="new-import-status-icon text-text-soft-400"
+                      aria-hidden
+                    />
+                    {profileFound &&
+                    preview?.mediaCount != null &&
+                    Number.isFinite(preview.mediaCount) ? (
+                      <>
+                        This Instagram has{" "}
+                        <span className="font-semibold">{preview.mediaCount}</span>{" "}
+                        {preview.mediaCount === 1 ? "post" : "posts"}
+                      </>
+                    ) : (
+                      "Posts will be imported chronologically"
+                    )}
+                  </p>
+                </div>
               </div>
 
               <div className="new-import-checks">
@@ -352,7 +379,9 @@ export function ImportScreen({
         <div className="new-import-right flex min-h-0 min-w-0 flex-1 flex-col" aria-live="polite">
           <div className="profile-preview profile-preview--header">
             <span className="profile-preview-avatar" aria-hidden>
-              {preview?.profilePicUrlHd ? (
+              {showAvatarSkeleton ? (
+                <Skeleton className="profile-preview-avatar-skeleton" />
+              ) : preview?.profilePicUrlHd ? (
                 <img
                   src={preview.profilePicUrlHd}
                   alt=""
@@ -361,14 +390,18 @@ export function ImportScreen({
               ) : null}
             </span>
             <div className="profile-preview-meta">
-              <p
-                className={cn(
-                  "profile-preview-main",
-                  !preview?.username && "font-normal text-text-sub-600",
-                )}
-              >
-                {profilePreviewLabel}
-              </p>
+              {showProfileHeaderSkeleton ? (
+                <Skeleton className="profile-preview-name-skeleton" />
+              ) : (
+                <p
+                  className={cn(
+                    "profile-preview-main text-paragraph-lg",
+                    !preview?.username && "font-normal text-text-sub-600",
+                  )}
+                >
+                  {profilePreviewLabel}
+                </p>
+              )}
               {preview?.isPrivate ? (
                 <p className="profile-preview-sub">
                   Private account — posts may not be available to import.
@@ -378,11 +411,14 @@ export function ImportScreen({
           </div>
 
           <div className="new-import-right-body flex min-h-0 flex-1 flex-col overflow-hidden">
-            {preview?.postsPreview && preview.postsPreview.length > 0 ? (
+            {showPreviewSkeletonGrid ? (
+              <PostPreviewSkeletonGrid count={maxPostsLimit} />
+            ) : preview?.postsPreview && preview.postsPreview.length > 0 ? (
               <PostPreviewList
                 items={preview.postsPreview}
                 selectedIndices={selectedIndices}
                 onToggleIndex={onTogglePostIndex}
+                thumbsLoading={previewThumbsLoading}
               />
             ) : (
               <div className="new-import-preview-empty flex h-full w-full" aria-hidden />

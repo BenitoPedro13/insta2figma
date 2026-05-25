@@ -6,6 +6,7 @@ import {
   type RefObject,
 } from 'react';
 import { cn } from '../utils/cn';
+import { Skeleton } from './Skeleton';
 
 export type PostPreviewItem = {
   index: number;
@@ -19,6 +20,7 @@ type PostPreviewListProps = {
   items: PostPreviewItem[];
   selectedIndices: number[];
   onToggleIndex: (index: number) => void;
+  thumbsLoading?: boolean;
 };
 
 type SelectionBounds = {
@@ -62,14 +64,17 @@ function PostPreviewTile({
   selected,
   tileRef,
   onToggle,
+  thumbsLoading = false,
 }: {
   item: PostPreviewItem;
   selected: boolean;
   tileRef: (el: HTMLButtonElement | null) => void;
   onToggle: () => void;
+  thumbsLoading?: boolean;
 }) {
   const hasImage =
     typeof item.thumbnailUrl === 'string' && item.thumbnailUrl.length > 0;
+  const showThumbSkeleton = thumbsLoading && !hasImage;
 
   return (
     <button
@@ -86,6 +91,8 @@ function PostPreviewTile({
     >
       {hasImage ? (
         <img src={item.thumbnailUrl!} alt="" className="h-full w-full object-cover" />
+      ) : showThumbSkeleton ? (
+        <Skeleton className="h-full w-full rounded-none" />
       ) : (
         <span className="flex h-full w-full items-center justify-center text-paragraph-xs font-semibold text-text-sub-600">
           {item.isVideo ? '▶' : '#'}
@@ -190,6 +197,7 @@ export function PostPreviewList({
   items,
   selectedIndices,
   onToggleIndex,
+  thumbsLoading = false,
 }: PostPreviewListProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -222,6 +230,7 @@ export function PostPreviewList({
               selected={selectedSet.has(item.index)}
               tileRef={(el) => setTileRef(item.index, el)}
               onToggle={() => onToggleIndex(item.index)}
+              thumbsLoading={thumbsLoading}
             />
           ))}
           {selectionBounds ? (

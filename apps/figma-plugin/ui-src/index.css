@@ -735,18 +735,43 @@ body,
 .profile-preview-main,
 .profile-preview-sub {
   margin: 0;
-  font-size: 11px;
-  line-height: 1.35;
 }
 
 .profile-preview-main {
   color: var(--color-text-strong-950);
-  font-size: 12px;
   font-weight: 500;
 }
 
 .profile-preview-sub {
   color: var(--color-text-sub-600);
+}
+
+.skeleton {
+  background: var(--color-bg-soft-200);
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+.profile-preview-avatar-skeleton {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.profile-preview-name-skeleton {
+  width: 80px;
+  height: 1.125rem;
+  border-radius: 6px;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 .post-preview-scroll {
