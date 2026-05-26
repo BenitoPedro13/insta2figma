@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { RiExpandDiagonalLine } from '@remixicon/react';
 
-const MIN_W = 380;
+const MIN_W = 830;
 const MIN_H = 420;
 const MAX_W = 1200;
 const MAX_H = 900;

@@ -37,7 +37,7 @@ function formatCaught(err: unknown): string {
 
 const UI_SIZE_STORAGE_KEY = 'insta2figma:ui-size:v1';
 const UI_SIZE_DEFAULT = { width: 872, height: 667 };
-const UI_SIZE_MIN = { width: 380, height: 420 };
+const UI_SIZE_MIN = { width: 830, height: 420 };
 const UI_SIZE_MAX = { width: 1200, height: 900 };
 
 function clampUiSize(width: number, height: number): { width: number; height: number } {
