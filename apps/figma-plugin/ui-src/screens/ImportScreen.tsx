@@ -528,6 +528,7 @@ export function ImportScreen({
         open={showProOverlay}
         onClose={onCloseProOverlay}
         onUpgrade={onUpgrade}
+        onOpenExternal={onOpenExternal}
       />
     </div>
   );

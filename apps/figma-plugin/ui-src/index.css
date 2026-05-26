@@ -870,8 +870,42 @@ body,
   box-shadow: var(--shadow-regular-md);
 }
 
-.pro-upgrade-benefits li {
-  line-height: 1.35;
+.pro-upgrade-table {
+  min-width: 0;
+}
+
+.pro-upgrade-plan--featured {
+  border-top-right-radius: 15px;
+  border-bottom-right-radius: 15px;
+}
+
+.pro-upgrade-popular-badge {
+  letter-spacing: 0.04em;
+}
+
+.pro-upgrade-ppp-photo {
+  box-shadow: 0 0 0 2px var(--color-bg-white-0);
+}
+
+@media (max-width: 720px) {
+  .pro-upgrade-table {
+    grid-template-columns: 1fr;
+  }
+
+  .pro-upgrade-labels {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-stroke-soft-200);
+  }
+
+  .pro-upgrade-plan {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-stroke-soft-200);
+  }
+
+  .pro-upgrade-plan--featured {
+    border-bottom: 0;
+    border-radius: 0 0 15px 15px;
+  }
 }
 
 .post-preview-scroll {
