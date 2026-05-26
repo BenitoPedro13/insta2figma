@@ -111,7 +111,7 @@ const PaginationItem = React.forwardRef<HTMLButtonElement, PaginationItemProps>(
       <Component
         ref={forwardedRef}
         className={cn(item({ class: className }), {
-          'text-text-strong-950': current,
+          'bg-bg-weak-50 text-text-strong-950 hover:bg-bg-weak-50': current,
         })}
         {...rest}
       >

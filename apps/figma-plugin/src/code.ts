@@ -282,6 +282,68 @@ function groupAssetsIntoPostRows(assets: SignedImageAsset[]): SignedImageAsset[]
   });
 }
 
+const LAYOUT_COL_WIDTH = 280;
+const LAYOUT_GAP = 16;
+const LAYOUT_ROW_GAP = 24;
+const LAYOUT_GRID_COLS = 3;
+
+type LoadedImageRect = {
+  rect: RectangleNode;
+  height: number;
+};
+
+async function loadImageRect(
+  asset: SignedImageAsset,
+  colWidth: number,
+  label?: string,
+): Promise<LoadedImageRect | null> {
+  try {
+    const bytes = await fetchImageBytes(asset.url);
+    const image = figma.createImage(bytes);
+    const { width: imageWidth, height: imageHeight } = await image.getSizeAsync();
+    if (imageWidth <= 0 || imageHeight <= 0) return null;
+
+    const height = Math.round(colWidth * (imageHeight / imageWidth));
+    const rect = figma.createRectangle();
+    rect.resize(colWidth, height);
+    rect.fills = [
+      { type: 'IMAGE', scaleMode: 'FILL', imageHash: image.hash },
+    ];
+    if (label) rect.name = label;
+    return { rect, height };
+  } catch (e) {
+    console.warn('[Insta2Figma] skip URL', asset.url.slice(0, 80), e);
+    return null;
+  }
+}
+
+/** Top-align numa linha; retorna a altura da linha (maior retângulo). */
+function placeTopAlignedRow(
+  items: LoadedImageRect[],
+  y: number,
+  colWidth: number,
+  gap: number,
+): number {
+  let rowHeight = 0;
+  for (let i = 0; i < items.length; i++) {
+    const { rect, height } = items[i];
+    rect.x = i * (colWidth + gap);
+    rect.y = y;
+    rowHeight = Math.max(rowHeight, height);
+  }
+  return rowHeight;
+}
+
+function appendLoadedRects(
+  items: LoadedImageRect[],
+  nodes: SceneNode[],
+): void {
+  for (const { rect } of items) {
+    figma.currentPage.appendChild(rect);
+    nodes.push(rect);
+  }
+}
+
 /** Coloca imagens no canvas. Carrossel expandido → filas por post; senão → grid 3 colunas. */
 async function placeSignedImages(
   assets: SignedImageAsset[],
@@ -291,13 +353,9 @@ async function placeSignedImages(
     expandCarouselImages?: boolean;
   },
 ): Promise<void> {
-  const size = 280;
-  const gap = 16;
-  const rowGap = 24;
-  const gridCols = 3;
-  let y = 0;
   const nodes: SceneNode[] = [];
   let ok = 0;
+  let imageIndex = 0;
   const usernameNorm = String(opts?.username ?? '')
     .trim()
     .replace(/^@+/, '')
@@ -306,47 +364,64 @@ async function placeSignedImages(
   const layoutRows = usePostRows
     ? groupAssetsIntoPostRows(assets)
     : [assets];
-  let gridIndex = 0;
 
-  for (const row of layoutRows) {
-    let rowX = 0;
-    let placedInRow = 0;
-    for (const asset of row) {
-      try {
-        const bytes = await fetchImageBytes(asset.url);
-        const image = figma.createImage(bytes);
-        const rect = figma.createRectangle();
-        rect.resize(size, size);
-        rect.fills = [
-          { type: 'IMAGE', scaleMode: 'FILL', imageHash: image.hash },
-        ];
+  const labelForNext = (): string | undefined => {
+    if (!usernameNorm) return undefined;
+    imageIndex += 1;
+    return `@${usernameNorm} - #${imageIndex}`;
+  };
+
+  if (usePostRows) {
+    let y = 0;
+    for (const row of layoutRows) {
+      const loaded: LoadedImageRect[] = [];
+      for (const asset of row) {
+        const item = await loadImageRect(
+          asset,
+          LAYOUT_COL_WIDTH,
+          labelForNext(),
+        );
+        if (item) {
+          loaded.push(item);
+          ok += 1;
+        }
+      }
+      if (loaded.length === 0) continue;
+
+      const rowHeight = placeTopAlignedRow(
+        loaded,
+        y,
+        LAYOUT_COL_WIDTH,
+        LAYOUT_GAP,
+      );
+      appendLoadedRects(loaded, nodes);
+      y += rowHeight + LAYOUT_ROW_GAP;
+    }
+  } else {
+    const loaded: LoadedImageRect[] = [];
+    for (const asset of assets) {
+      const item = await loadImageRect(
+        asset,
+        LAYOUT_COL_WIDTH,
+        labelForNext(),
+      );
+      if (item) {
+        loaded.push(item);
         ok += 1;
-        if (usernameNorm) {
-          rect.name = `@${usernameNorm} - #${ok}`;
-        }
-
-        if (usePostRows) {
-          rect.x = rowX;
-          rect.y = y;
-          rowX += size + gap;
-        } else {
-          const col = gridIndex % gridCols;
-          const gridRow = Math.floor(gridIndex / gridCols);
-          rect.x = col * (size + gap);
-          rect.y = gridRow * (size + gap);
-          gridIndex += 1;
-        }
-
-        figma.currentPage.appendChild(rect);
-        nodes.push(rect);
-        placedInRow += 1;
-      } catch (e) {
-        console.warn('[Insta2Figma] skip URL', asset.url.slice(0, 80), e);
       }
     }
 
-    if (usePostRows && placedInRow > 0) {
-      y += size + rowGap;
+    let y = 0;
+    for (let i = 0; i < loaded.length; i += LAYOUT_GRID_COLS) {
+      const row = loaded.slice(i, i + LAYOUT_GRID_COLS);
+      const rowHeight = placeTopAlignedRow(
+        row,
+        y,
+        LAYOUT_COL_WIDTH,
+        LAYOUT_GAP,
+      );
+      appendLoadedRects(row, nodes);
+      y += rowHeight + LAYOUT_ROW_GAP;
     }
   }
 

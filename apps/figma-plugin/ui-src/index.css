@@ -70,6 +70,7 @@ body,
 
 /* Hachura diagonal única -60° (linhas 1px stroke-soft-200, passo 8px) */
 .plugin-sidebar-hatch {
+  position: relative;
   flex-shrink: 0;
   width: 100%;
   --hatch-line: var(--color-stroke-soft-200);
@@ -81,6 +82,28 @@ body,
     transparent 1px,
     transparent 8px
   );
+}
+
+/* 8×8 — mesmo tamanho das vértices do preview; fill branco, stroke soft-200 */
+.plugin-layout-vertex {
+  position: absolute;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  background: var(--color-bg-white-0);
+  border: 1px solid var(--color-stroke-soft-200);
+  pointer-events: none;
+}
+
+.plugin-layout-vertex--header-tabs {
+  right: -4px;
+  bottom: -4px;
+}
+
+.plugin-layout-vertex--footer {
+  right: -4px;
+  top: -4px;
 }
 
 .plugin-sidebar-hatch--top {
@@ -958,7 +981,7 @@ body,
   position: absolute;
   width: 8px;
   height: 8px;
-  background: #fff;
+  background: var(--color-bg-white-0);
   border: 1px solid #0d99fe;
   box-sizing: border-box;
 }

@@ -93,7 +93,8 @@ type ImportScreenProps = {
   onTimelineOrderChange: (v: PostTimelineOrder) => void;
   onExpandCarouselChange: (v: boolean) => void;
   onImport: () => void;
-  onUpgrade: () => void;
+  onShowUpgradeOverlay: () => void;
+  onBillingCheckout: () => void;
   onManage: () => void;
   onOpenExternal: (url: string) => void;
 };
@@ -146,7 +147,8 @@ export function ImportScreen({
   onTimelineOrderChange,
   onExpandCarouselChange,
   onImport,
-  onUpgrade,
+  onShowUpgradeOverlay,
+  onBillingCheckout,
   onManage,
   onOpenExternal,
 }: ImportScreenProps) {
@@ -242,7 +244,7 @@ export function ImportScreen({
           <PanelHeader
             planTier={planTier}
             sessionError={sessionError}
-            onUpgrade={onUpgrade}
+            onUpgrade={onShowUpgradeOverlay}
             onManage={onManage}
             onOpenExternal={onOpenExternal}
           />
@@ -405,7 +407,7 @@ export function ImportScreen({
                     mode="stroke"
                     size="medium"
                     className="w-full"
-                    onClick={onUpgrade}
+                    onClick={onShowUpgradeOverlay}
                   >
                     Upgrade to Pro
                   </Button.Root>
@@ -527,7 +529,7 @@ export function ImportScreen({
       <ProUpgradeOverlay
         open={showProOverlay}
         onClose={onCloseProOverlay}
-        onUpgrade={onUpgrade}
+        onUpgrade={onBillingCheckout}
         onOpenExternal={onOpenExternal}
       />
     </div>

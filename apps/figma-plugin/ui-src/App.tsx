@@ -436,8 +436,12 @@ export function App() {
     setPagePostsCache({});
   }, []);
 
-  const onUpgrade = useCallback(() => {
+  const onBillingCheckout = useCallback(() => {
     parent.postMessage({ pluginMessage: { type: 'billing-checkout' } }, '*');
+  }, []);
+
+  const openUpgradeOverlay = useCallback(() => {
+    setShowProOverlay(true);
   }, []);
 
   const onManage = useCallback(() => {
@@ -795,7 +799,8 @@ export function App() {
                 onTimelineOrderChange={setTimelineOrder}
                 onExpandCarouselChange={setExpandCarouselImages}
                 onImport={onImport}
-                onUpgrade={onUpgrade}
+                onShowUpgradeOverlay={openUpgradeOverlay}
+                onBillingCheckout={onBillingCheckout}
                 onManage={onManage}
                 onOpenExternal={onOpenExternal}
               />
@@ -806,7 +811,7 @@ export function App() {
             imagesRemaining={imagesRemaining}
             imagesLimit={imagesLimit}
             periodEndIso={periodEndIso}
-            onUpgrade={onUpgrade}
+            onUpgrade={openUpgradeOverlay}
           />
         </div>
       </div>
