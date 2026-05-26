@@ -842,6 +842,7 @@ async function previewProfileViaApi(
   profilePicDataUrl: string | null;
   mediaCount: number;
   isPrivate: boolean;
+  imageCount?: number;
   estimatedImportImages: number;
   estimatedPostCovers: number;
   estimatedCarouselExtras: number;
@@ -885,6 +886,10 @@ async function previewProfileViaApi(
         ? data.mediaCount
         : 0,
     isPrivate: data.isPrivate === true,
+    imageCount:
+      typeof data.imageCount === 'number' && Number.isFinite(data.imageCount)
+        ? data.imageCount
+        : undefined,
     estimatedImportImages:
       typeof data.estimatedImportImages === 'number' &&
       Number.isFinite(data.estimatedImportImages)
@@ -932,7 +937,11 @@ async function previewProfileViaApi(
     nextPreviewCursor:
       typeof data.nextPreviewCursor === 'string' ? data.nextPreviewCursor : null,
     instagramUserId:
-      typeof data.instagramUserId === 'string' ? data.instagramUserId : null,
+      typeof data.instagramUserId === 'string'
+        ? data.instagramUserId
+        : typeof data.instagramUserId === 'number' && Number.isFinite(data.instagramUserId)
+          ? String(Math.floor(data.instagramUserId))
+          : null,
   };
 }
 
@@ -1130,6 +1139,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         username: preview.username,
         mediaCount: preview.mediaCount,
         isPrivate: preview.isPrivate,
+        imageCount: preview.imageCount,
         estimatedImportImages: preview.estimatedImportImages,
         estimatedPostCovers: preview.estimatedPostCovers,
         estimatedCarouselExtras: preview.estimatedCarouselExtras,

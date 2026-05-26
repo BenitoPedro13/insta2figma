@@ -156,7 +156,7 @@ function useSelectionBounds(
       top: minTop,
       width: maxRight - minLeft,
       height: maxBottom - minTop,
-      count: selectedElements.length,
+      count: selectedIndices.length,
     });
   }, [gridRef, tileRefs, items, selectedIndices.join(',')]);
 

@@ -1,4 +1,4 @@
-import { RiCloseLine } from '@remixicon/react';
+import { RiCloseLine, RiSearchLine, RiStarFill, RiStarLine } from '@remixicon/react';
 import { HistoryAvatar } from '../components/HistoryAvatar';
 import type { HistoryEntry } from '../lib/historyStorage';
 
@@ -46,7 +46,7 @@ export function ListScreen({
     <div className="list-screen list-screen--embedded flex min-h-0 flex-1 flex-col">
       <div className="list-search-wrap">
         <span className="list-search-icon" aria-hidden>
-          ⌕
+          <RiSearchLine size={18} />
         </span>
         <input
           className="list-search-input"
@@ -90,7 +90,11 @@ export function ListScreen({
                       aria-label={row.favorite ? 'Remove favorite' : 'Add favorite'}
                       aria-pressed={row.favorite}
                     >
-                      {row.favorite ? '★' : '☆'}
+                      {row.favorite ? (
+                        <RiStarFill size={18} aria-hidden />
+                      ) : (
+                        <RiStarLine size={18} aria-hidden />
+                      )}
                     </button>
                     <button
                       type="button"

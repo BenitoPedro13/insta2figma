@@ -1,5 +1,5 @@
 import { RiComputerLine, RiMoonLine, RiSunLine } from '@remixicon/react';
-import { cn } from '../utils/cn';
+import * as SegmentedControl from './ui/segmented-control';
 import { useThemePreference, type ThemePreference } from '../lib/themePreference';
 
 const OPTIONS: { id: ThemePreference; label: string; icon: typeof RiSunLine }[] = [
@@ -12,29 +12,18 @@ export function ThemeSegmentedControl() {
   const { preference, setPreference } = useThemePreference();
 
   return (
-    <div
-      className="theme-segmented-control flex gap-1 rounded-10 bg-bg-weak-50 p-1"
-      role="group"
+    <SegmentedControl.Root
+      value={preference}
+      onValueChange={(value) => setPreference(value as ThemePreference)}
       aria-label="Theme"
     >
-      {OPTIONS.map(({ id, label, icon: Icon }) => {
-        const active = preference === id;
-        return (
-          <button
-            key={id}
-            type="button"
-            className={cn(
-              'theme-segmented-control-item flex flex-1 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-1 transition',
-              active && 'theme-segmented-control-item--active bg-bg-white-0 shadow-toggle-switch',
-            )}
-            aria-label={label}
-            aria-pressed={active}
-            onClick={() => setPreference(id)}
-          >
-            <Icon className="size-5 text-text-sub-600" aria-hidden />
-          </button>
-        );
-      })}
-    </div>
+      <SegmentedControl.List>
+        {OPTIONS.map(({ id, label, icon: Icon }) => (
+          <SegmentedControl.Trigger key={id} value={id} aria-label={label}>
+            <Icon className="size-5" aria-hidden />
+          </SegmentedControl.Trigger>
+        ))}
+      </SegmentedControl.List>
+    </SegmentedControl.Root>
   );
 }

@@ -35,11 +35,54 @@ const MAX_AVATAR_BYTES = 900_000;
 const MAX_POST_THUMB_BYTES = 520_000;
 const PREVIEW_CACHE_TTL_MS = 45_000;
 const PREVIEW_THUMB_CONCURRENCY = 4;
-const IG_GRAPHQL_QUERY_ID = '17888483320059182';
 const FREE_MAX_PREVIEW_PAGE = 3;
 
 function normalizeUsername(raw: string): string {
   return raw.trim().replace(/^@+/u, '').toLowerCase();
+}
+
+function normalizeInstagramUserId(raw: unknown): string | null {
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    return raw.trim();
+  }
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return String(Math.floor(raw));
+  }
+  return null;
+}
+
+function isFeedMaxId(value: string): boolean {
+  return /^\d+_\d+$/.test(value.trim());
+}
+
+function estimateProfileImageCount(
+  parsedPosts: InstagramPostSummaryItem[],
+  mediaCount: number,
+  timelineOrder: 'newest_first' | 'oldest_first',
+): number {
+  if (mediaCount <= 0 || parsedPosts.length === 0) return 0;
+
+  const selection = resolveScrapeSelection(
+    {
+      selectionMode: 'recent',
+      startIndex: 1,
+      postCount: parsedPosts.length,
+      timelineOrder,
+      maxPosts: mediaCount,
+    },
+    { defaultMaxPosts: mediaCount },
+  );
+  const sampleImages = estimateImportImages(
+    parsedPosts,
+    selection,
+    true,
+  ).estimatedImportImages;
+
+  if (parsedPosts.length >= mediaCount) return sampleImages;
+  return Math.max(
+    sampleImages,
+    Math.round(sampleImages * (mediaCount / parsedPosts.length)),
+  );
 }
 
 function toRecord(v: unknown): Record<string, unknown> | null {
@@ -67,6 +110,7 @@ type CachedPreviewPayload = {
 type ProfilePreviewResponse = Omit<CachedPreviewPayload, 'parsedPosts'> & {
   previewPage: number;
   previewPageSize: number;
+  imageCount: number;
   estimatedImportImages: number;
   estimatedPostCovers: number;
   estimatedCarouselExtras: number;
@@ -166,76 +210,92 @@ export class InstagramPreviewService {
       defaultMaxPosts: opts?.maxPosts ?? 12,
     });
     const timelineOrder = selection.timelineOrder;
+    const fetchCount = Math.min(
+      50,
+      Math.max(PREVIEW_PAGE_SIZE, selection.fetchCount),
+    );
 
     if (previewPage > 1) {
-      const after = String(opts?.after ?? '').trim();
-      const userId = String(opts?.userId ?? '').trim();
+      const { base } = await this.getOrFetchPreviewBase(
+        username,
+        fetchCount,
+        timelineOrder,
+      );
+      const start = (previewPage - 1) * PREVIEW_PAGE_SIZE;
+      const cachedSlice = base.parsedPosts.slice(start, start + PREVIEW_PAGE_SIZE);
+
+      if (cachedSlice.length > 0) {
+        const hasMoreInCache =
+          base.parsedPosts.length > start + cachedSlice.length;
+        const hasNextPreviewPage =
+          hasMoreInCache || base.hasNextPreviewPage;
+        const nextPreviewCursor = hasMoreInCache
+          ? null
+          : base.nextPreviewCursor;
+
+        return this.buildPaginatedPreviewResponse({
+          username: base.username,
+          instagramUserId: base.instagramUserId,
+          previewPage,
+          timelineOrder,
+          selection,
+          posts: cachedSlice,
+          previewTotalPages: base.previewTotalPages,
+          hasNextPreviewPage,
+          nextPreviewCursor,
+        });
+      }
+
+      const requestedAfter = String(opts?.after ?? '').trim();
+      const after =
+        (isFeedMaxId(requestedAfter) ? requestedAfter : '') ||
+        base.nextPreviewCursor ||
+        '';
+      const userId =
+        normalizeInstagramUserId(opts?.userId) ?? base.instagramUserId;
       if (!after || !userId) {
         throw new BadRequestException(
           'Paginação do preview requer userId e after.',
         );
       }
 
-      const pagePosts = await this.fetchTimelinePageByCursor(
+      const pagePosts = await this.fetchTimelinePageByFeedMaxId(
         userId,
         after,
         PREVIEW_PAGE_SIZE,
       );
-      const postsPreviewRaw = buildIndexedPostPreview(
+      this.appendPostsToCache(
+        this.buildPreviewCacheKey(username, fetchCount, timelineOrder),
         pagePosts.posts,
-        timelineOrder,
-        { indexStart: (previewPage - 1) * PREVIEW_PAGE_SIZE + 1 },
+        pagePosts.nextMaxId,
+        pagePosts.hasNextPage,
       );
-      const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
-
-      return {
-        username,
+      return this.buildPaginatedPreviewResponse({
+        username: base.username,
         instagramUserId: userId,
-        profilePicUrlHd: null,
-        profilePicDataUrl: null,
-        mediaCount: 0,
-        isPrivate: false,
-        postsPreview,
-        postsAvailable: postsPreview.length,
-        timelineOrder,
-        hasNextPreviewPage: pagePosts.hasNextPage,
-        nextPreviewCursor: pagePosts.endCursor,
-        previewTotalPages: 0,
         previewPage,
-        previewPageSize: PREVIEW_PAGE_SIZE,
-        estimatedImportImages: 0,
-        estimatedPostCovers: 0,
-        estimatedCarouselExtras: 0,
-        selectionMode: selection.mode,
-        startIndex: selection.startIndex,
-        postCount: selection.postCount,
-        selectionEndIndex: endSelectionIndex(selection),
-        selectionAvailable: true,
-      };
+        timelineOrder,
+        selection,
+        posts: pagePosts.posts,
+        previewTotalPages: base.previewTotalPages,
+        hasNextPreviewPage: pagePosts.hasNextPage,
+        nextPreviewCursor: pagePosts.nextMaxId,
+      });
     }
 
-    const fetchCount = Math.min(
-      50,
-      Math.max(PREVIEW_PAGE_SIZE, selection.fetchCount),
-    );
-    const cacheKey = JSON.stringify({
+    const { base } = await this.getOrFetchPreviewBase(
       username,
       fetchCount,
       timelineOrder,
-    });
-
-    let base = this.readCache(cacheKey);
-    if (!base) {
-      base = await this.fetchInstagramPreviewBase(
-        username,
-        fetchCount,
-        timelineOrder,
-      );
-      this.writeCache(cacheKey, base);
-    }
+    );
 
     const expand = opts?.expandCarouselImages === true;
     const estimate = estimateImportImages(base.parsedPosts, selection, expand);
+    const imageCount = estimateProfileImageCount(
+      base.parsedPosts,
+      base.mediaCount,
+      timelineOrder,
+    );
 
     const selectionEndIndex = endSelectionIndex(selection);
     const selectionAvailable = selectionEndIndex <= base.postsAvailable;
@@ -252,13 +312,15 @@ export class InstagramPreviewService {
       mediaCount: base.mediaCount,
       isPrivate: base.isPrivate,
       postsPreview: base.postsPreview,
-      postsAvailable: base.postsAvailable,
+      postsAvailable: base.parsedPosts.length,
       timelineOrder: base.timelineOrder,
-      hasNextPreviewPage: base.hasNextPreviewPage,
+      hasNextPreviewPage:
+        base.parsedPosts.length > PREVIEW_PAGE_SIZE || base.hasNextPreviewPage,
       nextPreviewCursor: base.nextPreviewCursor,
       previewTotalPages: base.previewTotalPages,
       previewPage: 1,
       previewPageSize: PREVIEW_PAGE_SIZE,
+      imageCount,
       ...estimate,
       selectionMode: selection.mode,
       startIndex: selection.startIndex,
@@ -266,6 +328,77 @@ export class InstagramPreviewService {
       selectionEndIndex,
       selectionAvailable,
       ...(selectionWarning ? { selectionWarning } : {}),
+    };
+  }
+
+  private buildPreviewCacheKey(
+    username: string,
+    fetchCount: number,
+    timelineOrder: 'newest_first' | 'oldest_first',
+  ): string {
+    return JSON.stringify({ username, fetchCount, timelineOrder });
+  }
+
+  private async getOrFetchPreviewBase(
+    username: string,
+    fetchCount: number,
+    timelineOrder: 'newest_first' | 'oldest_first',
+  ): Promise<{ base: CachedPreviewPayload; cacheKey: string }> {
+    const cacheKey = this.buildPreviewCacheKey(username, fetchCount, timelineOrder);
+    let base = this.readCache(cacheKey);
+    if (!base) {
+      base = await this.fetchInstagramPreviewBase(
+        username,
+        fetchCount,
+        timelineOrder,
+      );
+      this.writeCache(cacheKey, base);
+    }
+    return { base, cacheKey };
+  }
+
+  private async buildPaginatedPreviewResponse(input: {
+    username: string;
+    instagramUserId: string | null;
+    previewPage: number;
+    timelineOrder: 'newest_first' | 'oldest_first';
+    selection: ReturnType<typeof resolveScrapeSelection>;
+    posts: TimelinePostItem[];
+    previewTotalPages: number;
+    hasNextPreviewPage: boolean;
+    nextPreviewCursor: string | null;
+  }): Promise<ProfilePreviewResponse> {
+    const postsPreviewRaw = buildIndexedPostPreview(
+      input.posts,
+      input.timelineOrder,
+      { indexStart: (input.previewPage - 1) * PREVIEW_PAGE_SIZE + 1 },
+    );
+    const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
+
+    return {
+      username: input.username,
+      instagramUserId: input.instagramUserId,
+      profilePicUrlHd: null,
+      profilePicDataUrl: null,
+      mediaCount: 0,
+      isPrivate: false,
+      postsPreview,
+      postsAvailable: postsPreview.length,
+      timelineOrder: input.timelineOrder,
+      hasNextPreviewPage: input.hasNextPreviewPage,
+      nextPreviewCursor: input.nextPreviewCursor,
+      previewTotalPages: input.previewTotalPages,
+      previewPage: input.previewPage,
+      previewPageSize: PREVIEW_PAGE_SIZE,
+      imageCount: 0,
+      estimatedImportImages: 0,
+      estimatedPostCovers: 0,
+      estimatedCarouselExtras: 0,
+      selectionMode: input.selection.mode,
+      startIndex: input.selection.startIndex,
+      postCount: input.selection.postCount,
+      selectionEndIndex: endSelectionIndex(input.selection),
+      selectionAvailable: true,
     };
   }
 
@@ -344,27 +477,36 @@ export class InstagramPreviewService {
           ? user.profile_pic_url
           : null;
 
-    const parsedPosts = parseTimelineSampleFromUserNode(
-      user,
-      Math.min(fetchCount, PREVIEW_PAGE_SIZE),
-    );
-    const postsPreviewRaw = buildIndexedPostPreview(parsedPosts, timelineOrder, {
+    const parsedPosts = parseTimelineSampleFromUserNode(user, fetchCount);
+    const pageOnePosts = parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
+    const postsPreviewRaw = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
       indexStart: 1,
     });
     const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
 
     const pageInfo = toRecord(edge?.page_info);
-    const hasNextPreviewPage = pageInfo?.has_next_page === true;
-    const nextPreviewCursor =
-      typeof pageInfo?.end_cursor === 'string' && pageInfo.end_cursor.length > 0
-        ? pageInfo.end_cursor
-        : null;
-    const instagramUserId =
-      typeof user.id === 'string' && user.id.length > 0 ? user.id : null;
+    const hasNextFromProfile = pageInfo?.has_next_page === true;
+    const instagramUserId = normalizeInstagramUserId(user.id);
     const previewTotalPages = Math.max(
       1,
       Math.ceil(mediaCount / PREVIEW_PAGE_SIZE),
     );
+
+    let nextPreviewCursor: string | null = null;
+    let hasNextPreviewPage = parsedPosts.length > PREVIEW_PAGE_SIZE || hasNextFromProfile;
+    if (instagramUserId && hasNextFromProfile) {
+      try {
+        const feedHead = await this.fetchTimelinePageByFeedMaxId(
+          instagramUserId,
+          undefined,
+          PREVIEW_PAGE_SIZE,
+        );
+        nextPreviewCursor = feedHead.nextMaxId;
+        hasNextPreviewPage = Boolean(nextPreviewCursor) || feedHead.hasNextPage;
+      } catch {
+        nextPreviewCursor = null;
+      }
+    }
 
     let profilePicDataUrl: string | null = null;
     if (hd) {
@@ -408,30 +550,95 @@ export class InstagramPreviewService {
     };
   }
 
-  private async fetchTimelinePageByCursor(
+  private appendPostsToCache(
+    cacheKey: string,
+    posts: TimelinePostItem[],
+    nextMaxId: string | null,
+    hasNextPage: boolean,
+  ): void {
+    const hit = this.previewCache.get(cacheKey);
+    if (!hit || posts.length === 0) return;
+    hit.payload.parsedPosts = [...hit.payload.parsedPosts, ...posts];
+    hit.payload.nextPreviewCursor = nextMaxId;
+    hit.payload.hasNextPreviewPage =
+      hasNextPage ||
+      hit.payload.parsedPosts.length < hit.payload.mediaCount;
+  }
+
+  private parseFeedUserItems(
+    itemsRaw: unknown,
+    maxPosts: number,
+  ): TimelinePostItem[] {
+    if (!Array.isArray(itemsRaw)) return [];
+    const out: TimelinePostItem[] = [];
+    for (const raw of itemsRaw) {
+      const item = toRecord(raw);
+      if (!item) continue;
+      const shortcode =
+        typeof item.code === 'string' && item.code.length > 0
+          ? item.code
+          : null;
+      if (!shortcode) continue;
+
+      let thumbnailUrl: string | null = null;
+      const imageVersions = toRecord(item.image_versions2);
+      const candidates = imageVersions?.candidates;
+      if (Array.isArray(candidates)) {
+        for (const candidateRaw of candidates) {
+          const candidate = toRecord(candidateRaw);
+          const url = candidate?.url;
+          if (typeof url === 'string' && url.length > 0) {
+            thumbnailUrl = url;
+            break;
+          }
+        }
+      }
+      if (
+        !thumbnailUrl &&
+        typeof item.display_uri === 'string' &&
+        item.display_uri.length > 0
+      ) {
+        thumbnailUrl = item.display_uri;
+      }
+
+      const mediaType = item.media_type;
+      const isVideo = mediaType === 2;
+
+      const parsed: TimelinePostItem = {
+        shortcode,
+        thumbnailUrl,
+        isVideo,
+      };
+      out.push(parsed);
+      if (out.length >= maxPosts) break;
+    }
+    return out;
+  }
+
+  private async fetchTimelinePageByFeedMaxId(
     userId: string,
-    after: string,
-    first: number,
+    maxId: string | undefined,
+    count: number,
   ): Promise<{
     posts: TimelinePostItem[];
     hasNextPage: boolean;
-    endCursor: string | null;
+    nextMaxId: string | null;
   }> {
-    const variables = JSON.stringify({
-      id: userId,
-      first,
-      after,
+    const safeCount = Math.min(50, Math.max(1, count));
+    const maxIdTrimmed = String(maxId ?? '').trim();
+    const qs = new URLSearchParams({
+      count: String(safeCount),
     });
-    const url = `https://www.instagram.com/graphql/query/?query_id=${IG_GRAPHQL_QUERY_ID}&variables=${encodeURIComponent(variables)}`;
+    if (maxIdTrimmed) {
+      qs.set('max_id', maxIdTrimmed);
+    }
+    const url = `https://i.instagram.com/api/v1/feed/user/${encodeURIComponent(userId)}/?${qs.toString()}`;
 
     let res: Response;
     try {
       res = await fetch(url, {
         method: 'GET',
-        headers: {
-          ...IG_HEADERS,
-          'X-Requested-With': 'XMLHttpRequest',
-        },
+        headers: IG_HEADERS,
         signal: AbortSignal.timeout(25_000),
       });
     } catch {
@@ -453,23 +660,23 @@ export class InstagramPreviewService {
 
     const body = (await res.json().catch(() => null)) as unknown;
     const envelope = toRecord(body);
-    const data = toRecord(envelope?.data);
-    const user = toRecord(data?.user);
-    if (!user) {
+    const items = envelope?.items;
+    const posts = this.parseFeedUserItems(items, safeCount);
+    if (posts.length === 0) {
       throw new ServiceUnavailableException(
         'Resposta de paginação do Instagram inválida.',
       );
     }
 
-    const posts = parseTimelineSampleFromUserNode(user, first);
-    const edge = toRecord(user.edge_owner_to_timeline_media);
-    const pageInfo = toRecord(edge?.page_info);
-    const hasNextPage = pageInfo?.has_next_page === true;
-    const endCursor =
-      typeof pageInfo?.end_cursor === 'string' && pageInfo.end_cursor.length > 0
-        ? pageInfo.end_cursor
-        : null;
+    const nextMaxIdRaw = envelope?.next_max_id;
+    const nextMaxId =
+      (typeof nextMaxIdRaw === 'string' && nextMaxIdRaw.length > 0
+        ? nextMaxIdRaw
+        : typeof nextMaxIdRaw === 'number' && Number.isFinite(nextMaxIdRaw)
+          ? String(nextMaxIdRaw)
+          : null);
+    const hasNextPage = envelope?.more_available === true;
 
-    return { posts, hasNextPage, endCursor };
+    return { posts, hasNextPage, nextMaxId };
   }
 }

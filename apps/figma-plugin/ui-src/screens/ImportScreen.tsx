@@ -1,8 +1,10 @@
 import { useCallback, useEffect, type FormEvent } from "react";
 import {
   RiCheckLine,
+  RiImageLine,
   RiInformationFill,
   RiInstagramFill,
+  RiLayoutGridLine,
   RiLoader4Line,
 } from "@remixicon/react";
 import { PanelHeader } from "../components/PanelHeader";
@@ -15,6 +17,7 @@ import type { HistoryEntry } from "../lib/historyStorage";
 import { ListScreen, type ListTab } from "./ListScreen";
 import { PostCountSlider } from "../components/PostCountSlider";
 import { PostPreviewSkeletonGrid } from "../components/PostPreviewSkeletonGrid";
+import { ProfilePreviewMorseSkeleton } from "../components/ProfilePreviewMorseSkeleton";
 import { Skeleton } from "../components/Skeleton";
 import * as FancyButton from "../components/ui/fancy-button";
 import * as Input from "../components/ui/input";
@@ -59,6 +62,7 @@ type ImportScreenProps = {
   preview: {
     username: string;
     mediaCount: number;
+    imageCount?: number;
     isPrivate: boolean;
     profilePicUrlHd?: string;
     estimatedImportImages: number;
@@ -204,6 +208,8 @@ export function ImportScreen({
   })();
 
   const showProfileHeaderSkeleton = previewLoading && !preview?.username;
+  const showProfileStatsSkeleton =
+    Boolean(trimmedUsername) && previewLoading && !preview?.username;
   const showAvatarSkeleton =
     showProfileHeaderSkeleton ||
     Boolean(preview?.username && !preview.profilePicUrlHd);
@@ -212,6 +218,11 @@ export function ImportScreen({
     previewPageLoading;
   const maxAccessiblePreviewPage =
     planTier === "free" ? FREE_MAX_PREVIEW_PAGE : previewTotalPages;
+
+  const formatProfileStat = (value: number | undefined) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? value.toLocaleString("en-US")
+      : "0";
 
   return (
     <div className="new-import-screen flex min-h-0 flex-1 flex-col">
@@ -409,36 +420,69 @@ export function ImportScreen({
 
         <div className="new-import-right flex min-h-0 min-w-0 flex-1 flex-col" aria-live="polite">
           <div className="profile-preview profile-preview--header">
-            <span className="profile-preview-avatar" aria-hidden>
-              {showAvatarSkeleton ? (
-                <Skeleton className="profile-preview-avatar-skeleton" />
-              ) : preview?.profilePicUrlHd ? (
-                <img
-                  src={preview.profilePicUrlHd}
-                  alt=""
-                  className="profile-preview-avatar-img"
-                />
-              ) : null}
-            </span>
-            <div className="profile-preview-meta">
-              {showProfileHeaderSkeleton ? (
-                <Skeleton className="profile-preview-name-skeleton" />
-              ) : (
-                <p
-                  className={cn(
-                    "profile-preview-main text-paragraph-lg",
-                    !preview?.username && "font-normal text-text-sub-600",
-                  )}
-                >
-                  {profilePreviewLabel}
-                </p>
-              )}
-              {preview?.isPrivate ? (
-                <p className="profile-preview-sub">
-                  Private account — posts may not be available to import.
-                </p>
-              ) : null}
+            <div className="profile-preview-identity flex min-w-0 flex-1 items-center gap-3">
+              <span className="profile-preview-avatar" aria-hidden>
+                {showAvatarSkeleton ? (
+                  <Skeleton className="profile-preview-avatar-skeleton" />
+                ) : preview?.profilePicUrlHd ? (
+                  <img
+                    src={preview.profilePicUrlHd}
+                    alt=""
+                    className="profile-preview-avatar-img"
+                  />
+                ) : null}
+              </span>
+              <div className="profile-preview-meta min-w-0">
+                {showProfileHeaderSkeleton ? (
+                  <Skeleton className="profile-preview-name-skeleton" />
+                ) : (
+                  <p
+                    className={cn(
+                      "profile-preview-main text-paragraph-lg",
+                      !preview?.username && "font-normal text-text-sub-600",
+                    )}
+                  >
+                    {profilePreviewLabel}
+                  </p>
+                )}
+                {preview?.isPrivate ? (
+                  <p className="profile-preview-sub">
+                    Private account — posts may not be available to import.
+                  </p>
+                ) : null}
+              </div>
             </div>
+
+            {trimmedUsername ? (
+              <div className="profile-preview-stats flex shrink-0 items-center gap-2">
+                <div className="profile-preview-stat flex items-center gap-1">
+                  <RiLayoutGridLine
+                    className="size-4 shrink-0 text-text-sub-600"
+                    aria-hidden
+                  />
+                  {showProfileStatsSkeleton ? (
+                    <ProfilePreviewMorseSkeleton compact />
+                  ) : (
+                    <span className="text-label-sm font-medium tabular-nums text-text-strong-950">
+                      {formatProfileStat(preview?.mediaCount)}
+                    </span>
+                  )}
+                </div>
+                <div className="profile-preview-stat flex items-center gap-1">
+                  <RiImageLine
+                    className="size-4 shrink-0 text-text-sub-600"
+                    aria-hidden
+                  />
+                  {showProfileStatsSkeleton ? (
+                    <ProfilePreviewMorseSkeleton compact />
+                  ) : (
+                    <span className="text-label-sm font-medium tabular-nums text-text-strong-950">
+                      {formatProfileStat(preview?.imageCount ?? preview?.mediaCount)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="new-import-right-body flex min-h-0 flex-1 flex-col overflow-hidden">
