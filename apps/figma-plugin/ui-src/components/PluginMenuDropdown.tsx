@@ -86,7 +86,7 @@ export function PluginMenuDropdown({
           className="w-full"
           onClick={handleUpgrade}
         >
-          Get 5,000 images ($5/mo)
+          Get 10,000 images ($5/mo)
         </FancyButton.Root>
       ) : (
         <MenuItem

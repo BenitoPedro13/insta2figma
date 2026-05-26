@@ -93,7 +93,7 @@ export class JobsService {
     }
 
     const data = parsed.data;
-    await this.plan.assertCanCreateJob(userId, data.input);
+    const { imagesToReserve } = await this.plan.assertCanCreateJob(userId, data.input);
 
     const periodStart = currentPeriodStartUtc();
     let job: Job;
@@ -104,8 +104,8 @@ export class JobsService {
           where: {
             userId_periodStart: { userId, periodStart },
           },
-          create: { userId, periodStart, jobsUsed: 1 },
-          update: { jobsUsed: { increment: 1 } },
+          create: { userId, periodStart, imagesUsed: imagesToReserve },
+          update: { imagesUsed: { increment: imagesToReserve } },
         });
         return tx.job.create({
           data: {

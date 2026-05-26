@@ -95,8 +95,8 @@ type StoredSession = {
 };
 
 type SessionQuotas = {
-  jobsRemaining: number | null;
-  jobsLimit: number | null;
+  imagesRemaining: number | null;
+  imagesLimit: number | null;
   maxPosts: number;
   expandCarouselImages: boolean;
 };
@@ -412,6 +412,7 @@ type PluginMessage =
       postCount?: number;
       timelineOrder?: 'newest_first' | 'oldest_first';
       selectedIndices?: number[];
+      estimatedImportImages?: number;
     }
   | { type: 'session-request' }
   | { type: 'billing-checkout' }
@@ -507,22 +508,26 @@ async function fetchMe(base: string, token: string): Promise<SessionPayload> {
       },
     }),
     quotas: {
-      jobsRemaining:
-        typeof quotasRaw?.jobsRemaining === 'number'
-          ? quotasRaw.jobsRemaining
-          : quotasRaw?.jobsRemaining === null
+      imagesRemaining:
+        typeof quotasRaw?.imagesRemaining === 'number'
+          ? quotasRaw.imagesRemaining
+          : quotasRaw?.imagesRemaining === null
             ? null
-            : 0,
-      jobsLimit:
-        typeof quotasRaw?.jobsLimit === 'number'
-          ? quotasRaw.jobsLimit
-          : quotasRaw?.jobsLimit === null
+            : typeof quotasRaw?.jobsRemaining === 'number'
+              ? quotasRaw.jobsRemaining
+              : 0,
+      imagesLimit:
+        typeof quotasRaw?.imagesLimit === 'number'
+          ? quotasRaw.imagesLimit
+          : quotasRaw?.imagesLimit === null
             ? null
-            : null,
+            : typeof quotasRaw?.jobsLimit === 'number'
+              ? quotasRaw.jobsLimit
+              : null,
       maxPosts:
         typeof quotasRaw?.maxPosts === 'number' && Number.isFinite(quotasRaw.maxPosts)
           ? quotasRaw.maxPosts
-          : 12,
+          : 50,
       expandCarouselImages: quotasRaw?.expandCarouselImages === true,
     },
   };
@@ -608,6 +613,7 @@ async function importProfileViaApi(
   options: {
     maxPosts: number;
     expandCarouselImages: boolean;
+    estimatedImportImages?: number;
     selectionMode?: 'recent' | 'single' | 'range' | 'multi';
     startIndex?: number;
     postCount?: number;
@@ -645,6 +651,11 @@ async function importProfileViaApi(
         ...(options.timelineOrder ? { timelineOrder: options.timelineOrder } : {}),
         ...(options.selectedIndices?.length
           ? { selectedIndices: options.selectedIndices }
+          : {}),
+        ...(options.estimatedImportImages != null &&
+        Number.isFinite(options.estimatedImportImages) &&
+        options.estimatedImportImages > 0
+          ? { estimatedImportImages: Math.floor(options.estimatedImportImages) }
           : {}),
       },
     }),
@@ -1068,6 +1079,11 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       await importProfileViaApi(base, username, {
         maxPosts,
         expandCarouselImages,
+        estimatedImportImages:
+          typeof msg.estimatedImportImages === 'number' &&
+          Number.isFinite(msg.estimatedImportImages)
+            ? Math.floor(msg.estimatedImportImages)
+            : undefined,
         selectionMode: msg.selectionMode,
         startIndex: msg.startIndex,
         postCount: msg.postCount,

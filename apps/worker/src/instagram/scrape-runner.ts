@@ -8,6 +8,11 @@ import {
 import { uploadScrapeAssets } from '../storage/upload-scrape-assets';
 import { InstagramUpstreamError } from './instagram-upstream-error';
 import { InstagramDataSource } from './http-instagram-data-source';
+import {
+  adjustUserImagesUsed,
+  countBillableJobImages,
+  readEstimatedImportImages,
+} from '../plan/quota-usage';
 
 /** Normalização mínima (API já valida formato). */
 export function normalizeInstagramUsername(raw: string): string {
@@ -20,12 +25,12 @@ function truncateMessage(msg: string, max = 2000): string {
 
 async function markFailed(
   prisma: PrismaClient,
-  jobId: string,
+  job: Job,
   code: string,
   message: string,
 ): Promise<void> {
   await prisma.job.update({
-    where: { id: jobId },
+    where: { id: job.id },
     data: {
       status: 'failed',
       finishedAt: new Date(),
@@ -33,16 +38,19 @@ async function markFailed(
       errorMessage: truncateMessage(message),
     },
   });
+
+  const reserved = readEstimatedImportImages(job.input);
+  await adjustUserImagesUsed(prisma, job.userId, -reserved);
 }
 
 async function markSucceeded(
   prisma: PrismaClient,
-  jobId: string,
+  job: Job,
   resultSummary: Prisma.InputJsonValue,
   resultStoragePrefix: string | null,
 ): Promise<void> {
   await prisma.job.update({
-    where: { id: jobId },
+    where: { id: job.id },
     data: {
       status: 'succeeded',
       finishedAt: new Date(),
@@ -52,6 +60,11 @@ async function markSucceeded(
         : {}),
     },
   });
+
+  const reserved = readEstimatedImportImages(job.input);
+  const actual = await countBillableJobImages(prisma, job.id);
+  const billable = actual > 0 ? actual : reserved;
+  await adjustUserImagesUsed(prisma, job.userId, billable - reserved);
 }
 
 /** Executa scrape real (job em `running`; retries BullMQ esperam mesmo estado). */
@@ -68,7 +81,7 @@ export async function processInstagramScrapeJob(
   if (!validated.success) {
     await markFailed(
       prisma,
-      row.id,
+      row,
       'IG_PARSE',
       'Input do job inválido ou corrompido na BD.',
     );
@@ -123,20 +136,20 @@ export async function processInstagramScrapeJob(
 
     await markSucceeded(
       prisma,
-      row.id,
+      row,
       summaryWithMeta as unknown as Prisma.InputJsonValue,
       prefix,
     );
   } catch (e) {
     if (e instanceof InstagramUpstreamError) {
       if (e.retryable) throw e;
-      await markFailed(prisma, row.id, e.code, e.message);
+      await markFailed(prisma, row, e.code, e.message);
       return;
     }
     console.error('[worker-scrape] erro inesperado', row.id, e);
     await markFailed(
       prisma,
-      row.id,
+      row,
       'INTERNAL',
       truncateMessage(e instanceof Error ? e.message : 'Erro interno.'),
     );

@@ -55,6 +55,7 @@ type ImportScreenProps = {
   timelineOrder: PostTimelineOrder;
   expandCarouselImages: boolean;
   quotaExceeded: boolean;
+  imagesRemaining: number | null;
   planTier: "free" | "pro";
   sessionError?: string;
   status: string;
@@ -119,6 +120,7 @@ export function ImportScreen({
   timelineOrder,
   expandCarouselImages,
   quotaExceeded,
+  imagesRemaining,
   planTier,
   sessionError,
   status,
@@ -183,7 +185,16 @@ export function ImportScreen({
     }
   }, [profileFound, rangeMode, onSelectionModeChange]);
 
-  const canImport = !quotaExceeded && selectedIndices.length >= 1;
+  const estimatedImportImages =
+    typeof preview?.estimatedImportImages === "number" &&
+    Number.isFinite(preview.estimatedImportImages) &&
+    preview.estimatedImportImages > 0
+      ? preview.estimatedImportImages
+      : selectedIndices.length;
+  const exceedsImageQuota =
+    imagesRemaining != null && estimatedImportImages > imagesRemaining;
+  const canImport =
+    !quotaExceeded && !exceedsImageQuota && selectedIndices.length >= 1;
 
   const handleRangeModeChange = useCallback(
     (enabled: boolean) => {
@@ -364,10 +375,11 @@ export function ImportScreen({
                 />
               </div>
 
-              {quotaExceeded ? (
+              {quotaExceeded || exceedsImageQuota ? (
                 <p className="import-quota-warn">
-                  Monthly quota used up on the{" "}
-                  {planTier === "pro" ? "Pro" : "Free"} plan.
+                  {exceedsImageQuota && !quotaExceeded
+                    ? `This import needs ${estimatedImportImages} images but you only have ${imagesRemaining} left this month.`
+                    : `Monthly image quota used up on the ${planTier === "pro" ? "Pro" : "Free"} plan.`}
                 </p>
               ) : null}
 
@@ -380,7 +392,7 @@ export function ImportScreen({
                   disabled={importing || !canImport}
                 >
                   <FancyButton.Icon as={RiInstagramFill} />
-                  {quotaExceeded
+                  {quotaExceeded || exceedsImageQuota
                     ? "Quota used up"
                     : !canImport
                       ? "Select images to import"

@@ -106,9 +106,9 @@ export function App() {
   >({});
   const [showProOverlay, setShowProOverlay] = useState(false);
   const [planTier, setPlanTier] = useState<'free' | 'pro'>('free');
-  const [jobsRemaining, setJobsRemaining] = useState<number | null>(null);
-  const [jobsLimit, setJobsLimit] = useState<number | null>(null);
-  const [maxPostsLimit, setMaxPostsLimit] = useState(12);
+  const [imagesRemaining, setImagesRemaining] = useState<number | null>(null);
+  const [imagesLimit, setImagesLimit] = useState<number | null>(null);
+  const [maxPostsLimit, setMaxPostsLimit] = useState(50);
   const [sessionError, setSessionError] = useState('');
   const [periodEndIso, setPeriodEndIso] = useState<string | null>(null);
 
@@ -116,7 +116,7 @@ export function App() {
     previewPageRef.current = previewPage;
   }, [previewPage]);
 
-  const quotaExceeded = jobsRemaining != null && jobsRemaining <= 0;
+  const quotaExceeded = imagesRemaining != null && imagesRemaining <= 0;
 
   const onCancel = useCallback(() => {
     parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
@@ -143,24 +143,28 @@ export function App() {
         setPlanTier(pm.planTier === 'pro' ? 'pro' : 'free');
         const q = pm.quotas as Record<string, unknown> | undefined;
         if (q) {
-          setJobsRemaining(
-            typeof q.jobsRemaining === 'number'
-              ? q.jobsRemaining
-              : q.jobsRemaining === null
+          setImagesRemaining(
+            typeof q.imagesRemaining === 'number'
+              ? q.imagesRemaining
+              : q.imagesRemaining === null
                 ? null
-                : null,
+                : typeof q.jobsRemaining === 'number'
+                  ? q.jobsRemaining
+                  : null,
           );
-          setJobsLimit(
-            typeof q.jobsLimit === 'number'
-              ? q.jobsLimit
-              : q.jobsLimit === null
+          setImagesLimit(
+            typeof q.imagesLimit === 'number'
+              ? q.imagesLimit
+              : q.imagesLimit === null
                 ? null
-                : null,
+                : typeof q.jobsLimit === 'number'
+                  ? q.jobsLimit
+                  : null,
           );
           const mp =
             typeof q.maxPosts === 'number' && Number.isFinite(q.maxPosts)
               ? q.maxPosts
-              : 12;
+              : 50;
           setMaxPostsLimit(mp);
           setMaxPosts((prev) => Math.min(prev, mp));
         }
@@ -668,7 +672,19 @@ export function App() {
       return;
     }
     if (quotaExceeded) {
-      setStatus('Monthly quota used up. Upgrade to Pro.');
+      setStatus('Monthly image quota used up. Upgrade to Pro.');
+      return;
+    }
+    const estimatedImages =
+      typeof preview?.estimatedImportImages === 'number' &&
+      Number.isFinite(preview.estimatedImportImages) &&
+      preview.estimatedImportImages > 0
+        ? preview.estimatedImportImages
+        : selectedIndices.length;
+    if (imagesRemaining != null && estimatedImages > imagesRemaining) {
+      setStatus(
+        `This import needs ${estimatedImages} images but you only have ${imagesRemaining} left this month.`,
+      );
       return;
     }
     if (selectedIndices.length < 1) {
@@ -689,6 +705,7 @@ export function App() {
           type: 'import-profile',
           username: user,
           expandCarouselImages,
+          estimatedImportImages: estimatedImages,
           ...scrapeInput,
         },
       },
@@ -701,6 +718,8 @@ export function App() {
     quotaExceeded,
     selectionMode,
     timelineOrder,
+    preview?.estimatedImportImages,
+    imagesRemaining,
   ]);
 
   const onToggleFavoriteRow = useCallback(
@@ -750,6 +769,7 @@ export function App() {
                 timelineOrder={timelineOrder}
                 expandCarouselImages={expandCarouselImages}
                 quotaExceeded={quotaExceeded}
+                imagesRemaining={imagesRemaining}
                 planTier={planTier}
                 sessionError={sessionError}
                 status={status}
@@ -783,8 +803,8 @@ export function App() {
           </div>
           <PluginFooter
             planTier={planTier}
-            jobsRemaining={jobsRemaining}
-            jobsLimit={jobsLimit}
+            imagesRemaining={imagesRemaining}
+            imagesLimit={imagesLimit}
             periodEndIso={periodEndIso}
             onUpgrade={onUpgrade}
           />

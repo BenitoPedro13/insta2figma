@@ -4,6 +4,7 @@ import {
   POST_TIMELINE_ORDERS,
   buildContiguousIndices,
   endSelectionIndex,
+  estimateImagesForJobInput,
   estimateImportImages,
   normalizeSelectedIndices,
   orderTimelinePosts,
@@ -32,6 +33,7 @@ export {
   POST_TIMELINE_ORDERS,
   buildContiguousIndices,
   endSelectionIndex,
+  estimateImagesForJobInput,
   estimateImportImages,
   normalizeSelectedIndices,
   orderTimelinePosts,
@@ -83,6 +85,8 @@ export const scrapeProfileInputSchema = z.object({
   timelineOrder: postTimelineOrderSchema.optional(),
   /** Posições 1-based no modo `multi`. */
   selectedIndices: z.array(z.number().int().min(1).max(50)).min(1).max(50).optional(),
+  /** Estimativa de imagens no canvas (covers + carrossel) para reserva de quota. */
+  estimatedImportImages: z.number().int().min(1).max(1000).optional(),
 });
 
 export type ScrapeProfileInput = z.infer<typeof scrapeProfileInputSchema>;
@@ -233,8 +237,8 @@ export const planTierSchema = z.enum(PLAN_TIERS);
 export type PlanTier = z.infer<typeof planTierSchema>;
 
 export const meQuotasSchema = z.object({
-  jobsRemaining: z.number().int().min(0).nullable(),
-  jobsLimit: z.number().int().min(0).nullable(),
+  imagesRemaining: z.number().int().min(0).nullable(),
+  imagesLimit: z.number().int().min(0).nullable(),
   maxPosts: z.number().int().min(1),
   expandCarouselImages: z.boolean(),
 });

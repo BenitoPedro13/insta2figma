@@ -1,31 +1,29 @@
 import type { PlanTier } from '@insta2figma/shared-contracts';
 
 export type PlanLimits = {
-  jobsPerMonth: number | null;
+  imagesPerMonth: number;
   maxPosts: number;
   expandCarouselImages: boolean;
 };
 
-const PRO_JOBS_SAFETY_CAP = 1000;
-
 export function getPlanLimits(
   planTier: string,
   env: {
-    freeJobsPerMonth: number;
-    freeMaxPosts: number;
-    proMaxPosts: number;
+    freeImagesPerMonth: number;
+    proImagesPerMonth: number;
+    maxPostsPerJob: number;
   },
 ): PlanLimits {
   if (planTier === 'pro') {
     return {
-      jobsPerMonth: PRO_JOBS_SAFETY_CAP,
-      maxPosts: env.proMaxPosts,
+      imagesPerMonth: env.proImagesPerMonth,
+      maxPosts: env.maxPostsPerJob,
       expandCarouselImages: true,
     };
   }
   return {
-    jobsPerMonth: env.freeJobsPerMonth,
-    maxPosts: env.freeMaxPosts,
+    imagesPerMonth: env.freeImagesPerMonth,
+    maxPosts: env.maxPostsPerJob,
     expandCarouselImages: true,
   };
 }

@@ -8,8 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   QUOTA_EXCEEDED_ERROR_CODE,
-  endSelectionIndex,
-  resolveScrapeSelection,
+  estimateImagesForJobInput,
   type MeResponse,
   type PlanTier,
   type ScrapeSelectionInput,
@@ -27,7 +26,7 @@ export class QuotaExceededException extends HttpException {
       {
         code: QUOTA_EXCEEDED_ERROR_CODE,
         message:
-          'Quota mensal esgotada. Faz upgrade para Pro para continuar a importar.',
+          'Quota mensal de imagens esgotada. Faz upgrade para Pro para continuar a importar.',
       },
       HttpStatus.PAYMENT_REQUIRED,
     );
@@ -49,16 +48,16 @@ export class PlanService {
 
   private envLimits() {
     return {
-      freeJobsPerMonth: Number.parseInt(
-        this.config.get<string>('QUOTA_FREE_JOBS_PER_MONTH') ?? '3',
+      freeImagesPerMonth: Number.parseInt(
+        this.config.get<string>('QUOTA_FREE_IMAGES_PER_MONTH') ?? '100',
         10,
       ),
-      freeMaxPosts: Number.parseInt(
-        this.config.get<string>('QUOTA_FREE_MAX_POSTS') ?? '12',
+      proImagesPerMonth: Number.parseInt(
+        this.config.get<string>('QUOTA_PRO_IMAGES_PER_MONTH') ?? '10000',
         10,
       ),
-      proMaxPosts: Number.parseInt(
-        this.config.get<string>('QUOTA_PRO_MAX_POSTS') ?? '50',
+      maxPostsPerJob: Number.parseInt(
+        this.config.get<string>('QUOTA_MAX_POSTS_PER_JOB') ?? '50',
         10,
       ),
     };
@@ -68,14 +67,14 @@ export class PlanService {
     return getPlanLimits(planTier, this.envLimits());
   }
 
-  async getJobsUsedThisPeriod(userId: string): Promise<number> {
+  async getImagesUsedThisPeriod(userId: string): Promise<number> {
     const periodStart = currentPeriodStartUtc();
     const counter = await this.prisma.usageCounter.findUnique({
       where: {
         userId_periodStart: { userId, periodStart },
       },
     });
-    return counter?.jobsUsed ?? 0;
+    return counter?.imagesUsed ?? 0;
   }
 
   async buildMeResponse(userId: string): Promise<MeResponse> {
@@ -94,19 +93,18 @@ export class PlanService {
 
     const planTier = normalizePlanTier(user.planTier);
     const limits = this.getLimitsForTier(planTier);
-    const jobsUsed = await this.getJobsUsedThisPeriod(userId);
+    const imagesUsed = await this.getImagesUsedThisPeriod(userId);
 
-    const jobsLimit = limits.jobsPerMonth;
-    const jobsRemaining =
-      jobsLimit == null ? null : Math.max(0, jobsLimit - jobsUsed);
+    const imagesLimit = limits.imagesPerMonth;
+    const imagesRemaining = Math.max(0, imagesLimit - imagesUsed);
 
     const sub = user.subscriptions[0];
     return {
       userId: user.id,
       planTier,
       quotas: {
-        jobsRemaining,
-        jobsLimit,
+        imagesRemaining,
+        imagesLimit,
         maxPosts: limits.maxPosts,
         expandCarouselImages: limits.expandCarouselImages,
       },
@@ -121,8 +119,8 @@ export class PlanService {
 
   async assertCanCreateJob(
     userId: string,
-    input: ScrapeSelectionInput & { expandCarouselImages?: boolean },
-  ): Promise<{ planTier: PlanTier }> {
+    input: ScrapeSelectionInput & { expandCarouselImages?: boolean; estimatedImportImages?: number },
+  ): Promise<{ planTier: PlanTier; imagesToReserve: number }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('Utilizador não encontrado.');
@@ -130,35 +128,22 @@ export class PlanService {
     const planTier = normalizePlanTier(user.planTier);
     const limits = this.getLimitsForTier(planTier);
 
-    const selection = resolveScrapeSelection(input, {
+    const imagesToReserve = estimateImagesForJobInput(input, {
       defaultMaxPosts: limits.maxPosts,
     });
-    const endIndex = endSelectionIndex(selection);
 
-    if (selection.postCount > limits.maxPosts) {
-      throw new JobInputPlanException(
-        `O plano ${planTier} permite importar no máximo ${limits.maxPosts} posts por job.`,
-      );
-    }
-    if (endIndex > limits.maxPosts || selection.fetchCount > limits.maxPosts) {
-      throw new JobInputPlanException(
-        `O plano ${planTier} cobre até a posição #${limits.maxPosts}. O pedido precisa até #${endIndex}.`,
-      );
-    }
     if (input.expandCarouselImages && !limits.expandCarouselImages) {
       throw new JobInputPlanException(
         'Expandir carrossel está disponível apenas no plano Pro.',
       );
     }
 
-    if (limits.jobsPerMonth != null) {
-      const used = await this.getJobsUsedThisPeriod(userId);
-      if (used >= limits.jobsPerMonth) {
-        throw new QuotaExceededException();
-      }
+    const imagesUsed = await this.getImagesUsedThisPeriod(userId);
+    if (imagesUsed + imagesToReserve > limits.imagesPerMonth) {
+      throw new QuotaExceededException();
     }
 
-    return { planTier };
+    return { planTier, imagesToReserve };
   }
 
   async getPlanTierForUser(userId: string): Promise<PlanTier> {

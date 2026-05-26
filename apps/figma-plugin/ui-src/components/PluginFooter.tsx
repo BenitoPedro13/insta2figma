@@ -2,8 +2,8 @@ import { RiFlashlightFill, RiTimeLine } from '@remixicon/react';
 
 type PluginFooterProps = {
   planTier: 'free' | 'pro';
-  jobsRemaining: number | null;
-  jobsLimit: number | null;
+  imagesRemaining: number | null;
+  imagesLimit: number | null;
   periodEndIso: string | null;
   onUpgrade: () => void;
 };
@@ -41,7 +41,7 @@ function QuotaRing({
       viewBox={`0 0 ${QUOTA_RING_SIZE} ${QUOTA_RING_SIZE}`}
       className="size-6 shrink-0"
       role="img"
-      aria-label={`${Math.round(usedPct)}% of monthly import quota used`}
+      aria-label={`${Math.round(usedPct)}% of monthly image quota used`}
     >
       <circle
         cx={center}
@@ -78,30 +78,30 @@ function daysUntilReset(periodEndIso: string | null): number {
 
 export function PluginFooter({
   planTier,
-  jobsRemaining,
-  jobsLimit,
+  imagesRemaining,
+  imagesLimit,
   periodEndIso,
   onUpgrade,
 }: PluginFooterProps) {
   const days = daysUntilReset(periodEndIso);
   const used =
-    jobsLimit != null && jobsRemaining != null
-      ? Math.max(0, jobsLimit - jobsRemaining)
+    imagesLimit != null && imagesRemaining != null
+      ? Math.max(0, imagesLimit - imagesRemaining)
       : null;
 
   const quotaLabel =
-    used != null && jobsLimit != null
-      ? `${used}/${jobsLimit} images imported`
+    used != null && imagesLimit != null
+      ? `${used}/${imagesLimit} images this month`
       : planTier === 'pro'
-        ? 'Unlimited imports'
-        : 'Import quota';
+        ? '10,000 images/month'
+        : '100 images/month';
 
   return (
     <footer className="plugin-footer flex h-[var(--plugin-footer-height)] shrink-0 items-center justify-center border-t border-stroke-soft-200 bg-bg-white-0 px-4">
       <div className="flex flex-wrap items-center justify-center gap-1">
         <div className="flex items-center gap-1.5">
-          {used != null && jobsLimit != null && jobsLimit > 0 ? (
-            <QuotaRing used={used} limit={jobsLimit} />
+          {used != null && imagesLimit != null && imagesLimit > 0 ? (
+            <QuotaRing used={used} limit={imagesLimit} />
           ) : null}
           <span className="text-label-sm font-medium text-text-sub-600">{quotaLabel}</span>
         </div>

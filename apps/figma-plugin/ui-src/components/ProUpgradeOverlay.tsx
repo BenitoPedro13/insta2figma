@@ -9,7 +9,7 @@ type ProUpgradeOverlayProps = {
 
 const PRO_BENEFITS = [
   'Infinite pagination',
-  '1000 images per month',
+  '10,000 images per month',
   'Special support in less than 24h',
 ] as const;
 

@@ -2,8 +2,8 @@ import { cn } from '../utils/cn';
 
 type AccountBannerProps = {
   planTier: 'free' | 'pro';
-  jobsRemaining: number | null;
-  jobsLimit: number | null;
+  imagesRemaining: number | null;
+  imagesLimit: number | null;
   sessionError: string;
   onUpgrade: () => void;
   onManage: () => void;
@@ -11,8 +11,8 @@ type AccountBannerProps = {
 
 export function AccountBanner({
   planTier,
-  jobsRemaining,
-  jobsLimit,
+  imagesRemaining,
+  imagesLimit,
   sessionError,
   onUpgrade,
   onManage,
@@ -26,11 +26,11 @@ export function AccountBanner({
   }
 
   const quotaText =
-    jobsRemaining != null && jobsLimit != null
-      ? `${jobsRemaining} of ${jobsLimit} imports this month`
+    imagesRemaining != null && imagesLimit != null
+      ? `${imagesRemaining} of ${imagesLimit} images left this month`
       : planTier === 'pro'
-        ? 'Pro plan — unlimited imports'
-        : '';
+        ? 'Pro plan — 10,000 images/month'
+        : 'Free plan — 100 images/month';
 
   return (
     <div className="account-banner flex shrink-0 items-center justify-between gap-2 border-b border-stroke-soft-200 bg-bg-weak-50 px-3 py-2">

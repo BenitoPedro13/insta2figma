@@ -217,6 +217,29 @@ export function estimateImportImages(
   };
 }
 
+const MAX_IMAGES_PER_JOB_ESTIMATE = 1000;
+
+/** Estima imagens consumidas por um job (para quota mensal). */
+export function estimateImagesForJobInput(
+  input: ScrapeSelectionInput & {
+    expandCarouselImages?: boolean;
+    estimatedImportImages?: number;
+  },
+  opts?: { defaultMaxPosts?: number },
+): number {
+  const selection = resolveScrapeSelection(input, opts);
+  const minImages = Math.max(1, selection.postCount);
+  const clientEstimate = input.estimatedImportImages;
+  if (
+    typeof clientEstimate === 'number' &&
+    Number.isFinite(clientEstimate) &&
+    clientEstimate >= minImages
+  ) {
+    return Math.min(MAX_IMAGES_PER_JOB_ESTIMATE, Math.floor(clientEstimate));
+  }
+  return minImages;
+}
+
 export function endSelectionIndex(selection: ResolvedScrapeSelection): number {
   if (selection.mode === 'multi') {
     const indices = selection.selectedIndices ?? [];
