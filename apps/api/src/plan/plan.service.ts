@@ -9,24 +9,26 @@ import { ConfigService } from '@nestjs/config';
 import {
   QUOTA_EXCEEDED_ERROR_CODE,
   estimateImagesForJobInput,
+  resolveQuotaPeriod,
   type MeResponse,
   type PlanTier,
   type ScrapeSelectionInput,
 } from '@insta2figma/shared-contracts';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  currentPeriodStartUtc,
-  getPlanLimits,
-  normalizePlanTier,
-} from './plan.config';
+import { getPlanLimits, normalizePlanTier } from './plan.config';
 
 export class QuotaExceededException extends HttpException {
-  constructor() {
+  constructor(planTier: PlanTier) {
+    const upgradeHint =
+      planTier === 'max'
+        ? 'Quota mensal esgotada.'
+        : planTier === 'pro'
+          ? 'Quota mensal esgotada. Faz upgrade para Max para continuar a importar.'
+          : 'Quota mensal de imagens esgotada. Faz upgrade para Pro ou Max para continuar a importar.';
     super(
       {
         code: QUOTA_EXCEEDED_ERROR_CODE,
-        message:
-          'Quota mensal de imagens esgotada. Faz upgrade para Pro para continuar a importar.',
+        message: upgradeHint,
       },
       HttpStatus.PAYMENT_REQUIRED,
     );
@@ -56,8 +58,16 @@ export class PlanService {
         this.config.get<string>('QUOTA_PRO_IMAGES_PER_MONTH') ?? '10000',
         10,
       ),
+      maxImagesPerMonth: Number.parseInt(
+        this.config.get<string>('QUOTA_MAX_IMAGES_PER_MONTH') ?? '100000',
+        10,
+      ),
       maxPostsPerJob: Number.parseInt(
         this.config.get<string>('QUOTA_MAX_POSTS_PER_JOB') ?? '50',
+        10,
+      ),
+      maxImagesPerJob: Number.parseInt(
+        this.config.get<string>('QUOTA_MAX_IMAGES_PER_JOB') ?? '100',
         10,
       ),
     };
@@ -67,8 +77,49 @@ export class PlanService {
     return getPlanLimits(planTier, this.envLimits());
   }
 
+  async getQuotaPeriodForUser(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { quotaAnchorAt: true },
+    });
+    if (!user) {
+      throw new NotFoundException('Utilizador não encontrado.');
+    }
+    return resolveQuotaPeriod(user.quotaAnchorAt);
+  }
+
+  /** Define quotaAnchorAt no primeiro import e devolve periodStart para o contador. */
+  async ensureQuotaAnchorAndGetPeriodStart(userId: string): Promise<Date> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { quotaAnchorAt: true },
+    });
+    if (!user) {
+      throw new NotFoundException('Utilizador não encontrado.');
+    }
+
+    let anchor = user.quotaAnchorAt;
+    if (!anchor) {
+      anchor = new Date();
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { quotaAnchorAt: anchor },
+      });
+    }
+
+    return resolveQuotaPeriod(anchor).periodStart;
+  }
+
   async getImagesUsedThisPeriod(userId: string): Promise<number> {
-    const periodStart = currentPeriodStartUtc();
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { quotaAnchorAt: true },
+    });
+    if (!user?.quotaAnchorAt) {
+      return 0;
+    }
+
+    const periodStart = resolveQuotaPeriod(user.quotaAnchorAt).periodStart;
     const counter = await this.prisma.usageCounter.findUnique({
       where: {
         userId_periodStart: { userId, periodStart },
@@ -97,6 +148,7 @@ export class PlanService {
 
     const imagesLimit = limits.imagesPerMonth;
     const imagesRemaining = Math.max(0, imagesLimit - imagesUsed);
+    const quotaPeriod = resolveQuotaPeriod(user.quotaAnchorAt);
 
     const sub = user.subscriptions[0];
     return {
@@ -106,7 +158,11 @@ export class PlanService {
         imagesRemaining,
         imagesLimit,
         maxPosts: limits.maxPosts,
+        maxImagesPerJob: limits.maxImagesPerJob,
         expandCarouselImages: limits.expandCarouselImages,
+        periodEnd: quotaPeriod.anchored
+          ? quotaPeriod.periodEnd.toISOString()
+          : null,
       },
       ...(sub && {
         subscription: {
@@ -132,15 +188,21 @@ export class PlanService {
       defaultMaxPosts: limits.maxPosts,
     });
 
+    if (imagesToReserve > limits.maxImagesPerJob) {
+      throw new JobInputPlanException(
+        `Cada importação pode usar no máximo ${limits.maxImagesPerJob} imagens de uma vez. Reduz a seleção ou desativa a expansão de carrosséis.`,
+      );
+    }
+
     if (input.expandCarouselImages && !limits.expandCarouselImages) {
       throw new JobInputPlanException(
-        'Expandir carrossel está disponível apenas no plano Pro.',
+        'Expandir carrossel está disponível apenas nos planos pagos.',
       );
     }
 
     const imagesUsed = await this.getImagesUsedThisPeriod(userId);
     if (imagesUsed + imagesToReserve > limits.imagesPerMonth) {
-      throw new QuotaExceededException();
+      throw new QuotaExceededException(planTier);
     }
 
     return { planTier, imagesToReserve };

@@ -1,10 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
-import { estimateImagesForJobInput } from '@insta2figma/shared-contracts';
-
-export function currentPeriodStartUtc(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-}
+import {
+  estimateImagesForJobInput,
+  resolveQuotaPeriod,
+} from '@insta2figma/shared-contracts';
 
 export function readEstimatedImportImages(input: unknown): number {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
@@ -19,7 +17,14 @@ export async function adjustUserImagesUsed(
   delta: number,
 ): Promise<void> {
   if (!Number.isFinite(delta) || delta === 0) return;
-  const periodStart = currentPeriodStartUtc();
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { quotaAnchorAt: true },
+  });
+  if (!user?.quotaAnchorAt) return;
+
+  const periodStart = resolveQuotaPeriod(user.quotaAnchorAt).periodStart;
   const change = Math.floor(delta);
   await prisma.usageCounter.upsert({
     where: { userId_periodStart: { userId, periodStart } },

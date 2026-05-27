@@ -27,9 +27,8 @@ import { ImportStatusLine } from "../components/ImportStatusLine";
 import { PostPreviewPagination } from "../components/PostPreviewPagination";
 import { ProUpgradeOverlay } from "../components/ProUpgradeOverlay";
 import { cn } from "../utils/cn";
-import { PREVIEW_PAGE_SIZE, type PostSelectionMode, type PostTimelineOrder } from "@insta2figma/shared-contracts";
-
-const FREE_MAX_PREVIEW_PAGE = 3;
+import { PREVIEW_PAGE_SIZE, maxAccessiblePreviewPage, type PostSelectionMode, type PostTimelineOrder } from "@insta2figma/shared-contracts";
+import { planTierLabel, type PlanTier } from "../lib/planTier";
 
 export type { PostSelectionMode, PostTimelineOrder };
 
@@ -48,6 +47,7 @@ type ImportScreenProps = {
   username: string;
   maxPosts: number;
   maxPostsLimit: number;
+  maxImagesLimit: number;
   selectedIndices: number[];
   selectionMode: PostSelectionMode;
   startIndex: number;
@@ -56,7 +56,7 @@ type ImportScreenProps = {
   expandCarouselImages: boolean;
   quotaExceeded: boolean;
   imagesRemaining: number | null;
-  planTier: "free" | "pro";
+  planTier: PlanTier;
   sessionError?: string;
   status: string;
   importing: boolean;
@@ -95,6 +95,7 @@ type ImportScreenProps = {
   onImport: () => void;
   onShowUpgradeOverlay: () => void;
   onBillingCheckout: () => void;
+  onBillingCheckoutMax: () => void;
   onManage: () => void;
   onOpenExternal: (url: string) => void;
 };
@@ -114,6 +115,7 @@ export function ImportScreen({
   username,
   maxPosts,
   maxPostsLimit,
+  maxImagesLimit,
   selectedIndices,
   selectionMode,
   startIndex,
@@ -149,6 +151,7 @@ export function ImportScreen({
   onImport,
   onShowUpgradeOverlay,
   onBillingCheckout,
+  onBillingCheckoutMax,
   onManage,
   onOpenExternal,
 }: ImportScreenProps) {
@@ -195,8 +198,12 @@ export function ImportScreen({
       : selectedIndices.length;
   const exceedsImageQuota =
     imagesRemaining != null && estimatedImportImages > imagesRemaining;
+  const exceedsPerImportLimit = estimatedImportImages > maxImagesLimit;
   const canImport =
-    !quotaExceeded && !exceedsImageQuota && selectedIndices.length >= 1;
+    !quotaExceeded &&
+    !exceedsImageQuota &&
+    !exceedsPerImportLimit &&
+    selectedIndices.length >= 1;
 
   const handleRangeModeChange = useCallback(
     (enabled: boolean) => {
@@ -229,8 +236,10 @@ export function ImportScreen({
   const showPreviewSkeletonGrid =
     (previewLoading && !(preview?.postsPreview && preview.postsPreview.length > 0)) ||
     previewPageLoading;
-  const maxAccessiblePreviewPage =
-    planTier === "free" ? FREE_MAX_PREVIEW_PAGE : previewTotalPages;
+  const maxAccessiblePreviewPageValue = maxAccessiblePreviewPage(
+    planTier,
+    previewTotalPages,
+  );
 
   const formatProfileStat = (value: number | undefined) =>
     typeof value === "number" && Number.isFinite(value)
@@ -377,11 +386,13 @@ export function ImportScreen({
                 />
               </div>
 
-              {quotaExceeded || exceedsImageQuota ? (
+              {quotaExceeded || exceedsImageQuota || exceedsPerImportLimit ? (
                 <p className="import-quota-warn">
-                  {exceedsImageQuota && !quotaExceeded
-                    ? `This import needs ${estimatedImportImages} images but you only have ${imagesRemaining} left this month.`
-                    : `Monthly image quota used up on the ${planTier === "pro" ? "Pro" : "Free"} plan.`}
+                  {exceedsPerImportLimit && !quotaExceeded && !exceedsImageQuota
+                    ? `Each import can use at most ${maxImagesLimit} images. Reduce your selection or turn off carousel expansion.`
+                    : exceedsImageQuota && !quotaExceeded
+                      ? `This import needs ${estimatedImportImages} images but you only have ${imagesRemaining} left in your quota period.`
+                      : `Image quota used up on the ${planTierLabel(planTier)} plan.`}
                 </p>
               ) : null}
 
@@ -394,13 +405,13 @@ export function ImportScreen({
                   disabled={importing || !canImport}
                 >
                   <FancyButton.Icon as={RiInstagramFill} />
-                  {quotaExceeded || exceedsImageQuota
+                  {quotaExceeded || exceedsImageQuota || exceedsPerImportLimit
                     ? "Quota used up"
                     : !canImport
                       ? "Select images to import"
                       : ctaLabel}
                 </FancyButton.Root>
-                {quotaExceeded ? (
+                {quotaExceeded && planTier === "free" ? (
                   <Button.Root
                     type="button"
                     variant="primary"
@@ -409,7 +420,7 @@ export function ImportScreen({
                     className="w-full"
                     onClick={onShowUpgradeOverlay}
                   >
-                    Upgrade to Pro
+                    Upgrade
                   </Button.Root>
                 ) : null}
               </div>
@@ -500,24 +511,26 @@ export function ImportScreen({
           </div>
 
           <div className="new-import-right-body flex min-h-0 flex-1 flex-col overflow-hidden">
-            {showPreviewSkeletonGrid ? (
-              <PostPreviewSkeletonGrid count={PREVIEW_PAGE_SIZE} />
-            ) : preview?.postsPreview && preview.postsPreview.length > 0 ? (
-              <PostPreviewList
-                items={preview.postsPreview}
-                selectedIndices={selectedIndices}
-                onToggleIndex={onTogglePostIndex}
-                thumbsLoading={previewThumbsLoading}
-              />
-            ) : (
-              <div className="new-import-preview-empty flex h-full w-full" aria-hidden />
-            )}
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {showPreviewSkeletonGrid ? (
+                <PostPreviewSkeletonGrid count={PREVIEW_PAGE_SIZE} />
+              ) : preview?.postsPreview && preview.postsPreview.length > 0 ? (
+                <PostPreviewList
+                  items={preview.postsPreview}
+                  selectedIndices={selectedIndices}
+                  onToggleIndex={onTogglePostIndex}
+                  thumbsLoading={previewThumbsLoading}
+                />
+              ) : (
+                <div className="new-import-preview-empty flex h-full w-full" aria-hidden />
+              )}
+            </div>
 
-            {preview?.postsPreview && preview.postsPreview.length > 0 ? (
+            {previewTotalPages > 1 ? (
               <PostPreviewPagination
                 currentPage={previewPage}
                 totalPages={previewTotalPages}
-                maxAccessiblePage={maxAccessiblePreviewPage}
+                maxAccessiblePage={maxAccessiblePreviewPageValue}
                 onPageChange={onPreviewPageChange}
                 onBlockedAdvance={onPreviewBlockedAdvance}
               />
@@ -530,6 +543,7 @@ export function ImportScreen({
         open={showProOverlay}
         onClose={onCloseProOverlay}
         onUpgrade={onBillingCheckout}
+        onUpgradeMax={onBillingCheckoutMax}
         onOpenExternal={onOpenExternal}
       />
     </div>

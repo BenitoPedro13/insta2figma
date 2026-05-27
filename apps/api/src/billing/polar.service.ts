@@ -34,4 +34,20 @@ export class PolarService {
   getProProductId(): string {
     return this.config.getOrThrow<string>('POLAR_PRODUCT_ID_PRO');
   }
+
+  getMaxProductId(): string | null {
+    const id = this.config.get<string>('POLAR_PRODUCT_ID_MAX')?.trim();
+    return id || null;
+  }
+
+  getProductIdForPlan(plan: 'pro' | 'max'): string {
+    if (plan === 'max') {
+      const maxId = this.getMaxProductId();
+      if (!maxId) {
+        throw new Error('POLAR_PRODUCT_ID_MAX em falta.');
+      }
+      return maxId;
+    }
+    return this.getProProductId();
+  }
 }

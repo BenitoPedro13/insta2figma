@@ -98,11 +98,13 @@ type SessionQuotas = {
   imagesRemaining: number | null;
   imagesLimit: number | null;
   maxPosts: number;
+  maxImagesPerJob: number;
   expandCarouselImages: boolean;
+  periodEnd: string | null;
 };
 
 type SessionPayload = {
-  planTier: 'free' | 'pro';
+  planTier: 'free' | 'pro' | 'max';
   quotas: SessionQuotas;
   userId: string;
   subscription?: { currentPeriodEnd: string | null };
@@ -490,7 +492,7 @@ type PluginMessage =
       estimatedImportImages?: number;
     }
   | { type: 'session-request' }
-  | { type: 'billing-checkout' }
+  | { type: 'billing-checkout'; plan?: 'pro' | 'max' }
   | { type: 'billing-portal' }
   | { type: 'open-external'; url: string }
   | { type: 'error'; message: unknown };
@@ -570,7 +572,12 @@ async function fetchMe(base: string, token: string): Promise<SessionPayload> {
   }
   const quotasRaw = data.quotas as Record<string, unknown> | undefined;
   const subRaw = data.subscription as Record<string, unknown> | undefined;
-  const planTier = data.planTier === 'pro' ? 'pro' : 'free';
+  const planTier =
+    data.planTier === 'max'
+      ? 'max'
+      : data.planTier === 'pro'
+        ? 'pro'
+        : 'free';
   return {
     planTier,
     userId: String(data.userId ?? ''),
@@ -603,7 +610,18 @@ async function fetchMe(base: string, token: string): Promise<SessionPayload> {
         typeof quotasRaw?.maxPosts === 'number' && Number.isFinite(quotasRaw.maxPosts)
           ? quotasRaw.maxPosts
           : 50,
+      maxImagesPerJob:
+        typeof quotasRaw?.maxImagesPerJob === 'number' &&
+        Number.isFinite(quotasRaw.maxImagesPerJob)
+          ? quotasRaw.maxImagesPerJob
+          : 100,
       expandCarouselImages: quotasRaw?.expandCarouselImages === true,
+      periodEnd:
+        typeof quotasRaw?.periodEnd === 'string'
+          ? quotasRaw.periodEnd
+          : quotasRaw?.periodEnd === null
+            ? null
+            : null,
     },
   };
 }
@@ -656,10 +674,18 @@ async function bootstrapSession(): Promise<void> {
   }
 }
 
-async function openBillingCheckout(base: string, token: string): Promise<void> {
+async function openBillingCheckout(
+  base: string,
+  token: string,
+  plan: 'pro' | 'max' = 'pro',
+): Promise<void> {
   const res = await fetch(`${base}/v1/billing/checkout-session`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ plan }),
   });
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const data = payload.data as { url?: string } | undefined;
@@ -1052,9 +1078,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
   if (msg.type === 'billing-checkout') {
     const base = normBase(DEFAULT_API_BASE);
+    const plan = msg.plan === 'max' ? 'max' : 'pro';
     try {
       const { session } = await ensureSession(base);
-      await openBillingCheckout(base, session.accessToken);
+      await openBillingCheckout(base, session.accessToken, plan);
       figma.notify('Checkout aberto no browser.');
     } catch (err) {
       figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });

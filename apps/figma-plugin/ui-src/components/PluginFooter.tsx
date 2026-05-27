@@ -1,7 +1,8 @@
 import { RiFlashlightFill, RiTimeLine } from '@remixicon/react';
+import { isPaidPlan, planTierLabel, type PlanTier } from '../lib/planTier';
 
 type PluginFooterProps = {
-  planTier: 'free' | 'pro';
+  planTier: PlanTier;
   imagesRemaining: number | null;
   imagesLimit: number | null;
   periodEndIso: string | null;
@@ -41,7 +42,7 @@ function QuotaRing({
       viewBox={`0 0 ${QUOTA_RING_SIZE} ${QUOTA_RING_SIZE}`}
       className="size-6 shrink-0"
       role="img"
-      aria-label={`${Math.round(usedPct)}% of monthly image quota used`}
+      aria-label={`${Math.round(usedPct)}% of quota period used`}
     >
       <circle
         cx={center}
@@ -51,29 +52,32 @@ function QuotaRing({
         stroke="var(--color-stroke-soft-200)"
         strokeWidth={QUOTA_RING_STROKE}
       />
-      {arcLength > 0 ? (
-        <circle
-          cx={center}
-          cy={center}
-          r={QUOTA_RING_RADIUS}
-          fill="none"
-          stroke={color}
-          strokeWidth={QUOTA_RING_STROKE}
-          strokeLinecap="round"
-          strokeDasharray={`${arcLength} ${QUOTA_RING_CIRCUMFERENCE}`}
-          transform={`rotate(-90 ${center} ${center})`}
-        />
-      ) : null}
+      <circle
+        cx={center}
+        cy={center}
+        r={QUOTA_RING_RADIUS}
+        fill="none"
+        stroke={color}
+        strokeWidth={QUOTA_RING_STROKE}
+        strokeLinecap="round"
+        strokeDasharray={`${arcLength} ${QUOTA_RING_CIRCUMFERENCE}`}
+        transform={`rotate(-90 ${center} ${center})`}
+      />
     </svg>
   );
 }
 
-function daysUntilReset(periodEndIso: string | null): number {
-  const end = periodEndIso
-    ? new Date(periodEndIso)
-    : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
+function daysUntilReset(periodEndIso: string | null): number | null {
+  if (!periodEndIso) return null;
+  const end = new Date(periodEndIso);
   const ms = end.getTime() - Date.now();
   return Math.max(0, Math.ceil(ms / 86_400_000));
+}
+
+function defaultQuotaLabel(planTier: PlanTier): string {
+  if (planTier === 'max') return '100,000 images / 30 days';
+  if (planTier === 'pro') return '10,000 images / 30 days';
+  return '100 images / 30 days';
 }
 
 export function PluginFooter({
@@ -91,10 +95,8 @@ export function PluginFooter({
 
   const quotaLabel =
     used != null && imagesLimit != null
-      ? `${used}/${imagesLimit} images this month`
-      : planTier === 'pro'
-        ? '10,000 images/month'
-        : '100 images/month';
+      ? `${used}/${imagesLimit} images this period`
+      : defaultQuotaLabel(planTier);
 
   return (
     <footer className="plugin-footer flex h-[var(--plugin-footer-height)] shrink-0 items-center justify-center border-t border-stroke-soft-200 bg-bg-white-0 px-4">
@@ -105,11 +107,15 @@ export function PluginFooter({
           ) : null}
           <span className="text-label-sm font-medium text-text-sub-600">{quotaLabel}</span>
         </div>
-        <RiTimeLine className="size-6 shrink-0 text-text-sub-600" aria-hidden />
-        <span className="text-label-sm font-medium text-text-sub-600">
-          Resets in {days} {days === 1 ? 'day' : 'days'}
-        </span>
-        {planTier === 'free' ? (
+        {days != null ? (
+          <>
+            <RiTimeLine className="size-6 shrink-0 text-text-sub-600" aria-hidden />
+            <span className="text-label-sm font-medium text-text-sub-600">
+              Resets in {days} {days === 1 ? 'day' : 'days'}
+            </span>
+          </>
+        ) : null}
+        {!isPaidPlan(planTier) ? (
           <>
             <RiFlashlightFill className="size-6 shrink-0 text-text-sub-600" aria-hidden />
             <button
@@ -118,6 +124,17 @@ export function PluginFooter({
               onClick={onUpgrade}
             >
               Upgrade
+            </button>
+          </>
+        ) : planTier === 'pro' ? (
+          <>
+            <RiFlashlightFill className="size-6 shrink-0 text-text-sub-600" aria-hidden />
+            <button
+              type="button"
+              className="cursor-pointer border-0 bg-transparent p-0 text-label-sm font-medium text-text-strong-950 transition hover:text-feature-base"
+              onClick={onUpgrade}
+            >
+              Upgrade to Max
             </button>
           </>
         ) : null}

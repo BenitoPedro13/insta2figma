@@ -13,6 +13,7 @@ model User {
   figmaUserId     String?  @unique @map("figma_user_id")
   polarCustomerId String?  @map("polar_customer_id")
   planTier        String   @default("free") @map("plan_tier")
+  quotaAnchorAt   DateTime? @map("quota_anchor_at") @db.Timestamptz(6)
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

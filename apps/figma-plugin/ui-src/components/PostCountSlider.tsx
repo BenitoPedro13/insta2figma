@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Slider from "./ui/slider";
 import * as Switch from "./ui/switch";
 import { cn } from "../utils/cn";
+import type { PlanTier } from "../lib/planTier";
 
 type PostCountSliderProps = {
   profilePostCount: number | null;
   planMaxPosts: number;
-  planTier: "free" | "pro";
+  planTier: PlanTier;
   /** Profile resolved successfully — range switch only when true. */
   profileFound: boolean;
   rangeMode: boolean;
@@ -124,7 +125,7 @@ export function PostCountSlider({
   className,
 }: PostCountSliderProps) {
   const [dragging, setDragging] = useState(false);
-  const accent = planTier === "pro" ? "pro" : "free";
+  const accent = planTier === "free" ? "free" : "pro";
 
   const sliderMax = useMemo(() => {
     const fromProfile =

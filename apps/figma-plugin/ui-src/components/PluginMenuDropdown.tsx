@@ -13,9 +13,10 @@ import {
   TERMS_URL,
 } from '../lib/pluginLinks';
 import { cn } from '../utils/cn';
+import { isPaidPlan, type PlanTier } from '../lib/planTier';
 
 type PluginMenuDropdownProps = {
-  planTier: 'free' | 'pro';
+  planTier: PlanTier;
   onUpgrade: () => void;
   onManage: () => void;
   onOpenExternal: (url: string) => void;
@@ -78,7 +79,7 @@ export function PluginMenuDropdown({
       role="menu"
       aria-label="Plugin menu"
     >
-      {planTier === 'free' ? (
+      {!isPaidPlan(planTier) ? (
         <FancyButton.Root
           type="button"
           variant="neutral"
@@ -86,7 +87,7 @@ export function PluginMenuDropdown({
           className="w-full"
           onClick={handleUpgrade}
         >
-          Get 10,000 images ($5/mo)
+          Upgrade plan
         </FancyButton.Root>
       ) : (
         <MenuItem

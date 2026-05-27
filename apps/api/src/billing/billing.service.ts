@@ -27,6 +27,7 @@ import {
   shouldOmitCheckoutCustomerEmail,
 } from './polar-email.util';
 import { PolarService } from './polar.service';
+import type { BillingCheckoutPlan } from '@insta2figma/shared-contracts';
 
 type WebhookPayload = {
   type?: string;
@@ -108,7 +109,10 @@ export class BillingService {
     }
   }
 
-  async createCheckoutSession(userId: string): Promise<{ url: string }> {
+  async createCheckoutSession(
+    userId: string,
+    plan: BillingCheckoutPlan = 'pro',
+  ): Promise<{ url: string }> {
     if (!this.polar.isConfigured()) {
       throw new ServiceUnavailableException('Billing Polar não configurado.');
     }
@@ -121,7 +125,16 @@ export class BillingService {
     const polarEmail = emailForPolar(user, placeholderDomain);
 
     const client = this.polar.getClient();
-    const productId = this.polar.getProProductId();
+    let productId: string;
+    try {
+      productId = this.polar.getProductIdForPlan(plan);
+    } catch {
+      throw new BadRequestException(
+        plan === 'max'
+          ? 'Plano Max ainda não configurado (POLAR_PRODUCT_ID_MAX).'
+          : 'Plano Pro ainda não configurado (POLAR_PRODUCT_ID_PRO).',
+      );
+    }
     const successUrl =
       this.config.get<string>('POLAR_SUCCESS_URL')?.trim() ||
       'https://insta2figma.com/billing/success';
@@ -136,7 +149,7 @@ export class BillingService {
           : { customerEmail: polarEmail }),
         successUrl,
         returnUrl: returnUrl || undefined,
-        metadata: { userId },
+        metadata: { userId, plan },
       });
 
       if (!checkout.url) {
@@ -147,7 +160,7 @@ export class BillingService {
       this.logger.error('checkouts.create falhou', err);
       if (isPolarSdkValidation(err)) {
         throw new BadRequestException(
-          `Checkout inválido: ${formatPolarError(err)}. Verifica POLAR_PRODUCT_ID_PRO (sandbox).`,
+          `Checkout inválido: ${formatPolarError(err)}. Verifica POLAR_PRODUCT_ID_${plan === 'max' ? 'MAX' : 'PRO'} (sandbox).`,
         );
       }
       throw new ServiceUnavailableException(
@@ -240,16 +253,24 @@ export class BillingService {
     state: PolarCustomerState,
   ): Promise<void> {
     const polarCustomerId = this.extractCustomerId(state);
+    const maxProductId = this.polar.isConfigured()
+      ? this.polar.getMaxProductId()
+      : null;
     const proProductId = this.polar.isConfigured()
       ? this.polar.getProProductId()
       : null;
 
     const subs = this.extractActiveSubscriptions(state);
-    const proSub = proProductId
-      ? subs.find((s) => s.productId === proProductId)
-      : subs[0];
+    const maxSub = maxProductId
+      ? subs.find((s) => s.productId === maxProductId)
+      : null;
+    const proSub =
+      !maxSub && proProductId
+        ? subs.find((s) => s.productId === proProductId)
+        : null;
+    const activeSub = maxSub ?? proSub ?? null;
 
-    const planTier = proSub ? 'pro' : 'free';
+    const planTier = maxSub ? 'max' : proSub ? 'pro' : 'free';
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -259,19 +280,19 @@ export class BillingService {
       },
     });
 
-    if (proSub) {
+    if (activeSub) {
       await this.prisma.subscription.upsert({
-        where: { polarSubscriptionId: proSub.id },
+        where: { polarSubscriptionId: activeSub.id },
         create: {
           userId,
-          polarSubscriptionId: proSub.id,
-          productId: proSub.productId,
-          status: String(proSub.status),
-          currentPeriodEnd: proSub.currentPeriodEnd ?? null,
+          polarSubscriptionId: activeSub.id,
+          productId: activeSub.productId,
+          status: String(activeSub.status),
+          currentPeriodEnd: activeSub.currentPeriodEnd ?? null,
         },
         update: {
-          status: String(proSub.status),
-          currentPeriodEnd: proSub.currentPeriodEnd ?? null,
+          status: String(activeSub.status),
+          currentPeriodEnd: activeSub.currentPeriodEnd ?? null,
         },
       });
     }

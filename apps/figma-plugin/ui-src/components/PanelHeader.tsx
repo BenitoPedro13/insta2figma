@@ -3,9 +3,10 @@ import { RiMenu4Line } from '@remixicon/react';
 import { AccountBadge } from './AccountBadge';
 import { PluginMenuDropdown } from './PluginMenuDropdown';
 import logoInstagramFill from '../assets/logo-instagram-fill.png';
+import type { PlanTier } from '../lib/planTier';
 
 type PanelHeaderProps = {
-  planTier: 'free' | 'pro';
+  planTier: PlanTier;
   sessionError?: string;
   onUpgrade: () => void;
   onManage: () => void;

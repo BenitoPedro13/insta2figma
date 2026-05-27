@@ -51,10 +51,15 @@ export function PostPreviewPagination({
   };
 
   return (
-    <div className="post-preview-pagination shrink-0 border-t border-stroke-soft-200 bg-bg-white-0 px-3 py-2">
-      <Pagination.Root variant="group" aria-label="Post preview pages">
+    <div className="post-preview-pagination shrink-0 border-t border-stroke-soft-200 bg-bg-white-0">
+      <Pagination.Root
+        variant="group"
+        className="post-preview-pagination-root w-full !divide-x-0 !rounded-none !border-0"
+        aria-label="Post preview pages"
+      >
         <Pagination.NavButton
           type="button"
+          className="post-preview-pagination-cell"
           aria-label="Previous page"
           disabled={currentPage <= 1}
           onClick={() => tryPage(currentPage - 1)}
@@ -70,7 +75,7 @@ export function PostPreviewPagination({
             <span key={page} className="contents">
               {showGap ? (
                 <span
-                  className="flex h-8 min-w-10 items-center justify-center text-label-sm text-text-soft-400"
+                  className="post-preview-pagination-cell flex h-8 min-w-10 items-center justify-center text-label-sm text-text-soft-400"
                   aria-hidden
                 >
                   …
@@ -78,6 +83,7 @@ export function PostPreviewPagination({
               ) : null}
               <Pagination.Item
                 type="button"
+                className="post-preview-pagination-cell"
                 current={page === currentPage}
                 aria-label={`Page ${page}`}
                 aria-current={page === currentPage ? 'page' : undefined}
@@ -91,6 +97,7 @@ export function PostPreviewPagination({
 
         <Pagination.NavButton
           type="button"
+          className="post-preview-pagination-cell"
           aria-label="Next page"
           disabled={currentPage >= totalPages}
           onClick={tryNext}

@@ -232,15 +232,26 @@ export const jobSignedAssetDtoSchema = z.object({
 export type JobSignedAssetDto = z.infer<typeof jobSignedAssetDtoSchema>;
 
 /** Tiers de subscrição (Fase 7 — Polar). */
-export const PLAN_TIERS = ['free', 'pro'] as const;
+export const PLAN_TIERS = ['free', 'pro', 'max'] as const;
 export const planTierSchema = z.enum(PLAN_TIERS);
 export type PlanTier = z.infer<typeof planTierSchema>;
+
+export const billingCheckoutPlanSchema = z.enum(['pro', 'max']);
+export type BillingCheckoutPlan = z.infer<typeof billingCheckoutPlanSchema>;
+
+export const billingCheckoutBodySchema = z.object({
+  plan: billingCheckoutPlanSchema.optional().default('pro'),
+});
+
+export type BillingCheckoutBody = z.infer<typeof billingCheckoutBodySchema>;
 
 export const meQuotasSchema = z.object({
   imagesRemaining: z.number().int().min(0).nullable(),
   imagesLimit: z.number().int().min(0).nullable(),
   maxPosts: z.number().int().min(1),
+  maxImagesPerJob: z.number().int().min(1),
   expandCarouselImages: z.boolean(),
+  periodEnd: z.string().nullable(),
 });
 
 export type MeQuotas = z.infer<typeof meQuotasSchema>;
@@ -268,3 +279,15 @@ export const billingSessionUrlSchema = z.object({
 });
 
 export type BillingSessionUrl = z.infer<typeof billingSessionUrlSchema>;
+
+export {
+  QUOTA_PERIOD_MS,
+  resolveQuotaPeriod,
+  type ResolvedQuotaPeriod,
+} from './quota-period';
+
+export {
+  FREE_MAX_PREVIEW_PAGE,
+  PRO_MAX_PREVIEW_PAGE,
+  maxAccessiblePreviewPage,
+} from './preview-limits';

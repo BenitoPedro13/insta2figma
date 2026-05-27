@@ -17,12 +17,13 @@ import { computePreviewEstimates } from './lib/previewEstimates';
 import { ImportScreen, type PostSelectionMode, type PostTimelineOrder } from './screens/ImportScreen';
 import {
   buildContiguousIndices,
+  maxAccessiblePreviewPage,
   PREVIEW_PAGE_SIZE,
+  PRO_MAX_PREVIEW_PAGE,
   selectionInputFromIndices,
   toggleSelectedIndex,
 } from '@insta2figma/shared-contracts';
-
-const FREE_MAX_PREVIEW_PAGE = 3;
+import { parsePlanTier, type PlanTier } from './lib/planTier';
 
 type ProfilePreviewPost = {
   index: number;
@@ -70,6 +71,16 @@ function deriveSelectionModeFromIndices(
   return 'multi';
 }
 
+function parseInstagramUserId(raw: unknown): string | null {
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    return raw.trim();
+  }
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return String(Math.floor(raw));
+  }
+  return null;
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<ShellTab>('new-import');
   const [search, setSearch] = useState('');
@@ -92,6 +103,7 @@ export function App() {
   const previewPageReqId = useRef(0);
   const previewFetchedForUsername = useRef('');
   const previewPageRef = useRef(1);
+  const lastLoadedPreviewPageRef = useRef(1);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewThumbsLoading, setPreviewThumbsLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
@@ -104,17 +116,23 @@ export function App() {
   const [pagePostsCache, setPagePostsCache] = useState<
     Record<number, ProfilePreviewPost[]>
   >({});
+  const pagePostsCacheRef = useRef<Record<number, ProfilePreviewPost[]>>({});
   const [showProOverlay, setShowProOverlay] = useState(false);
-  const [planTier, setPlanTier] = useState<'free' | 'pro'>('free');
+  const [planTier, setPlanTier] = useState<PlanTier>('free');
   const [imagesRemaining, setImagesRemaining] = useState<number | null>(null);
   const [imagesLimit, setImagesLimit] = useState<number | null>(null);
   const [maxPostsLimit, setMaxPostsLimit] = useState(50);
+  const [maxImagesLimit, setMaxImagesLimit] = useState(100);
   const [sessionError, setSessionError] = useState('');
   const [periodEndIso, setPeriodEndIso] = useState<string | null>(null);
 
   useEffect(() => {
     previewPageRef.current = previewPage;
   }, [previewPage]);
+
+  useEffect(() => {
+    pagePostsCacheRef.current = pagePostsCache;
+  }, [pagePostsCache]);
 
   const quotaExceeded = imagesRemaining != null && imagesRemaining <= 0;
 
@@ -140,7 +158,7 @@ export function App() {
 
       if (pm.type === 'session-data') {
         setSessionError('');
-        setPlanTier(pm.planTier === 'pro' ? 'pro' : 'free');
+        setPlanTier(parsePlanTier(pm.planTier));
         const q = pm.quotas as Record<string, unknown> | undefined;
         if (q) {
           setImagesRemaining(
@@ -167,11 +185,25 @@ export function App() {
               : 50;
           setMaxPostsLimit(mp);
           setMaxPosts((prev) => Math.min(prev, mp));
+          const mi =
+            typeof q.maxImagesPerJob === 'number' && Number.isFinite(q.maxImagesPerJob)
+              ? q.maxImagesPerJob
+              : 100;
+          setMaxImagesLimit(mi);
         }
         const sub = pm.subscription as Record<string, unknown> | undefined;
-        if (sub && typeof sub.currentPeriodEnd === 'string') {
+        const quotaPeriodEnd =
+          typeof (pm.quotas as Record<string, unknown> | undefined)?.periodEnd ===
+          'string'
+            ? String((pm.quotas as Record<string, unknown>).periodEnd)
+            : null;
+        if (quotaPeriodEnd) {
+          setPeriodEndIso(quotaPeriodEnd);
+        } else if (sub && typeof sub.currentPeriodEnd === 'string') {
           setPeriodEndIso(sub.currentPeriodEnd);
         } else if (sub && sub.currentPeriodEnd === null) {
+          setPeriodEndIso(null);
+        } else {
           setPeriodEndIso(null);
         }
         return;
@@ -247,11 +279,10 @@ export function App() {
               ? Math.max(1, pm.previewTotalPages)
               : 1,
           );
-          setInstagramUserId(
-            typeof pm.instagramUserId === 'string' ? pm.instagramUserId : null,
-          );
+          setInstagramUserId(parseInstagramUserId(pm.instagramUserId));
           setPagePostsCache(postsPreview ? { 1: postsPreview } : {});
           setPageCursors(nextPreviewCursor ? { 2: nextPreviewCursor } : {});
+          lastLoadedPreviewPageRef.current = 1;
           setPreview({
             username: String(pm.username ?? ''),
             mediaCount:
@@ -295,6 +326,10 @@ export function App() {
         setPreviewThumbsLoading(thumbsPending > 0);
         setPreviewError('');
         setPreviewPage(page);
+        const resolvedInstagramUserId = parseInstagramUserId(pm.instagramUserId);
+        if (resolvedInstagramUserId) {
+          setInstagramUserId(resolvedInstagramUserId);
+        }
         if (
           typeof pm.previewTotalPages === 'number' &&
           Number.isFinite(pm.previewTotalPages)
@@ -309,6 +344,7 @@ export function App() {
           setPreview((prev) =>
             prev ? { ...prev, postsPreview } : prev,
           );
+          lastLoadedPreviewPageRef.current = page;
         }
         return;
       }
@@ -366,6 +402,12 @@ export function App() {
         if (requestKind === 'page') {
           setPreviewPageLoading(false);
           setPreviewThumbsLoading(false);
+          const fallbackPage = lastLoadedPreviewPageRef.current;
+          setPreviewPage(fallbackPage);
+          const cached = pagePostsCacheRef.current[fallbackPage];
+          if (cached) {
+            setPreview((prev) => (prev ? { ...prev, postsPreview: cached } : prev));
+          }
           setPreviewError(
             typeof pm.message === 'string' ? pm.message : 'Could not load profile preview.',
           );
@@ -434,10 +476,21 @@ export function App() {
     setInstagramUserId(null);
     setPageCursors({});
     setPagePostsCache({});
+    lastLoadedPreviewPageRef.current = 1;
   }, []);
 
-  const onBillingCheckout = useCallback(() => {
-    parent.postMessage({ pluginMessage: { type: 'billing-checkout' } }, '*');
+  const onBillingCheckoutPro = useCallback(() => {
+    parent.postMessage(
+      { pluginMessage: { type: 'billing-checkout', plan: 'pro' } },
+      '*',
+    );
+  }, []);
+
+  const onBillingCheckoutMax = useCallback(() => {
+    parent.postMessage(
+      { pluginMessage: { type: 'billing-checkout', plan: 'max' } },
+      '*',
+    );
   }, []);
 
   const openUpgradeOverlay = useCallback(() => {
@@ -519,7 +572,13 @@ export function App() {
 
   const fetchPreviewPage = useCallback(
     (page: number) => {
-      if (planTier === 'free' && page > FREE_MAX_PREVIEW_PAGE) {
+      const tierPageCap =
+        planTier === 'max'
+          ? Number.MAX_SAFE_INTEGER
+          : planTier === 'pro'
+            ? PRO_MAX_PREVIEW_PAGE
+            : 3;
+      if (page > tierPageCap) {
         setShowProOverlay(true);
         return;
       }
@@ -534,6 +593,7 @@ export function App() {
       if (cached) {
         setPreviewPage(page);
         setPreview((prev) => (prev ? { ...prev, postsPreview: cached } : prev));
+        lastLoadedPreviewPageRef.current = page;
         return;
       }
 
@@ -676,7 +736,7 @@ export function App() {
       return;
     }
     if (quotaExceeded) {
-      setStatus('Monthly image quota used up. Upgrade to Pro.');
+      setStatus('Monthly image quota used up. Upgrade to continue importing.');
       return;
     }
     const estimatedImages =
@@ -685,6 +745,12 @@ export function App() {
       preview.estimatedImportImages > 0
         ? preview.estimatedImportImages
         : selectedIndices.length;
+    if (estimatedImages > maxImagesLimit) {
+      setStatus(
+        `Each import can use at most ${maxImagesLimit} images. Reduce your selection or turn off carousel expansion.`,
+      );
+      return;
+    }
     if (imagesRemaining != null && estimatedImages > imagesRemaining) {
       setStatus(
         `This import needs ${estimatedImages} images but you only have ${imagesRemaining} left this month.`,
@@ -724,6 +790,7 @@ export function App() {
     timelineOrder,
     preview?.estimatedImportImages,
     imagesRemaining,
+    maxImagesLimit,
   ]);
 
   const onToggleFavoriteRow = useCallback(
@@ -766,6 +833,7 @@ export function App() {
                 username={username}
                 maxPosts={maxPosts}
                 maxPostsLimit={maxPostsLimit}
+                maxImagesLimit={maxImagesLimit}
                 selectedIndices={selectedIndices}
                 selectionMode={selectionMode}
                 startIndex={startIndex}
@@ -800,7 +868,8 @@ export function App() {
                 onExpandCarouselChange={setExpandCarouselImages}
                 onImport={onImport}
                 onShowUpgradeOverlay={openUpgradeOverlay}
-                onBillingCheckout={onBillingCheckout}
+                onBillingCheckout={onBillingCheckoutPro}
+                onBillingCheckoutMax={onBillingCheckoutMax}
                 onManage={onManage}
                 onOpenExternal={onOpenExternal}
               />

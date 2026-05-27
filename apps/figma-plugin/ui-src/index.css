@@ -892,6 +892,14 @@ body,
   flex-shrink: 0;
 }
 
+.post-preview-pagination-root > .post-preview-pagination-cell {
+  border-right: 1px solid var(--color-stroke-soft-200);
+}
+
+.post-preview-pagination-root > .post-preview-pagination-cell:last-child {
+  border-right: 0;
+}
+
 .pro-upgrade-overlay-backdrop {
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
