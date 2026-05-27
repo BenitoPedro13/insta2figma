@@ -33,7 +33,7 @@ export function ContainmentArea({
       ) : null}
       {vertex === 'footer' ? (
         <span
-          className="plugin-layout-vertex plugin-layout-vertex--footer-tl"
+          className="plugin-layout-vertex plugin-layout-vertex--footer"
           aria-hidden
         />
       ) : null}

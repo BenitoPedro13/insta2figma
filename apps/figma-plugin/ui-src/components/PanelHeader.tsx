@@ -73,7 +73,7 @@ export function PanelHeader({
             aria-haspopup="menu"
             onClick={() => setMenuOpen((open) => !open)}
           >
-            <RiMenu4Line size={20} aria-hidden />
+            <RiMenu4Line size={24} aria-hidden />
           </button>
           {menuOpen ? (
             <div className="plugin-menu-dropdown-wrap absolute right-0 top-[calc(100%+6px)] z-50">

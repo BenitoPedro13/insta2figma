@@ -224,7 +224,7 @@ export function PostCountSlider({
       <div className="flex items-center justify-between gap-3">
         <p
           id="post-count-heading"
-          className="m-0 text-label-sm font-semibold text-text-strong-950"
+          className="m-0 new-import-label font-semibold text-text-strong-950"
         >
           How many posts?
         </p>

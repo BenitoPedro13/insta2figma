@@ -8,7 +8,7 @@ import {
   RiVipCrownLine,
 } from '@remixicon/react';
 import pppFounderPhoto from '../assets/ppp-founder.png';
-import { ChromeRuler, OVERLAY_SCALE_MARKS } from './ChromeRuler';
+import { ChromeRuler } from './ChromeRuler';
 import { ContainmentArea } from './ContainmentArea';
 import * as FancyButton from './ui/fancy-button';
 import * as SegmentedControl from './ui/segmented-control';
@@ -56,6 +56,29 @@ const FEATURE_ROWS: FeatureRow[] = [
 
 const PPP_EMAIL = 'mailto:marcus@mainnet.design';
 
+const PLAN_PRICING = {
+  yearly: { pro: 3, max: 30 },
+  monthly: { pro: 5, max: 50 },
+} as const;
+
+/** Desconto do yearly vs preço monthly equivalente: Pro (5→3) e Max (50→30) = 40%. */
+const YEARLY_DISCOUNT_PERCENT = Math.round(
+  ((PLAN_PRICING.monthly.pro - PLAN_PRICING.yearly.pro) /
+    PLAN_PRICING.monthly.pro) *
+    100,
+);
+
+function AnimatedPlanPrice({ amount }: { amount: number }) {
+  return (
+    <span
+      key={amount}
+      className="pro-upgrade-price-amount text-[36px] font-medium leading-none tracking-[-0.54px] text-text-strong-950"
+    >
+      ${amount}
+    </span>
+  );
+}
+
 function PlanTableCell({
   className,
   children,
@@ -85,6 +108,7 @@ export function ProUpgradeOverlay({
   const [billingPeriod, setBillingPeriod] = useState<'yearly' | 'monthly'>(
     'yearly',
   );
+  const prices = PLAN_PRICING[billingPeriod];
 
   if (!open) return null;
 
@@ -137,13 +161,10 @@ export function ProUpgradeOverlay({
           </button>
         </div>
 
-        <ChromeRuler
-          marks={OVERLAY_SCALE_MARKS}
-          className="pro-upgrade-grid-ruler"
-        />
+        <ChromeRuler className="pro-upgrade-grid-ruler" />
 
         <div className="pro-upgrade-plan-header-row grid grid-cols-3 border-b border-stroke-soft-200">
-          <div className="pro-upgrade-plan-col items-center justify-center gap-2.5 border-r border-stroke-soft-200 px-4 py-5">
+          <div className="pro-upgrade-plan-col pro-upgrade-plan-col--chooser items-center justify-center border-r border-stroke-soft-200 px-4 py-5">
             <p
               id="pro-upgrade-title"
               className="m-0 text-center text-label-lg font-medium tracking-[-0.27px] text-text-strong-950"
@@ -165,11 +186,17 @@ export function ProUpgradeOverlay({
                 </SegmentedControl.Trigger>
               </SegmentedControl.List>
             </SegmentedControl.Root>
-            {billingPeriod === 'yearly' ? (
-              <span className="rounded-md bg-success-lighter px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success-dark">
-                30% off
+            <div className="pro-upgrade-discount-slot" aria-live="polite">
+              <span
+                className={cn(
+                  'pro-upgrade-discount-badge rounded-md bg-success-lighter px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success-dark',
+                  billingPeriod === 'yearly' && 'pro-upgrade-discount-badge--visible',
+                )}
+                aria-hidden={billingPeriod !== 'yearly'}
+              >
+                {YEARLY_DISCOUNT_PERCENT}% off
               </span>
-            ) : null}
+            </div>
           </div>
 
           <div className="pro-upgrade-plan-col gap-1.5 border-r border-stroke-soft-200 px-4 py-5">
@@ -177,13 +204,11 @@ export function ProUpgradeOverlay({
               className="size-6 shrink-0 text-feature-base"
               aria-hidden
             />
-            <p className="m-0 text-label-lg font-medium tracking-[-0.27px] text-text-strong-950">
+            <p className="m-0 text-title-h5 font-medium tracking-[-0.27px] text-text-strong-950">
               Pro
             </p>
-            <div className="flex items-end gap-1">
-              <span className="text-[36px] font-medium leading-none tracking-[-0.54px] text-text-strong-950">
-                $3
-              </span>
+            <div className="pro-upgrade-price-row flex items-end gap-1 overflow-hidden">
+              <AnimatedPlanPrice amount={prices.pro} />
               <span className="pb-1 text-paragraph-xs text-text-sub-600">
                 /month
               </span>
@@ -205,17 +230,15 @@ export function ProUpgradeOverlay({
               aria-hidden
             />
             <div className="flex flex-wrap items-center gap-1.5">
-              <p className="m-0 text-label-lg font-medium tracking-[-0.27px] text-orange-500">
+              <p className="m-0 text-title-h5 font-medium tracking-[-0.27px] text-orange-500">
                 Max
               </p>
               <span className="rounded-md bg-warning-lighter px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning-dark">
                 Most Popular
               </span>
             </div>
-            <div className="flex items-end gap-1">
-              <span className="text-[36px] font-medium leading-none tracking-[-0.54px] text-text-strong-950">
-                $30
-              </span>
+            <div className="pro-upgrade-price-row flex items-end gap-1 overflow-hidden">
+              <AnimatedPlanPrice amount={prices.max} />
               <span className="pb-1 text-paragraph-xs text-text-sub-600">
                 /month
               </span>

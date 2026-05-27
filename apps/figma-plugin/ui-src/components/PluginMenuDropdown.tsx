@@ -121,7 +121,7 @@ export function PluginMenuDropdown({
             className="cursor-pointer border-0 bg-transparent p-0 text-inherit underline-offset-2 hover:underline"
             onClick={() => openLink(MAINNET_URL)}
           >
-            Made by Mainnet™
+            Made by Mainnet™ in 🇧🇷
           </button>
         </p>
       </div>

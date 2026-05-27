@@ -131,24 +131,26 @@ body,
 }
 
 .plugin-sidebar-track {
+  position: relative;
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
   width: 100%;
-  padding: 0;
+  overflow: hidden;
 }
 
 .plugin-sidebar-mark {
+  position: absolute;
+  right: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
   gap: 3px;
-  width: 100%;
-  min-height: 0;
+  transform: translateY(-50%);
+}
+
+.plugin-sidebar-mark--origin {
+  transform: none;
 }
 
 .plugin-sidebar-mark-label {
@@ -961,13 +963,62 @@ body,
   flex-direction: column;
 }
 
+.pro-upgrade-plan-col--chooser {
+  gap: 10px;
+}
+
+.pro-upgrade-discount-slot {
+  display: flex;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+}
+
+.pro-upgrade-discount-badge {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.96);
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease;
+  pointer-events: none;
+}
+
+.pro-upgrade-discount-badge--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.pro-upgrade-price-row {
+  min-height: 36px;
+}
+
+@keyframes pro-upgrade-price-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.pro-upgrade-price-amount {
+  display: inline-block;
+  animation: pro-upgrade-price-enter 0.4s ease-out both;
+}
+
 .pro-upgrade-plan-action {
   margin-top: auto;
   width: 100%;
+  cursor: pointer;
 }
 
 .pro-upgrade-max-btn {
   border: 0;
+  cursor: pointer;
   background: var(--color-orange-500);
   color: var(--color-static-white);
   box-shadow:
@@ -1044,7 +1095,7 @@ body,
   position: absolute;
   width: 8px;
   height: 8px;
-  background: var(--color-bg-white-0);
+  background: #ffffff;
   border: 1px solid #0d99fe;
   box-sizing: border-box;
 }

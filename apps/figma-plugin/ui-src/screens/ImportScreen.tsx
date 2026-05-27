@@ -251,10 +251,10 @@ export function ImportScreen({
           <PluginTabs active={activeTab} onChange={onTabChange} />
           {isImportTab ? (
             <form
-              className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
+              className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4"
               onSubmit={onSubmit}
             >
-              <div className="new-import-field flex flex-col gap-2">
+              <div className="new-import-field flex flex-col gap-4">
                 <label
                   htmlFor="username"
                   className="new-import-label text-label-sm  text-text-strong-950"

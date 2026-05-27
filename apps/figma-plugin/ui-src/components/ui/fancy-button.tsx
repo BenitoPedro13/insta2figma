@@ -13,10 +13,10 @@ const FANCY_BUTTON_ICON_NAME = 'FancyButtonIcon';
 export const fancyButtonVariants = tv({
   slots: {
     root: [
-      'group relative inline-flex items-center justify-center whitespace-nowrap text-label-sm outline-none',
+      'group relative inline-flex cursor-pointer items-center justify-center whitespace-nowrap text-label-sm outline-none',
       'transition duration-200 ease-out',
       'focus:outline-none',
-      'disabled:pointer-events-none disabled:text-text-disabled-300',
+      'disabled:pointer-events-none disabled:cursor-not-allowed disabled:text-text-disabled-300',
       'disabled:bg-bg-weak-50 disabled:bg-none disabled:shadow-none disabled:before:hidden disabled:after:hidden',
     ],
     icon: 'relative z-10 size-5 shrink-0',

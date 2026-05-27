@@ -79,11 +79,12 @@ const SegmentedControlTrigger = React.forwardRef<
       ref={forwardedRef}
       className={cn(
         'peer',
-        'relative z-10 h-7 whitespace-nowrap rounded-md px-1 text-label-sm text-text-soft-400 outline-none',
-        'flex items-center justify-center gap-1.5',
+        'relative z-10 flex h-7 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1 text-label-sm text-text-soft-400 outline-none',
         'transition duration-300 ease-out',
+        'hover:text-text-sub-600',
         'focus:outline-none',
         'data-[state=active]:text-text-strong-950',
+        'data-[state=active]:hover:text-text-strong-950',
         className,
       )}
       {...rest}
