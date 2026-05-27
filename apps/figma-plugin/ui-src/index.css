@@ -1265,6 +1265,16 @@ body,
     0 20px 20px -10px rgba(23, 23, 23, 0.04);
 }
 
+.plugin-menu-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--color-stroke-soft-200);
+}
+
+.plugin-menu-email-support {
+  margin-top: 2px;
+}
+
 .plugin-menu-footer p {
   white-space: normal;
 }

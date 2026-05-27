@@ -492,7 +492,7 @@ type PluginMessage =
       estimatedImportImages?: number;
     }
   | { type: 'session-request' }
-  | { type: 'billing-checkout'; plan?: 'pro' | 'max' }
+  | { type: 'billing-checkout'; plan?: 'pro' | 'max'; cycle?: 'monthly' | 'yearly' }
   | { type: 'billing-portal' }
   | { type: 'open-external'; url: string }
   | { type: 'error'; message: unknown };
@@ -678,6 +678,7 @@ async function openBillingCheckout(
   base: string,
   token: string,
   plan: 'pro' | 'max' = 'pro',
+  cycle: 'monthly' | 'yearly' = 'monthly',
 ): Promise<void> {
   const res = await fetch(`${base}/v1/billing/checkout-session`, {
     method: 'POST',
@@ -685,7 +686,7 @@ async function openBillingCheckout(
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify({ plan, cycle }),
   });
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const data = payload.data as { url?: string } | undefined;
@@ -1079,9 +1080,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
   if (msg.type === 'billing-checkout') {
     const base = normBase(DEFAULT_API_BASE);
     const plan = msg.plan === 'max' ? 'max' : 'pro';
+    const cycle = msg.cycle === 'yearly' ? 'yearly' : 'monthly';
     try {
       const { session } = await ensureSession(base);
-      await openBillingCheckout(base, session.accessToken, plan);
+      await openBillingCheckout(base, session.accessToken, plan, cycle);
       figma.notify('Checkout aberto no browser.');
     } catch (err) {
       figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
@@ -1103,7 +1105,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
   if (msg.type === 'open-external') {
     const url = typeof msg.url === 'string' ? msg.url.trim() : '';
-    if (url && /^https?:\/\//i.test(url)) {
+    if (url && (/^https?:\/\//i.test(url) || /^mailto:/i.test(url))) {
       figma.openExternal(url);
     }
     return;

@@ -239,8 +239,12 @@ export type PlanTier = z.infer<typeof planTierSchema>;
 export const billingCheckoutPlanSchema = z.enum(['pro', 'max']);
 export type BillingCheckoutPlan = z.infer<typeof billingCheckoutPlanSchema>;
 
+export const billingCycleSchema = z.enum(['monthly', 'yearly']);
+export type BillingCycle = z.infer<typeof billingCycleSchema>;
+
 export const billingCheckoutBodySchema = z.object({
   plan: billingCheckoutPlanSchema.optional().default('pro'),
+  cycle: billingCycleSchema.optional().default('monthly'),
 });
 
 export type BillingCheckoutBody = z.infer<typeof billingCheckoutBodySchema>;

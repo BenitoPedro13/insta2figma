@@ -31,23 +31,42 @@ export class PolarService {
     return this.client;
   }
 
-  getProProductId(): string {
-    return this.config.getOrThrow<string>('POLAR_PRODUCT_ID_PRO');
-  }
-
-  getMaxProductId(): string | null {
-    const id = this.config.get<string>('POLAR_PRODUCT_ID_MAX')?.trim();
+  private getEnvId(key: string): string | null {
+    const id = this.config.get<string>(key)?.trim();
     return id || null;
   }
 
-  getProductIdForPlan(plan: 'pro' | 'max'): string {
-    if (plan === 'max') {
-      const maxId = this.getMaxProductId();
-      if (!maxId) {
-        throw new Error('POLAR_PRODUCT_ID_MAX em falta.');
-      }
-      return maxId;
+  getProductId(plan: 'pro' | 'max', cycle: 'monthly' | 'yearly'): string | null {
+    const key = `POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()}`;
+    const direct = this.getEnvId(key);
+    if (direct) return direct;
+    // Fallback compatível com a env antiga (sem ciclo).
+    if (cycle === 'monthly') {
+      const legacy = this.getEnvId(`POLAR_PRODUCT_ID_${plan.toUpperCase()}`);
+      if (legacy) return legacy;
     }
-    return this.getProProductId();
+    return null;
+  }
+
+  getProductIdForPlan(
+    plan: 'pro' | 'max',
+    cycle: 'monthly' | 'yearly' = 'monthly',
+  ): string {
+    const id = this.getProductId(plan, cycle);
+    if (!id) {
+      throw new Error(
+        `POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()} em falta.`,
+      );
+    }
+    return id;
+  }
+
+  /** Todos os product IDs conhecidos para um tier (monthly + yearly). */
+  getAllProductIdsForPlan(plan: 'pro' | 'max'): string[] {
+    const ids = [
+      this.getProductId(plan, 'monthly'),
+      this.getProductId(plan, 'yearly'),
+    ].filter((id): id is string => Boolean(id));
+    return Array.from(new Set(ids));
   }
 }

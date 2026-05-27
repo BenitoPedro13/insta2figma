@@ -94,8 +94,8 @@ type ImportScreenProps = {
   onExpandCarouselChange: (v: boolean) => void;
   onImport: () => void;
   onShowUpgradeOverlay: () => void;
-  onBillingCheckout: () => void;
-  onBillingCheckoutMax: () => void;
+  onBillingCheckout: (cycle?: 'monthly' | 'yearly') => void;
+  onBillingCheckoutMax: (cycle?: 'monthly' | 'yearly') => void;
   onManage: () => void;
   onOpenExternal: (url: string) => void;
 };

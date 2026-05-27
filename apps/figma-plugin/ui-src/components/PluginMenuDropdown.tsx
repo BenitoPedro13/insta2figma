@@ -1,15 +1,17 @@
 import { useCallback } from 'react';
 import {
   RiArrowRightUpLine,
-  RiCustomerService2Line,
+  RiFeedbackLine,
+  RiMailLine,
   RiSettings3Line,
 } from '@remixicon/react';
 import * as FancyButton from './ui/fancy-button';
 import { ThemeSegmentedControl } from './ThemeSegmentedControl';
 import {
+  FEEDBACK_EMAIL,
   MAINNET_URL,
   PLUGIN_VERSION,
-  SUPPORT_URL,
+  SUPPORT_EMAIL,
   TERMS_URL,
 } from '../lib/pluginLinks';
 import { cn } from '../utils/cn';
@@ -25,11 +27,15 @@ type PluginMenuDropdownProps = {
 };
 
 type MenuItemProps = {
-  icon: typeof RiCustomerService2Line;
+  icon: typeof RiFeedbackLine;
   label: string;
   onClick: () => void;
   showExternal?: boolean;
 };
+
+function MenuDivider() {
+  return <div className="plugin-menu-divider" role="separator" />;
+}
 
 function MenuItem({ icon: Icon, label, onClick, showExternal }: MenuItemProps) {
   return (
@@ -84,7 +90,7 @@ export function PluginMenuDropdown({
           type="button"
           variant="neutral"
           size="small"
-          className="w-full"
+          className="pro-upgrade-max-btn w-full"
           onClick={handleUpgrade}
         >
           Upgrade plan
@@ -98,13 +104,28 @@ export function PluginMenuDropdown({
         />
       )}
 
+      <MenuDivider />
+
       <MenuItem
-        icon={RiCustomerService2Line}
-        label="Support"
-        onClick={() => openLink(SUPPORT_URL)}
+        icon={RiFeedbackLine}
+        label="Send feedback"
+        onClick={() => openLink(FEEDBACK_EMAIL)}
       />
 
+      <MenuDivider />
+
       <ThemeSegmentedControl />
+
+      <FancyButton.Root
+        type="button"
+        variant="primary"
+        size="small"
+        className="plugin-menu-email-support w-full"
+        onClick={() => openLink(SUPPORT_EMAIL)}
+      >
+        <FancyButton.Icon as={RiMailLine} />
+        Email support
+      </FancyButton.Root>
 
       <div className="plugin-menu-footer px-2 py-2">
         <p className="m-0 text-paragraph-xs text-text-soft-400">

@@ -17,8 +17,8 @@ import { cn } from '../utils/cn';
 type ProUpgradeOverlayProps = {
   open: boolean;
   onClose: () => void;
-  onUpgrade: () => void;
-  onUpgradeMax?: () => void;
+  onUpgrade: (cycle?: 'monthly' | 'yearly') => void;
+  onUpgradeMax?: (cycle?: 'monthly' | 'yearly') => void;
   onOpenExternal?: (url: string) => void;
 };
 
@@ -114,12 +114,12 @@ export function ProUpgradeOverlay({
 
   const handleUpgradePro = () => {
     onClose();
-    onUpgrade();
+    onUpgrade(billingPeriod);
   };
 
   const handleUpgradeMax = () => {
     onClose();
-    (onUpgradeMax ?? onUpgrade)();
+    (onUpgradeMax ?? onUpgrade)(billingPeriod);
   };
 
   const openPppEmail = () => {

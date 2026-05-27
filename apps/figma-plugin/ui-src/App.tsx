@@ -479,19 +479,25 @@ export function App() {
     lastLoadedPreviewPageRef.current = 1;
   }, []);
 
-  const onBillingCheckoutPro = useCallback(() => {
-    parent.postMessage(
-      { pluginMessage: { type: 'billing-checkout', plan: 'pro' } },
-      '*',
-    );
-  }, []);
+  const onBillingCheckoutPro = useCallback(
+    (cycle: 'monthly' | 'yearly' = 'monthly') => {
+      parent.postMessage(
+        { pluginMessage: { type: 'billing-checkout', plan: 'pro', cycle } },
+        '*',
+      );
+    },
+    [],
+  );
 
-  const onBillingCheckoutMax = useCallback(() => {
-    parent.postMessage(
-      { pluginMessage: { type: 'billing-checkout', plan: 'max' } },
-      '*',
-    );
-  }, []);
+  const onBillingCheckoutMax = useCallback(
+    (cycle: 'monthly' | 'yearly' = 'monthly') => {
+      parent.postMessage(
+        { pluginMessage: { type: 'billing-checkout', plan: 'max', cycle } },
+        '*',
+      );
+    },
+    [],
+  );
 
   const openUpgradeOverlay = useCallback(() => {
     setShowProOverlay(true);

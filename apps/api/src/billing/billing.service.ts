@@ -27,7 +27,10 @@ import {
   shouldOmitCheckoutCustomerEmail,
 } from './polar-email.util';
 import { PolarService } from './polar.service';
-import type { BillingCheckoutPlan } from '@insta2figma/shared-contracts';
+import type {
+  BillingCheckoutPlan,
+  BillingCycle,
+} from '@insta2figma/shared-contracts';
 
 type WebhookPayload = {
   type?: string;
@@ -112,6 +115,7 @@ export class BillingService {
   async createCheckoutSession(
     userId: string,
     plan: BillingCheckoutPlan = 'pro',
+    cycle: BillingCycle = 'monthly',
   ): Promise<{ url: string }> {
     if (!this.polar.isConfigured()) {
       throw new ServiceUnavailableException('Billing Polar não configurado.');
@@ -127,12 +131,10 @@ export class BillingService {
     const client = this.polar.getClient();
     let productId: string;
     try {
-      productId = this.polar.getProductIdForPlan(plan);
+      productId = this.polar.getProductIdForPlan(plan, cycle);
     } catch {
       throw new BadRequestException(
-        plan === 'max'
-          ? 'Plano Max ainda não configurado (POLAR_PRODUCT_ID_MAX).'
-          : 'Plano Pro ainda não configurado (POLAR_PRODUCT_ID_PRO).',
+        `Plano ${plan} (${cycle}) ainda não configurado (POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()}).`,
       );
     }
     const successUrl =
@@ -149,7 +151,7 @@ export class BillingService {
           : { customerEmail: polarEmail }),
         successUrl,
         returnUrl: returnUrl || undefined,
-        metadata: { userId, plan },
+        metadata: { userId, plan, cycle },
       });
 
       if (!checkout.url) {
@@ -160,7 +162,7 @@ export class BillingService {
       this.logger.error('checkouts.create falhou', err);
       if (isPolarSdkValidation(err)) {
         throw new BadRequestException(
-          `Checkout inválido: ${formatPolarError(err)}. Verifica POLAR_PRODUCT_ID_${plan === 'max' ? 'MAX' : 'PRO'} (sandbox).`,
+          `Checkout inválido: ${formatPolarError(err)}. Verifica POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()} (sandbox).`,
         );
       }
       throw new ServiceUnavailableException(
@@ -253,21 +255,18 @@ export class BillingService {
     state: PolarCustomerState,
   ): Promise<void> {
     const polarCustomerId = this.extractCustomerId(state);
-    const maxProductId = this.polar.isConfigured()
-      ? this.polar.getMaxProductId()
-      : null;
-    const proProductId = this.polar.isConfigured()
-      ? this.polar.getProProductId()
-      : null;
+    const maxIds = this.polar.isConfigured()
+      ? this.polar.getAllProductIdsForPlan('max')
+      : [];
+    const proIds = this.polar.isConfigured()
+      ? this.polar.getAllProductIdsForPlan('pro')
+      : [];
 
     const subs = this.extractActiveSubscriptions(state);
-    const maxSub = maxProductId
-      ? subs.find((s) => s.productId === maxProductId)
+    const maxSub = subs.find((s) => maxIds.includes(s.productId)) ?? null;
+    const proSub = !maxSub
+      ? (subs.find((s) => proIds.includes(s.productId)) ?? null)
       : null;
-    const proSub =
-      !maxSub && proProductId
-        ? subs.find((s) => s.productId === proProductId)
-        : null;
     const activeSub = maxSub ?? proSub ?? null;
 
     const planTier = maxSub ? 'max' : proSub ? 'pro' : 'free';

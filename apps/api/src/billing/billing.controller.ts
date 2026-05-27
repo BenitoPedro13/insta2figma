@@ -20,7 +20,8 @@ export class BillingController {
   ) {
     const parsed = billingCheckoutBodySchema.safeParse(body ?? {});
     const plan = parsed.success ? parsed.data.plan : 'pro';
-    return this.billing.createCheckoutSession(req.user.userId, plan);
+    const cycle = parsed.success ? parsed.data.cycle : 'monthly';
+    return this.billing.createCheckoutSession(req.user.userId, plan, cycle);
   }
 
   @Post('portal-session')
