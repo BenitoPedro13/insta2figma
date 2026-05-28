@@ -27,17 +27,17 @@ const apiMode: 'auto' | 'local' | 'production' =
 
 async function probeLocalApi(): Promise<boolean> {
   const local = normApiBase(LOCAL_API_BASE);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 2_000);
+  const timeoutMs = 2_000;
   try {
-    const res = await fetch(`${local}/v1/health`, {
-      signal: controller.signal,
-    });
+    const res = await Promise.race([
+      fetch(`${local}/v1/health`),
+      new Promise<never>((_resolve, reject) => {
+        setTimeout(() => reject(new Error('timeout')), timeoutMs);
+      }),
+    ]);
     return res.ok;
   } catch {
     return false;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
