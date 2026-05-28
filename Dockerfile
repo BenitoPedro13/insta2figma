@@ -5,16 +5,18 @@
 FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
-ENV NODE_ENV=production
 
 FROM base AS deps
+ENV NODE_ENV=development
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
 COPY packages/shared-contracts/package.json packages/shared-contracts/
+COPY packages/shared-config/package.json packages/shared-config/
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
+COPY packages/shared-config packages/shared-config
 COPY packages/shared-contracts packages/shared-contracts
 COPY apps/api apps/api
 COPY apps/worker apps/worker
@@ -25,6 +27,7 @@ RUN pnpm --filter @insta2figma/shared-contracts build \
   && pnpm --filter @insta2figma/worker build
 
 FROM base AS api
+ENV NODE_ENV=production
 COPY --from=build /app /app
 WORKDIR /app/apps/api
 EXPOSE 3333
@@ -33,6 +36,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 ENTRYPOINT ["/app/scripts/docker-entrypoint-api.sh"]
 
 FROM base AS worker
+ENV NODE_ENV=production
 COPY --from=build /app /app
 WORKDIR /app/apps/worker
 ENTRYPOINT ["node", "dist/main.js"]
