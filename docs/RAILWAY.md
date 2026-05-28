@@ -114,7 +114,7 @@ No plugin Figma, `DEFAULT_API_BASE` = `https://<api>.up.railway.app` (sem `/v1`)
 ## 7. Ordem de arranque
 
 1. Postgres + Redis healthy
-2. Deploy `api` (corre `prisma migrate deploy` no entrypoint)
+2. Deploy `api` — `preDeployCommand` corre `prisma migrate deploy` (ver `railway.api.toml`)
 3. Deploy `worker`
 
 Se jobs ficarem `queued`, confirma que o worker está **Running** e que `REDIS_URL` é idêntico nos dois serviços.
@@ -123,9 +123,10 @@ Se jobs ficarem `queued`, confirma que o worker está **Running** e que `REDIS_U
 
 | Problema | Solução |
 |----------|---------|
+| Log repete só `[api] Aplicar migrations Prisma…` | Health check a `/v1/health` antes do Nest arrancar → usa `preDeployCommand` + entrypoint sem migrate no Railway (já no repo). Faz redeploy após pull. |
 | Build usa Dockerfile errado | `RAILWAY_DOCKERFILE_PATH=Dockerfile.api` no serviço certo |
 | Health check falha | Path `/v1/health`; API precisa de `PORT` do Railway |
-| Prisma migrate falha | `DATABASE_URL` do plugin Postgres; rede privada Railway |
+| Prisma migrate falha / hang | `DATABASE_URL=${{Postgres.DATABASE_URL}}`; se precisar SSL: acrescenta `?sslmode=require` ao URL |
 | Imagens não carregam no Figma | `PUBLIC_S3_ENDPOINT` acessível publicamente |
 
 Guia geral: [DEPLOY.md](./DEPLOY.md).

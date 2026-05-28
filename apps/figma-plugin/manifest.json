@@ -10,7 +10,17 @@
   "ui": "dist/ui.html",
   "permissions": ["currentuser"],
   "networkAccess": {
-    "allowedDomains": ["*"],
-    "reasoning": "Dev MVP: allows the current proxy; replace with explicit domains (API + storage) before production — see docs/IMPLEMENTATION.md Phase 8."
+    "allowedDomains": [
+      "https://insta2figma-production.up.railway.app",
+      "https://*.up.railway.app",
+      "https://*.railway.app",
+      "https://instagram.com",
+      "https://*.cdninstagram.com",
+      "https://*.fbcdn.net"
+    ],
+    "devAllowedDomains": [
+      "http://localhost:3333"
+    ],
+    "reasoning": "API Railway em produção; Instagram CDN; presigned assets. Local só em dev via devAllowedDomains."
   }
 }

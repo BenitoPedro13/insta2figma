@@ -61,14 +61,30 @@ As chamadas **`fetch` à API** correm no **contexto principal do plugin** (`code
 
 No preview, o backend devolve `profilePicDataUrl` + estimativas (`estimatedPostCovers`, `estimatedCarouselExtras`, `estimatedImportImages`). O botão primário usa essa estimativa: **Importar X imagens**.
 
-## Configuração interna do plugin (dev)
+## Configuração da API (local vs Railway)
 
-No `code.ts`:
+Em `src/api-base.ts`:
 
-- `DEFAULT_API_BASE` — por omissão `http://127.0.0.1:3333` (API local).
-- Sessão: `POST /v1/auth/figma` com `figma.currentUser.id`; JWT em `insta2figma:session:v1` (`clientStorage`).
+- **Local:** `http://localhost:3333` (manifest: `devAllowedDomains`)
+- **Produção:** `https://insta2figma-production.up.railway.app`
 
-Para outro host/porta da API, altera `DEFAULT_API_BASE` e recompila o plugin.
+Por omissão (`INSTA2FIGMA_API_MODE=auto`), ao abrir o plugin:
+
+1. Faz probe a `GET /v1/health` na API local (2s).
+2. Se responder → usa **local** (`pnpm dev` a correr).
+3. Senão → usa **Railway**.
+
+Forçar no build:
+
+```bash
+pnpm --filter @insta2figma/figma-plugin run build:local   # só localhost:3333
+pnpm --filter @insta2figma/figma-plugin run build:prod    # só Railway
+pnpm --filter @insta2figma/figma-plugin build             # auto (recomendado)
+```
+
+Outro domínio Railway: `INSTA2FIGMA_PRODUCTION_API_BASE=https://... pnpm --filter @insta2figma/figma-plugin build`
+
+Sessão: `POST /v1/auth/figma`; JWT em `insta2figma:session:v1`. Ao mudar de local → produção, a sessão é limpa automaticamente.
 
 Para MinIO/S3, o download das imagens continua a ser `fetch` no `code.ts`; confirma **`networkAccess`** e domínios assinados quando saíres de dev — ver nota abaixo.
 
@@ -76,4 +92,4 @@ A API deve expor **CORS** para pedidos que ainda possam vir de outros contextos;
 
 ## Nota `networkAccess`
 
-`allowedDomains: ["*"]` é apenas para desenvolvimento com o proxy actual. Antes de produção, restringir a domínios explícitos (API + storage), conforme o guia de implementação Fase 8.
+`manifest.json` lista API local, Railway e CDNs Instagram. Se presigned URLs do bucket usarem outro host, acrescenta o domínio em `allowedDomains` e reimporta o manifest.

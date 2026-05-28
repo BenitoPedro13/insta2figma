@@ -319,11 +319,15 @@ export function ImportScreen({
                       {usernameLookupStatus === "not-found" ? (
                         <>
                           <RiInformationFill
-                            className="new-import-status-icon"
+                            className="new-import-status-icon shrink-0"
                             size={16}
                             aria-hidden
                           />
-                          Username not found
+                          <span className="min-w-0 break-words">
+                            {previewError.trim()
+                              ? previewError.trim().split("\n")[0]
+                              : "Username not found"}
+                          </span>
                         </>
                       ) : null}
                     </p>

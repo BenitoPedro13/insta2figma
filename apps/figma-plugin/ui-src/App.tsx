@@ -423,9 +423,10 @@ export function App() {
         setInstagramUserId(null);
         setPageCursors({});
         setPagePostsCache({});
-        setPreviewError(
-          typeof pm.message === 'string' ? pm.message : 'Could not load profile preview.',
-        );
+        const errMsg =
+          typeof pm.message === 'string' ? pm.message : 'Could not load profile preview.';
+        const errBase = typeof pm.base === 'string' ? pm.base : '';
+        setPreviewError(errBase ? `${errMsg}\n\nAPI: ${errBase}` : errMsg);
         return;
       }
       if (pm.type === 'import-error') {

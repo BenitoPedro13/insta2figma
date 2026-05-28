@@ -7,6 +7,8 @@ dockerfilePath = "Dockerfile.api"
 watchPatterns = ["apps/api/**", "packages/shared-contracts/**", "Dockerfile.api"]
 
 [deploy]
+# Migrations antes do container expor /v1/health (evita crash loop no entrypoint).
+preDeployCommand = ["pnpm exec prisma migrate deploy"]
 healthcheckPath = "/v1/health"
-healthcheckTimeout = 120
+healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

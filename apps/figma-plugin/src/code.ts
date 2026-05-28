@@ -8,6 +8,8 @@ import {
   importStatusSigning,
   importStatusWaiting,
 } from './importStatusCopy';
+import { resolveApiBase } from './api-base';
+import { apiFetch, probeApiHealth } from './plugin-fetch';
 
 function assertWorkspaceContractsLinked(): void {
   if (JOB_TYPES.length !== 2) {
@@ -86,7 +88,22 @@ void bootstrapSession();
 /** Alinhado com `historyStorage.ts` HISTORY_STORAGE_KEY — persistência via `clientStorage`. */
 const HISTORY_STORAGE_KEY = 'insta2figma:history:v1';
 const SESSION_STORAGE_KEY = 'insta2figma:session:v1';
-const DEFAULT_API_BASE = 'http://127.0.0.1:3333';
+const API_BASE_STORAGE_KEY = 'insta2figma:api-base:v1';
+
+/** Local se `pnpm dev` responder em /v1/health; senão Railway (ver `api-base.ts`). */
+async function getApiBase(): Promise<string> {
+  const base = await resolveApiBase();
+  try {
+    const prev = await figma.clientStorage.getAsync(API_BASE_STORAGE_KEY);
+    if (typeof prev === 'string' && prev !== base) {
+      await figma.clientStorage.deleteAsync(SESSION_STORAGE_KEY);
+    }
+    await figma.clientStorage.setAsync(API_BASE_STORAGE_KEY, base);
+  } catch (e) {
+    console.warn('[Insta2Figma] api-base persist', e);
+  }
+  return base;
+}
 
 type StoredSession = {
   accessToken: string;
@@ -497,12 +514,6 @@ type PluginMessage =
   | { type: 'open-external'; url: string }
   | { type: 'error'; message: unknown };
 
-function normBase(b: string): string {
-  return String(b ?? '')
-    .trim()
-    .replace(/\/+$/, '');
-}
-
 function parseApiError(payload: Record<string, unknown>): string {
   const err = payload.error as { code?: string; message?: string } | undefined;
   if (err?.message) return err.message;
@@ -536,11 +547,15 @@ async function authFigmaUser(
   figmaUserId: string,
   name?: string,
 ): Promise<StoredSession> {
-  const res = await fetch(`${base}/v1/auth/figma`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ figmaUserId, name }),
-  });
+  const res = await apiFetch(
+    `${base}/v1/auth/figma`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ figmaUserId, name }),
+    },
+    'auth/figma',
+  );
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const data = payload.data as
     | { accessToken?: string; userId?: string }
@@ -558,9 +573,11 @@ async function authFigmaUser(
 }
 
 async function fetchMe(base: string, token: string): Promise<SessionPayload> {
-  const res = await fetch(`${base}/v1/me`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
+  const res = await apiFetch(
+    `${base}/v1/me`,
+    { headers: { authorization: `Bearer ${token}` } },
+    'GET /me',
+  );
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const data = payload.data as Record<string, unknown> | undefined;
   if (!res.ok || !data) {
@@ -662,14 +679,20 @@ async function ensureSession(base: string): Promise<{
 }
 
 async function bootstrapSession(): Promise<void> {
-  const base = normBase(DEFAULT_API_BASE);
+  const base = await getApiBase();
+  console.info('[Insta2Figma] bootstrap API base:', base);
+  figma.ui.postMessage({ type: 'api-base', base });
   try {
+    await probeApiHealth(base);
     const { me } = await ensureSession(base);
     figma.ui.postMessage({ type: 'session-data', ...me });
   } catch (err) {
+    const message = formatCaught(err);
+    console.error('[Insta2Figma] bootstrapSession', { base }, err);
     figma.ui.postMessage({
       type: 'session-error',
-      message: formatCaught(err),
+      message,
+      base,
     });
   }
 }
@@ -680,7 +703,7 @@ async function openBillingCheckout(
   plan: 'pro' | 'max' = 'pro',
   cycle: 'monthly' | 'yearly' = 'monthly',
 ): Promise<void> {
-  const res = await fetch(`${base}/v1/billing/checkout-session`, {
+  const res = await apiFetch(`${base}/v1/billing/checkout-session`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token}`,
@@ -697,7 +720,7 @@ async function openBillingCheckout(
 }
 
 async function openBillingPortal(base: string, token: string): Promise<void> {
-  const res = await fetch(`${base}/v1/billing/portal-session`, {
+  const res = await apiFetch(`${base}/v1/billing/portal-session`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
   });
@@ -734,7 +757,7 @@ async function importProfileViaApi(
 
   notifyStatus(importStatusQueue());
   const idem = `figma-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const jr = await fetch(`${base}/v1/jobs`, {
+  const jr = await apiFetch(`${base}/v1/jobs`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token}`,
@@ -784,7 +807,7 @@ async function importProfileViaApi(
   let status = '';
   for (let i = 0; i < 120; i++) {
     await new Promise((r) => setTimeout(r, 2000));
-    const gr = await fetch(`${base}/v1/jobs/${encodeURIComponent(jobId)}`, {
+    const gr = await apiFetch(`${base}/v1/jobs/${encodeURIComponent(jobId)}`, {
       headers: { authorization: `Bearer ${token}` },
     });
     const gj = (await gr.json().catch(() => ({}))) as Record<string, unknown>;
@@ -978,9 +1001,11 @@ async function previewProfileViaApi(
   const { session } = await ensureSession(base);
   const token = session.accessToken;
   const qs = buildPreviewQueryString(username, opts);
-  const res = await fetch(`${base}/v1/instagram/profile-preview?${qs}`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
+  const res = await apiFetch(
+    `${base}/v1/instagram/profile-preview?${qs}`,
+    { headers: { authorization: `Bearer ${token}` } },
+    'profile-preview',
+  );
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const data = payload.data as Record<string, unknown> | undefined;
   if (!res.ok || !data) {
@@ -1078,7 +1103,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
   }
 
   if (msg.type === 'billing-checkout') {
-    const base = normBase(DEFAULT_API_BASE);
+    const base = await getApiBase();
     const plan = msg.plan === 'max' ? 'max' : 'pro';
     const cycle = msg.cycle === 'yearly' ? 'yearly' : 'monthly';
     try {
@@ -1092,7 +1117,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
   }
 
   if (msg.type === 'billing-portal') {
-    const base = normBase(DEFAULT_API_BASE);
+    const base = await getApiBase();
     try {
       const { session } = await ensureSession(base);
       await openBillingPortal(base, session.accessToken);
@@ -1153,7 +1178,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
   }
 
   if (msg.type === 'import-profile') {
-    const base = normBase(DEFAULT_API_BASE);
+    const base = await getApiBase();
     const username = String(msg.username ?? '')
       .trim()
       .replace(/^@+/, '')
@@ -1206,7 +1231,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
   }
 
   if (msg.type === 'profile-preview') {
-    const base = normBase(DEFAULT_API_BASE);
+    const base = await getApiBase();
     const username = String(msg.username ?? '')
       .trim()
       .replace(/^@+/, '')
@@ -1231,6 +1256,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       return;
     }
     try {
+      console.info('[Insta2Figma] profile-preview pedido', { base, username });
       const preview = await previewProfileViaApi(base, username, {
         maxPosts,
         expandCarouselImages,
@@ -1297,11 +1323,14 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         });
       }
     } catch (err) {
+      const message = formatCaught(err);
+      console.error('[Insta2Figma] profile-preview falhou', { base, username }, err);
       figma.ui.postMessage({
         type: 'profile-preview-error',
         requestKind: msg.requestKind === 'page' ? 'page' : 'initial',
         requestId: msg.requestId,
-        message: formatCaught(err),
+        message,
+        base,
       });
     }
     return;

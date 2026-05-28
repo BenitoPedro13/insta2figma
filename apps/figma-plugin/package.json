@@ -7,6 +7,8 @@
   "scripts": {
     "alignui:globals": "tsx scripts/generate-alignui-globals.mts",
     "build": "node scripts/build.mjs",
+    "build:prod": "INSTA2FIGMA_API_MODE=production node scripts/build.mjs",
+    "build:local": "INSTA2FIGMA_API_MODE=local node scripts/build.mjs",
     "lint": "eslint \"src/**/*.ts\" \"ui-src/**/*.{ts,tsx}\" --max-warnings 0"
   },
   "dependencies": {
