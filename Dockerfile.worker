@@ -1,0 +1,28 @@
+# Worker BullMQ — Railway
+# Local: docker build -f Dockerfile.worker -t insta2figma-worker .
+
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+WORKDIR /app
+ENV NODE_ENV=production
+
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY apps/worker/package.json apps/worker/
+COPY packages/shared-contracts/package.json packages/shared-contracts/
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS build
+COPY packages/shared-contracts packages/shared-contracts
+COPY apps/api apps/api
+COPY apps/worker apps/worker
+COPY turbo.json turbo.json
+RUN pnpm --filter @insta2figma/shared-contracts build \
+  && pnpm --filter @insta2figma/api build \
+  && pnpm --filter @insta2figma/worker build
+
+FROM base
+COPY --from=build /app /app
+WORKDIR /app/apps/worker
+ENTRYPOINT ["node", "dist/main.js"]

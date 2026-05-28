@@ -131,6 +131,27 @@ Guia completo (scopes do token, troubleshooting, `curl`): **[docs/DEV-POLAR-NGRO
    - validar preview/estimativa,
    - importar e confirmar resultado no canvas + histórico/favoritos.
 
+## Deploy (produção)
+
+- **Railway:** **[docs/RAILWAY.md](docs/RAILWAY.md)** — Postgres + Redis + API + worker no mesmo projeto.
+- **Geral:** **[docs/DEPLOY.md](docs/DEPLOY.md)** — Docker Compose VPS, R2, plugin Figma.
+
+Remotes Git:
+
+| Remote | URL |
+|--------|-----|
+| `mainnet` | `git@github.com:mainnetdesign/insta2figma.git` |
+| `origin` | fork pessoal (BenitoPedro13) |
+
+```bash
+git push -u mainnet main
+```
+
+```bash
+cp .env.prod.example .env.prod   # editar segredos
+pnpm prod:up                     # API + worker + Postgres + Redis + MinIO
+```
+
 ## Troubleshooting rápido
 
 - `pnpm bootstrap` falha em Docker: confirmar Docker Desktop ligado e `docker compose version`.

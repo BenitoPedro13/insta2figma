@@ -1,0 +1,12 @@
+# Config do serviço API no Railway.
+# No dashboard: Settings → Config-as-code → /railway.api.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.api"
+watchPatterns = ["apps/api/**", "packages/shared-contracts/**", "Dockerfile.api"]
+
+[deploy]
+healthcheckPath = "/v1/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"

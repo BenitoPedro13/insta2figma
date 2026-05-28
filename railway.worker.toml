@@ -1,0 +1,10 @@
+# Config do serviço worker no Railway.
+# No dashboard: Settings → Config-as-code → /railway.worker.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.worker"
+watchPatterns = ["apps/worker/**", "packages/shared-contracts/**", "Dockerfile.worker"]
+
+[deploy]
+restartPolicyType = "ON_FAILURE"

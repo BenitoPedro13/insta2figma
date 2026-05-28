@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.github
+.env
+**/.env
+!.env.example
+**/.env.example
+*.md
+!apps/api/README.md
+.cursor
+agent-transcripts
+coverage
+.turbo
+apps/figma-plugin/dist

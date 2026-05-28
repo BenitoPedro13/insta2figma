@@ -1,0 +1,134 @@
+# Stack completo num VPS (API + worker + Postgres + Redis + MinIO).
+# Uso: cp .env.prod.example .env.prod && docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Em produção real, preferir Postgres/Redis/S3 geridos (Neon, Upstash, R2) — ver docs/DEPLOY.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-insta2figma}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-insta2figma}
+    volumes:
+      - insta2figma_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-insta2figma} -d ${POSTGRES_DB:-insta2figma}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - insta2figma_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-insta2figma}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?defina MINIO_ROOT_PASSWORD}
+    volumes:
+      - insta2figma_minio:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    restart: 'no'
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - >-
+        for i in $$(seq 1 40); do
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+        mc mb local/${S3_BUCKET:-insta2figma} --ignore-existing &&
+        exit 0;
+        sleep 2;
+        done;
+        exit 1
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-insta2figma}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?defina MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-insta2figma}
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - '${API_PORT:-3333}:3333'
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      DATABASE_URL: postgresql://${POSTGRES_USER:-insta2figma}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-insta2figma}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      S3_ENDPOINT: http://minio:9000
+      PUBLIC_S3_ENDPOINT: ${PUBLIC_S3_ENDPOINT:?defina PUBLIC_S3_ENDPOINT (URL pública do storage)}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-insta2figma}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-insta2figma}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_FORCE_PATH_STYLE: 'true'
+      ASSET_PRESIGN_SECONDS: ${ASSET_PRESIGN_SECONDS:-3600}
+      POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
+      POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
+      POLAR_SERVER: ${POLAR_SERVER:-sandbox}
+      POLAR_PRODUCT_ID_PRO: ${POLAR_PRODUCT_ID_PRO:-}
+      POLAR_SYNTHETIC_EMAIL_DOMAIN: ${POLAR_SYNTHETIC_EMAIL_DOMAIN:-}
+      POLAR_SUCCESS_URL: ${POLAR_SUCCESS_URL:-}
+      POLAR_RETURN_URL: ${POLAR_RETURN_URL:-}
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-insta2figma}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-insta2figma}?schema=public
+      REDIS_URL: redis://redis:6379
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      IG_FETCH_TIMEOUT_MS: ${IG_FETCH_TIMEOUT_MS:-30000}
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-insta2figma}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-insta2figma}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_FORCE_PATH_STYLE: 'true'
+      STORAGE_MAX_THUMBNAILS: ${STORAGE_MAX_THUMBNAILS:-12}
+      ASSET_FETCH_TIMEOUT_MS: ${ASSET_FETCH_TIMEOUT_MS:-20000}
+
+volumes:
+  insta2figma_pgdata:
+  insta2figma_redis:
+  insta2figma_minio:
