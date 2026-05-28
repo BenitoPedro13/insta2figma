@@ -15,7 +15,7 @@ export class PolarService {
 
   getClient(): Polar {
     if (!this.isConfigured()) {
-      throw new Error('Polar não configurado (POLAR_ACCESS_TOKEN em falta).');
+      throw new Error('Polar is not configured (POLAR_ACCESS_TOKEN missing).');
     }
     if (!this.client) {
       const server =
@@ -31,7 +31,42 @@ export class PolarService {
     return this.client;
   }
 
-  getProProductId(): string {
-    return this.config.getOrThrow<string>('POLAR_PRODUCT_ID_PRO');
+  private getEnvId(key: string): string | null {
+    const id = this.config.get<string>(key)?.trim();
+    return id || null;
+  }
+
+  getProductId(plan: 'pro' | 'max', cycle: 'monthly' | 'yearly'): string | null {
+    const key = `POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()}`;
+    const direct = this.getEnvId(key);
+    if (direct) return direct;
+    // Fallback compatível com a env antiga (sem ciclo).
+    if (cycle === 'monthly') {
+      const legacy = this.getEnvId(`POLAR_PRODUCT_ID_${plan.toUpperCase()}`);
+      if (legacy) return legacy;
+    }
+    return null;
+  }
+
+  getProductIdForPlan(
+    plan: 'pro' | 'max',
+    cycle: 'monthly' | 'yearly' = 'monthly',
+  ): string {
+    const id = this.getProductId(plan, cycle);
+    if (!id) {
+      throw new Error(
+        `POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()} is missing.`,
+      );
+    }
+    return id;
+  }
+
+  /** Todos os product IDs conhecidos para um tier (monthly + yearly). */
+  getAllProductIdsForPlan(plan: 'pro' | 'max'): string[] {
+    const ids = [
+      this.getProductId(plan, 'monthly'),
+      this.getProductId(plan, 'yearly'),
+    ].filter((id): id is string => Boolean(id));
+    return Array.from(new Set(ids));
   }
 }

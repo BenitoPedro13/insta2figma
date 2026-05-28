@@ -35,7 +35,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       response.status(HttpStatus.CONFLICT).json({
         error: {
           code: 'CONFLICT',
-          message: 'Recurso em conflito (ex.: email ou idempotência duplicada).',
+          message: 'Resource conflict (e.g. duplicate email or idempotency key).',
         },
       });
       return;
@@ -45,7 +45,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: {
         code: 'INTERNAL',
-        message: 'Erro interno.',
+        message: 'Internal error.',
       },
     });
   }
@@ -65,6 +65,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (Array.isArray(m)) return m.join('; ');
       if (typeof m === 'string') return m;
     }
-    return 'Pedido inválido';
+    return 'Invalid request';
   }
 }

@@ -1,40 +1,48 @@
 import type { PlanTier } from '@insta2figma/shared-contracts';
 
 export type PlanLimits = {
-  jobsPerMonth: number | null;
+  imagesPerMonth: number;
   maxPosts: number;
+  maxImagesPerJob: number;
   expandCarouselImages: boolean;
 };
-
-const PRO_JOBS_SAFETY_CAP = 1000;
 
 export function getPlanLimits(
   planTier: string,
   env: {
-    freeJobsPerMonth: number;
-    freeMaxPosts: number;
-    proMaxPosts: number;
+    freeImagesPerMonth: number;
+    proImagesPerMonth: number;
+    maxImagesPerMonth: number;
+    maxPostsPerJob: number;
+    maxImagesPerJob: number;
   },
 ): PlanLimits {
+  if (planTier === 'max') {
+    return {
+      imagesPerMonth: env.maxImagesPerMonth,
+      maxPosts: env.maxPostsPerJob,
+      maxImagesPerJob: env.maxImagesPerJob,
+      expandCarouselImages: true,
+    };
+  }
   if (planTier === 'pro') {
     return {
-      jobsPerMonth: PRO_JOBS_SAFETY_CAP,
-      maxPosts: env.proMaxPosts,
+      imagesPerMonth: env.proImagesPerMonth,
+      maxPosts: env.maxPostsPerJob,
+      maxImagesPerJob: env.maxImagesPerJob,
       expandCarouselImages: true,
     };
   }
   return {
-    jobsPerMonth: env.freeJobsPerMonth,
-    maxPosts: env.freeMaxPosts,
-    expandCarouselImages: false,
+    imagesPerMonth: env.freeImagesPerMonth,
+    maxPosts: env.maxPostsPerJob,
+    maxImagesPerJob: env.maxImagesPerJob,
+    expandCarouselImages: true,
   };
 }
 
 export function normalizePlanTier(tier: string): PlanTier {
-  return tier === 'pro' ? 'pro' : 'free';
-}
-
-export function currentPeriodStartUtc(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  if (tier === 'max') return 'max';
+  if (tier === 'pro') return 'pro';
+  return 'free';
 }

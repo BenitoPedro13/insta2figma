@@ -20,6 +20,18 @@ ou `pnpm build` (builda todos os pacotes).
 
 O `manifest.json` na pasta `dist/` referencia `code.js` e `ui.html` no mesmo directório (ver [ARQUITETURA-INSTA2FIGMA.md](../../docs/ARQUITETURA-INSTA2FIGMA.md) §4.4).
 
+## AlignUI (design system)
+
+Tailwind v4 + tokens AlignUI em `ui-src/globals.css`. Componentes em `ui-src/components/ui/` (ex.: `Button.Root`, `Button.Icon`) e ícones `@remixicon/react`.
+
+Guia de uso: [docs/ALIGNUI.md](./docs/ALIGNUI.md).
+
+```bash
+pnpm --filter @insta2figma/figma-plugin run alignui:globals   # regenerar tokens
+```
+
+Requisito: **Node 20+** para o build (Tailwind Oxide).
+
 ## Fonte da UI (React)
 
 - Código editável em `ui-src/` (`App.tsx`, estilos). `pnpm build` corre **Vite** com **`vite-plugin-singlefile`** (JS/CSS inlinados em `dist/index.html` → `dist/ui.html`). Isto é necessário porque **`figma.showUI(__html__)`** injeta HTML no iframe: referências externas `<script src="./assets/...">` **não resolvem** e a UI fica em branco.

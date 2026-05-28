@@ -33,7 +33,7 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (existing) {
-      throw new ConflictException('Este email já está registado.');
+      throw new ConflictException('This email is already registered.');
     }
     const user = await this.prisma.user.create({
       data: { email: dto.email },
@@ -46,7 +46,7 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!user) {
-      throw new NotFoundException('Utilizador não encontrado. Usa /v1/auth/register primeiro.');
+      throw new NotFoundException('User not found. Use /v1/auth/register first.');
     }
     return this.signForUser(user.id);
   }

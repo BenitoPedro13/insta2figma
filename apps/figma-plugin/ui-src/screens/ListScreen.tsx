@@ -1,3 +1,4 @@
+import { RiCloseLine, RiSearchLine, RiStarFill, RiStarLine } from '@remixicon/react';
 import { HistoryAvatar } from '../components/HistoryAvatar';
 import type { HistoryEntry } from '../lib/historyStorage';
 
@@ -5,15 +6,13 @@ export type ListTab = 'history' | 'favorites';
 
 type ListScreenProps = {
   tab: ListTab;
-  onTabChange: (t: ListTab) => void;
   search: string;
   onSearchChange: (q: string) => void;
   entries: HistoryEntry[];
   selectedUsername: string | null;
   onOpenImportForProfile: (username: string) => void;
   onToggleFavorite: (username: string) => void;
-  onStartImport: () => void;
-  onAddNew: () => void;
+  onRemoveFromHistory: (username: string) => void;
   listStatus: string;
 };
 
@@ -25,15 +24,13 @@ function matchesSearch(entry: HistoryEntry, q: string): boolean {
 
 export function ListScreen({
   tab,
-  onTabChange,
   search,
   onSearchChange,
   entries,
   selectedUsername,
   onOpenImportForProfile,
   onToggleFavorite,
-  onStartImport,
-  onAddNew,
+  onRemoveFromHistory,
   listStatus,
 }: ListScreenProps) {
   const filtered = entries
@@ -42,38 +39,14 @@ export function ListScreen({
 
   const emptyCopy =
     tab === 'favorites'
-      ? 'Ainda não tens favoritos. Marca uma estrela no histórico.'
-      : 'Clica em Start Import para trazer um perfil Instagram para o histórico.';
+      ? 'No favorites yet. Star an account from History.'
+      : 'Import a profile from New Import to show up here.';
 
   return (
-    <div className="list-screen">
-      <div className="list-tabs" role="tablist" aria-label="Secção">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'history'}
-          className={`list-tab ${tab === 'history' ? 'is-active' : ''}`}
-          onClick={() => onTabChange('history')}
-        >
-          History
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'favorites'}
-          className={`list-tab ${tab === 'favorites' ? 'is-active' : ''}`}
-          onClick={() => onTabChange('favorites')}
-        >
-          Favorites
-        </button>
-        <button type="button" className="list-tab-add" onClick={onAddNew} aria-label="Nova importação">
-          +
-        </button>
-      </div>
-      <div className="list-rule" />
+    <div className="list-screen list-screen--embedded flex min-h-0 flex-1 flex-col">
       <div className="list-search-wrap">
         <span className="list-search-icon" aria-hidden>
-          ⌕
+          <RiSearchLine size={18} />
         </span>
         <input
           className="list-search-input"
@@ -81,7 +54,7 @@ export function ListScreen({
           placeholder="Search"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          aria-label="Pesquisar conta"
+          aria-label="Search accounts"
         />
       </div>
       <div className="list-rule" />
@@ -100,24 +73,42 @@ export function ListScreen({
                     type="button"
                     className={`account-row ${sel ? 'is-selected' : ''}`}
                     onClick={() => onOpenImportForProfile(row.username)}
-                    aria-label={`Importar @{row.username}`}
+                    aria-label={`Open @${row.username}`}
                   >
                     <HistoryAvatar username={row.username} profilePicUrl={row.profilePicUrl} />
                     <span className="account-handle">@{row.username}</span>
                   </button>
-                  <button
-                    type="button"
-                    className={`account-star ${row.favorite ? 'is-on' : ''}`}
-                    onClick={(ev) => {
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                      onToggleFavorite(row.username);
-                    }}
-                    aria-label={row.favorite ? 'Remover favorito' : 'Adicionar favorito'}
-                    aria-pressed={row.favorite}
-                  >
-                    {row.favorite ? '★' : '☆'}
-                  </button>
+                  <div className="account-item-actions">
+                    <button
+                      type="button"
+                      className={`account-star ${row.favorite ? 'is-on' : ''}`}
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        onToggleFavorite(row.username);
+                      }}
+                      aria-label={row.favorite ? 'Remove favorite' : 'Add favorite'}
+                      aria-pressed={row.favorite}
+                    >
+                      {row.favorite ? (
+                        <RiStarFill size={18} aria-hidden />
+                      ) : (
+                        <RiStarLine size={18} aria-hidden />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="account-remove"
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        onRemoveFromHistory(row.username);
+                      }}
+                      aria-label={`Remove @${row.username} from history`}
+                    >
+                      <RiCloseLine size={18} aria-hidden />
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -126,11 +117,6 @@ export function ListScreen({
       </div>
       <div className="list-rule" />
       {listStatus ? <p className="list-foot-status">{listStatus}</p> : null}
-      <div className="list-footer">
-        <button type="button" className="list-cta primary" onClick={onStartImport}>
-          Start Import
-        </button>
-      </div>
     </div>
   );
 }

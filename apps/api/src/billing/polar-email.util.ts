@@ -93,5 +93,5 @@ export function formatPolarError(err: unknown): string {
   if ('message' in err && typeof (err as { message: unknown }).message === 'string') {
     return (err as { message: string }).message;
   }
-  return 'Erro Polar desconhecido';
+  return 'Unknown Polar error';
 }

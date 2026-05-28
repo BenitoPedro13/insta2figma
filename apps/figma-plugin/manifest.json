@@ -2,15 +2,15 @@
   "name": "Insta2Figma",
   "id": "1451273691544619216",
   "api": "1.0.0",
-  "main": "code.js",
+  "main": "dist/code.js",
   "capabilities": [],
   "enableProposedApi": false,
   "documentAccess": "dynamic-page",
   "editorType": ["figma"],
-  "ui": "ui.html",
+  "ui": "dist/ui.html",
   "permissions": ["currentuser"],
   "networkAccess": {
     "allowedDomains": ["*"],
-    "reasoning": "Dev MVP: permite o proxy atual; substituir por domínios explícitos (API + storage) antes de produção — ver docs/IMPLEMENTATION.md Fase 8."
+    "reasoning": "Dev MVP: allows the current proxy; replace with explicit domains (API + storage) before production — see docs/IMPLEMENTATION.md Phase 8."
   }
 }

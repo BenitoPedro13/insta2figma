@@ -70,7 +70,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     } catch (e) {
       throw new InstagramUpstreamError(
         'IG_UPSTREAM',
-        'Falha de rede ou timeout ao contactar Instagram.',
+        'Network failure or timeout while contacting Instagram.',
         true,
         { cause: e },
       );
@@ -79,21 +79,21 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     if (res.status === 429) {
       throw new InstagramUpstreamError(
         'IG_RATE_LIMIT',
-        'Instagram devolveu limite de pedidos (429).',
+        'Instagram returned rate limit (429).',
         true,
       );
     }
     if (res.status === 401 || res.status === 403) {
       throw new InstagramUpstreamError(
         'IG_BLOCKED',
-        `Instagram devolveu HTTP ${res.status} (acesso negado).`,
+        `Instagram returned HTTP ${res.status} (access denied).`,
         false,
       );
     }
     if (res.status >= 500) {
       throw new InstagramUpstreamError(
         'IG_UPSTREAM',
-        `Instagram devolveu erro HTTP ${res.status}.`,
+        `Instagram returned HTTP error ${res.status}.`,
         true,
       );
     }
@@ -108,7 +108,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
       const preview = trimmed.replace(/\s+/gu, ' ').slice(0, 160);
       throw new InstagramUpstreamError(
         'IG_BLOCKED',
-        `Resposta não-JSON (bloqueio, captcha ou HTML). Pré-visualização: ${preview}`,
+        `Non-JSON response (block, captcha, or HTML). Preview: ${preview}`,
         false,
         { cause: e },
       );
@@ -117,7 +117,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     if (!body || typeof body !== 'object') {
       throw new InstagramUpstreamError(
         'IG_PARSE',
-        'Corpo de resposta inesperado.',
+        'Unexpected response body.',
         false,
       );
     }
@@ -141,7 +141,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     if (data === null || data === undefined) {
       throw new InstagramUpstreamError(
         'IG_NOT_FOUND',
-        'Utilizador não encontrado ou resposta sem dados.',
+        'User not found or response had no data.',
         false,
       );
     }
@@ -151,7 +151,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     if (userNode === null || userNode === undefined) {
       throw new InstagramUpstreamError(
         'IG_NOT_FOUND',
-        'Utilizador não encontrado.',
+        'User not found.',
         false,
       );
     }
@@ -167,7 +167,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
       if (e instanceof InstagramUpstreamError) throw e;
       throw new InstagramUpstreamError(
         'IG_PARSE',
-        'Falha ao interpretar dados do perfil.',
+        'Failed to parse profile data.',
         false,
         { cause: e },
       );

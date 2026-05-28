@@ -1,7 +1,7 @@
 export const POST_TIMELINE_ORDERS = ['newest_first', 'oldest_first'] as const;
 export type PostTimelineOrder = (typeof POST_TIMELINE_ORDERS)[number];
 
-export const POST_SELECTION_MODES = ['recent', 'single', 'range'] as const;
+export const POST_SELECTION_MODES = ['recent', 'single', 'range', 'multi'] as const;
 export type PostSelectionMode = (typeof POST_SELECTION_MODES)[number];
 
 export type ScrapeSelectionInput = {
@@ -10,6 +10,8 @@ export type ScrapeSelectionInput = {
   startIndex?: number;
   postCount?: number;
   timelineOrder?: PostTimelineOrder;
+  /** Posições 1-based escolhidas individualmente (modo `multi`). */
+  selectedIndices?: number[];
 };
 
 export type ResolvedScrapeSelection = {
@@ -20,6 +22,7 @@ export type ResolvedScrapeSelection = {
   postCount: number;
   /** Quantos posts pedir ao Instagram (cobre startIndex + postCount). */
   fetchCount: number;
+  selectedIndices?: number[];
 };
 
 export type ImportImageEstimate = {
@@ -37,6 +40,82 @@ const ABSOLUTE_MAX = 50;
 
 function clampInt(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.floor(n)));
+}
+
+export function normalizeSelectedIndices(indices: number[] | undefined): number[] {
+  if (!indices?.length) return [];
+  return [...new Set(indices.map((i) => clampInt(i, 1, ABSOLUTE_MAX)))].sort(
+    (a, b) => a - b,
+  );
+}
+
+export function buildContiguousIndices(start: number, count: number): number[] {
+  const safeStart = clampInt(start, 1, ABSOLUTE_MAX);
+  const safeCount = clampInt(count, 0, ABSOLUTE_MAX);
+  if (safeCount < 1) return [];
+  return Array.from({ length: safeCount }, (_, i) => safeStart + i);
+}
+
+export function toggleSelectedIndex(indices: number[], index: number): number[] {
+  const next = new Set(normalizeSelectedIndices(indices));
+  const key = clampInt(index, 1, ABSOLUTE_MAX);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return [...next].sort((a, b) => a - b);
+}
+
+function isContiguous(sorted: number[]): boolean {
+  return sorted.every((value, idx) => idx === 0 || value === sorted[idx - 1] + 1);
+}
+
+/** Converte índices escolhidos na UI para input de scrape/API. */
+export function selectionInputFromIndices(
+  indices: number[],
+  opts?: { rangeMode?: boolean; timelineOrder?: PostTimelineOrder },
+): ScrapeSelectionInput {
+  const sorted = normalizeSelectedIndices(indices);
+  const timelineOrder = opts?.timelineOrder ?? 'newest_first';
+  if (sorted.length === 0) {
+    return { maxPosts: 0, selectionMode: 'recent', timelineOrder };
+  }
+
+  const end = sorted[sorted.length - 1]!;
+  if (opts?.rangeMode && isContiguous(sorted)) {
+    return {
+      selectionMode: 'range',
+      startIndex: sorted[0],
+      postCount: sorted.length,
+      maxPosts: end,
+      timelineOrder,
+    };
+  }
+
+  if (isContiguous(sorted) && sorted[0] === 1) {
+    return {
+      selectionMode: 'recent',
+      maxPosts: sorted.length,
+      timelineOrder,
+    };
+  }
+
+  if (isContiguous(sorted)) {
+    return {
+      selectionMode: 'range',
+      startIndex: sorted[0],
+      postCount: sorted.length,
+      maxPosts: end,
+      timelineOrder,
+    };
+  }
+
+  return {
+    selectionMode: 'multi',
+    selectedIndices: sorted,
+    startIndex: sorted[0],
+    postCount: sorted.length,
+    maxPosts: end,
+    timelineOrder,
+  };
 }
 
 /** Normaliza opções de seleção com defaults compatíveis com imports antigos (`recent`). */
@@ -62,6 +141,29 @@ export function resolveScrapeSelection(
     };
   }
 
+  if (mode === 'multi') {
+    const selectedIndices = normalizeSelectedIndices(input.selectedIndices);
+    if (selectedIndices.length === 0) {
+      return {
+        mode,
+        timelineOrder,
+        startIndex: 1,
+        postCount: 0,
+        fetchCount: 1,
+        selectedIndices: [],
+      };
+    }
+    const fetchCount = selectedIndices[selectedIndices.length - 1]!;
+    return {
+      mode,
+      timelineOrder,
+      startIndex: selectedIndices[0]!,
+      postCount: selectedIndices.length,
+      fetchCount,
+      selectedIndices,
+    };
+  }
+
   const startIndex = clampInt(input.startIndex ?? 1, 1, ABSOLUTE_MAX);
   const postCount =
     mode === 'single'
@@ -84,6 +186,12 @@ export function slicePostsBySelection<T>(
   selection: ResolvedScrapeSelection,
 ): T[] {
   const ordered = orderTimelinePosts(items, selection.timelineOrder);
+  if (selection.mode === 'multi') {
+    const indices = selection.selectedIndices ?? [];
+    return indices
+      .map((index) => ordered[index - 1])
+      .filter((item): item is T => item !== undefined);
+  }
   const start = selection.startIndex - 1;
   return ordered.slice(start, start + selection.postCount);
 }
@@ -109,6 +217,34 @@ export function estimateImportImages(
   };
 }
 
+const MAX_IMAGES_PER_JOB_ESTIMATE = 1000;
+
+/** Estima imagens consumidas por um job (para quota mensal). */
+export function estimateImagesForJobInput(
+  input: ScrapeSelectionInput & {
+    expandCarouselImages?: boolean;
+    estimatedImportImages?: number;
+  },
+  opts?: { defaultMaxPosts?: number },
+): number {
+  const selection = resolveScrapeSelection(input, opts);
+  const minImages = Math.max(1, selection.postCount);
+  const clientEstimate = input.estimatedImportImages;
+  if (
+    typeof clientEstimate === 'number' &&
+    Number.isFinite(clientEstimate) &&
+    clientEstimate >= minImages
+  ) {
+    return Math.min(MAX_IMAGES_PER_JOB_ESTIMATE, Math.floor(clientEstimate));
+  }
+  return minImages;
+}
+
 export function endSelectionIndex(selection: ResolvedScrapeSelection): number {
+  if (selection.mode === 'multi') {
+    const indices = selection.selectedIndices ?? [];
+    if (indices.length === 0) return 0;
+    return Math.max(...indices);
+  }
   return selection.startIndex + selection.postCount - 1;
 }

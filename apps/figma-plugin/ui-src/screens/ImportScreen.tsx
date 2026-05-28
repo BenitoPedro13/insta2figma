@@ -1,26 +1,69 @@
-import { useCallback, type FormEvent } from 'react';
-import { PostPreviewList, type PostPreviewItem } from '../components/PostPreviewList';
+import { useCallback, useEffect, type FormEvent } from "react";
+import {
+  RiCheckLine,
+  RiImageLine,
+  RiInformationFill,
+  RiInstagramFill,
+  RiLayoutGridLine,
+  RiLoader4Line,
+} from "@remixicon/react";
+import { PanelHeader } from "../components/PanelHeader";
+import { PluginTabs, type ShellTab } from "../components/PluginTabs";
+import {
+  PostPreviewList,
+  type PostPreviewItem,
+} from "../components/PostPreviewList";
+import type { HistoryEntry } from "../lib/historyStorage";
+import { ListScreen, type ListTab } from "./ListScreen";
+import { PostCountSlider } from "../components/PostCountSlider";
+import { PostPreviewSkeletonGrid } from "../components/PostPreviewSkeletonGrid";
+import { ProfilePreviewMorseSkeleton } from "../components/ProfilePreviewMorseSkeleton";
+import { Skeleton } from "../components/Skeleton";
+import * as FancyButton from "../components/ui/fancy-button";
+import * as Input from "../components/ui/input";
+import * as Button from "../components/ui/button";
+import { CheckboxLabel } from "../components/ui/checkbox-label";
+import { ImportStatusLine } from "../components/ImportStatusLine";
+import { PostPreviewPagination } from "../components/PostPreviewPagination";
+import { ProUpgradeOverlay } from "../components/ProUpgradeOverlay";
+import { cn } from "../utils/cn";
+import { PREVIEW_PAGE_SIZE, maxAccessiblePreviewPage, type PostSelectionMode, type PostTimelineOrder } from "@insta2figma/shared-contracts";
+import { planTierLabel, type PlanTier } from "../lib/planTier";
 
-export type PostSelectionMode = 'recent' | 'single' | 'range';
-export type PostTimelineOrder = 'newest_first' | 'oldest_first';
+export type { PostSelectionMode, PostTimelineOrder };
 
 type ImportScreenProps = {
+  activeTab: ShellTab;
+  onTabChange: (tab: ShellTab) => void;
+  listTab: ListTab;
+  search: string;
+  onSearchChange: (q: string) => void;
+  historyEntries: HistoryEntry[];
+  selectedUsername: string | null;
+  onSelectProfile: (username: string) => void;
+  onToggleFavorite: (username: string) => void;
+  onRemoveFromHistory: (username: string) => void;
+  listStatus: string;
   username: string;
   maxPosts: number;
   maxPostsLimit: number;
+  maxImagesLimit: number;
+  selectedIndices: number[];
   selectionMode: PostSelectionMode;
   startIndex: number;
   postCount: number;
   timelineOrder: PostTimelineOrder;
   expandCarouselImages: boolean;
-  allowCarousel: boolean;
   quotaExceeded: boolean;
-  planTier: 'free' | 'pro';
+  imagesRemaining: number | null;
+  planTier: PlanTier;
+  sessionError?: string;
   status: string;
   importing: boolean;
   preview: {
     username: string;
     mediaCount: number;
+    imageCount?: number;
     isPrivate: boolean;
     profilePicUrlHd?: string;
     estimatedImportImages: number;
@@ -31,50 +74,86 @@ type ImportScreenProps = {
     selectionWarning?: string;
   } | null;
   previewLoading: boolean;
+  previewPageLoading: boolean;
   previewThumbsLoading: boolean;
   previewError: string;
+  previewPage: number;
+  previewTotalPages: number;
+  onPreviewPageChange: (page: number) => void;
+  onPreviewBlockedAdvance: () => void;
+  showProOverlay: boolean;
+  onCloseProOverlay: () => void;
   onUsernameChange: (v: string) => void;
   onMaxPostsChange: (v: number) => void;
   onSelectionModeChange: (v: PostSelectionMode) => void;
   onStartIndexChange: (v: number) => void;
   onPostCountChange: (v: number) => void;
+  onRangeChange: (start: number, length: number) => void;
+  onTogglePostIndex: (index: number) => void;
   onTimelineOrderChange: (v: PostTimelineOrder) => void;
   onExpandCarouselChange: (v: boolean) => void;
   onImport: () => void;
-  onUpgrade: () => void;
-  onBack: () => void;
-  onClose: () => void;
+  onShowUpgradeOverlay: () => void;
+  onBillingCheckout: (cycle?: 'monthly' | 'yearly') => void;
+  onBillingCheckoutMax: (cycle?: 'monthly' | 'yearly') => void;
+  onManage: () => void;
+  onOpenExternal: (url: string) => void;
 };
 
 export function ImportScreen({
+  activeTab,
+  onTabChange,
+  listTab,
+  search,
+  onSearchChange,
+  historyEntries,
+  selectedUsername,
+  onSelectProfile,
+  onToggleFavorite,
+  onRemoveFromHistory,
+  listStatus,
   username,
   maxPosts,
   maxPostsLimit,
+  maxImagesLimit,
+  selectedIndices,
   selectionMode,
   startIndex,
   postCount,
   timelineOrder,
   expandCarouselImages,
-  allowCarousel,
   quotaExceeded,
+  imagesRemaining,
   planTier,
+  sessionError,
   status,
   importing,
   preview,
   previewLoading,
+  previewPageLoading,
   previewThumbsLoading,
   previewError,
+  previewPage,
+  previewTotalPages,
+  onPreviewPageChange,
+  onPreviewBlockedAdvance,
+  showProOverlay,
+  onCloseProOverlay,
   onUsernameChange,
   onMaxPostsChange,
   onSelectionModeChange,
   onStartIndexChange,
   onPostCountChange,
+  onRangeChange,
+  onTogglePostIndex,
   onTimelineOrderChange,
   onExpandCarouselChange,
   onImport,
-  onUpgrade,
-  onBack,
-  onClose,
+  onShowUpgradeOverlay,
+  onBillingCheckout,
+  onBillingCheckoutMax,
+  onManage,
+  onOpenExternal,
 }: ImportScreenProps) {
   const onSubmit = useCallback(
     (e: FormEvent) => {
@@ -84,232 +163,393 @@ export function ImportScreen({
     [onImport],
   );
 
-  const onPickPostIndex = useCallback(
-    (index: number) => {
-      onStartIndexChange(index);
-      if (selectionMode === 'recent') {
-        onSelectionModeChange('single');
-      }
-    },
-    [onSelectionModeChange, onStartIndexChange, selectionMode],
-  );
+  const trimmedUsername = username.trim();
+  const usernameLookupStatus = (() => {
+    if (!trimmedUsername) return "idle" as const;
+    if (previewLoading && !preview?.username) return "searching" as const;
+    if (preview?.username) return "found" as const;
+    if (previewError) return "not-found" as const;
+    return "idle" as const;
+  })();
+  const profileFound = usernameLookupStatus === "found";
 
   const ctaLabel = (() => {
-    if (importing) return 'A importar…';
-    const estimated = preview?.estimatedImportImages;
-    if (typeof estimated === 'number' && Number.isFinite(estimated) && estimated > 0) {
-      return `Importar ${estimated} ${estimated === 1 ? 'imagem' : 'imagens'}`;
+    if (importing) return "Importing…";
+    const images = preview?.estimatedImportImages;
+    if (typeof images === "number" && Number.isFinite(images) && images > 0) {
+      return `Import ${images} ${images === 1 ? "image" : "images"}`;
     }
-    if (selectionMode === 'single') return `Importar post #${startIndex}`;
-    if (selectionMode === 'range') {
-      return `Importar posts #${startIndex}–#${startIndex + postCount - 1}`;
-    }
-    return `Importar (${maxPosts} posts)`;
+    return "Import images";
   })();
 
+  const rangeMode = selectionMode === "range";
+
+  useEffect(() => {
+    if (!profileFound && rangeMode) {
+      onSelectionModeChange("recent");
+    }
+  }, [profileFound, rangeMode, onSelectionModeChange]);
+
+  const estimatedImportImages =
+    typeof preview?.estimatedImportImages === "number" &&
+    Number.isFinite(preview.estimatedImportImages) &&
+    preview.estimatedImportImages > 0
+      ? preview.estimatedImportImages
+      : selectedIndices.length;
+  const exceedsImageQuota =
+    imagesRemaining != null && estimatedImportImages > imagesRemaining;
+  const exceedsPerImportLimit = estimatedImportImages > maxImagesLimit;
+  const canImport =
+    !quotaExceeded &&
+    !exceedsImageQuota &&
+    !exceedsPerImportLimit &&
+    selectedIndices.length >= 1;
+
+  const handleRangeModeChange = useCallback(
+    (enabled: boolean) => {
+      onSelectionModeChange(enabled ? "range" : "recent");
+    },
+    [onSelectionModeChange],
+  );
+
+  const handleRangeSliderChange = useCallback(
+    (start: number, length: number) => {
+      onRangeChange(start, length);
+    },
+    [onRangeChange],
+  );
+
+  const showUsernameLookup = usernameLookupStatus !== "idle";
+  const isImportTab = activeTab === "new-import";
+
+  const profilePreviewLabel = (() => {
+    if (preview?.username) return `@${preview.username}`;
+    return "Enter an Instagram to appear here";
+  })();
+
+  const showProfileHeaderSkeleton = previewLoading && !preview?.username;
+  const showProfileStatsSkeleton =
+    Boolean(trimmedUsername) && previewLoading && !preview?.username;
+  const showAvatarSkeleton =
+    showProfileHeaderSkeleton ||
+    Boolean(preview?.username && !preview.profilePicUrlHd);
+  const showPreviewSkeletonGrid =
+    (previewLoading && !(preview?.postsPreview && preview.postsPreview.length > 0)) ||
+    previewPageLoading;
+  const maxAccessiblePreviewPageValue = maxAccessiblePreviewPage(
+    planTier,
+    previewTotalPages,
+  );
+
+  const formatProfileStat = (value: number | undefined) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? value.toLocaleString("en-US")
+      : "0";
+
   return (
-    <div className="import-screen">
-      <button type="button" className="import-back" onClick={onBack}>
-        ‹ Back
-      </button>
-      <div className="list-rule" />
-      <form className="import-form" onSubmit={onSubmit}>
-        <div className="import-section-label">What Instagram?</div>
-        <div className="field">
-          <label htmlFor="username">Username (sem @)</label>
-          <input
-            id="username"
-            type="text"
-            value={username}
-            onChange={(e) => onUsernameChange(e.target.value)}
-            placeholder="ex.: archillect"
-            autoComplete="off"
+    <div className="new-import-screen flex min-h-0 flex-1 flex-col">
+      <div className="new-import-layout flex min-h-0 flex-1 flex-row">
+        <div className="new-import-left flex w-[466px] shrink-0 flex-col border-r border-stroke-soft-200 bg-bg-white-0">
+          <PanelHeader
+            planTier={planTier}
+            sessionError={sessionError}
+            onUpgrade={onShowUpgradeOverlay}
+            onManage={onManage}
+            onOpenExternal={onOpenExternal}
           />
-        </div>
-        <p className="import-hint">
-          Enter only the username without &apos;@&apos;.
-        </p>
-        <div className="profile-preview">
-          <span className="profile-preview-avatar" aria-hidden>
-            {preview?.profilePicUrlHd ? (
-              <img src={preview.profilePicUrlHd} alt="" className="profile-preview-avatar-img" />
-            ) : (
-              username.slice(0, 1).toUpperCase() || '?'
-            )}
-          </span>
-          <div className="profile-preview-meta">
-            <p className="profile-preview-main">
-              {previewLoading
-                ? previewThumbsLoading
-                  ? 'A carregar miniaturas…'
-                  : 'A validar perfil…'
-                : preview
-                  ? `@${preview.username} · ${preview.mediaCount} posts`
-                  : username.trim()
-                    ? 'Sem preview ainda.'
-                    : 'Introduce um username para preview.'}
-            </p>
-            {preview?.isPrivate ? (
-              <p className="profile-preview-sub">Conta privada: o scrape pode não trazer posts.</p>
-            ) : null}
-            {previewError ? <p className="profile-preview-sub">{previewError}</p> : null}
-          </div>
-        </div>
+          <PluginTabs active={activeTab} onChange={onTabChange} />
+          {isImportTab ? (
+            <form
+              className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4"
+              onSubmit={onSubmit}
+            >
+              <div className="new-import-field flex flex-col gap-4">
+                <label
+                  htmlFor="username"
+                  className="new-import-label text-label-sm  text-text-strong-950"
+                >
+                  What user?
+                </label>
+                <Input.Root size="medium">
+                  <Input.Wrapper>
+                    <Input.Icon as={RiInstagramFill} />
+                    <Input.Input
+                      id="username"
+                      type="text"
+                      value={username}
+                      onChange={(e) => onUsernameChange(e.target.value)}
+                      placeholder="@profile"
+                      autoComplete="off"
+                      className="text-paragraph-md"
+                    />
+                  </Input.Wrapper>
+                </Input.Root>
+                <div className="new-import-status-slot" aria-live="polite">
+                  {!showUsernameLookup ? (
+                    <p className="new-import-status new-import-status--visible m-0 text-paragraph-xs text-text-sub-600">
+                      <RiInformationFill
+                        size={16}
+                        className="new-import-status-icon text-text-soft-400"
+                        aria-hidden
+                      />
+                      Insert username or link
+                    </p>
+                  ) : (
+                    <p
+                      role="status"
+                      className={cn(
+                        "new-import-status new-import-status--visible text-paragraph-xs",
+                        usernameLookupStatus === "found" && "text-success-base",
+                        usernameLookupStatus === "not-found" && "text-warning-base",
+                        usernameLookupStatus === "searching" && "text-text-sub-600",
+                      )}
+                    >
+                      {usernameLookupStatus === "searching" ? (
+                        <>
+                          <RiLoader4Line className="new-import-spinner" size={16} aria-hidden />
+                          Searching username
+                        </>
+                      ) : null}
+                      {usernameLookupStatus === "found" ? (
+                        <>
+                          <RiCheckLine className="new-import-status-icon" size={16} aria-hidden />
+                          Username found
+                        </>
+                      ) : null}
+                      {usernameLookupStatus === "not-found" ? (
+                        <>
+                          <RiInformationFill
+                            className="new-import-status-icon"
+                            size={16}
+                            aria-hidden
+                          />
+                          Username not found
+                        </>
+                      ) : null}
+                    </p>
+                  )}
+                </div>
+              </div>
 
-        {preview?.postsPreview && preview.postsPreview.length > 0 ? (
-          <PostPreviewList
-            items={preview.postsPreview}
-            timelineOrder={timelineOrder}
-            selectionMode={selectionMode}
-            startIndex={startIndex}
-            postCount={selectionMode === 'recent' ? maxPosts : postCount}
-            postsAvailable={preview.postsAvailable ?? preview.postsPreview.length}
-            selectionWarning={preview.selectionWarning}
-            onSelectIndex={onPickPostIndex}
-          />
-        ) : null}
-
-        <div className="import-section-label">Como importar?</div>
-        <div className="field">
-          <label htmlFor="selection-mode">Modo</label>
-          <select
-            id="selection-mode"
-            value={selectionMode}
-            onChange={(e) => onSelectionModeChange(e.target.value as PostSelectionMode)}
-          >
-            <option value="recent">Posts recentes (do 1º em diante)</option>
-            <option value="single">Post único por posição</option>
-            <option value="range">Intervalo por posição</option>
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="timeline-order">Ordem da timeline</label>
-          <select
-            id="timeline-order"
-            value={timelineOrder}
-            onChange={(e) => onTimelineOrderChange(e.target.value as PostTimelineOrder)}
-          >
-            <option value="newest_first">Mais recente primeiro (#1 = último post)</option>
-            <option value="oldest_first">Mais antigo primeiro (#1 = post mais antigo visível)</option>
-          </select>
-        </div>
-
-        {selectionMode === 'recent' ? (
-          <div className="field">
-            <label htmlFor="max-posts">Número de posts</label>
-            <input
-              id="max-posts"
-              type="number"
-              min={1}
-              max={maxPostsLimit}
-              step={1}
-              value={Number.isFinite(maxPosts) ? maxPosts : ''}
-              onChange={(e) => {
-                const n = Number.parseInt(e.target.value, 10);
-                if (!Number.isFinite(n)) {
-                  onMaxPostsChange(1);
-                  return;
-                }
-                onMaxPostsChange(Math.min(maxPostsLimit, Math.max(1, n)));
-              }}
-            />
-          </div>
-        ) : (
-          <>
-            <div className="field">
-              <label htmlFor="start-index">Posição inicial (#)</label>
-              <input
-                id="start-index"
-                type="number"
-                min={1}
-                max={maxPostsLimit}
-                step={1}
-                value={Number.isFinite(startIndex) ? startIndex : ''}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value, 10);
-                  if (!Number.isFinite(n)) {
-                    onStartIndexChange(1);
-                    return;
+              <div className="new-import-field flex flex-col gap-2">
+                <PostCountSlider
+                  profilePostCount={
+                    preview?.mediaCount != null ? preview.mediaCount : null
                   }
-                  onStartIndexChange(Math.min(maxPostsLimit, Math.max(1, n)));
-                }}
-              />
-            </div>
-            {selectionMode === 'range' ? (
-              <div className="field">
-                <label htmlFor="post-count">Quantidade de posts</label>
-                <input
-                  id="post-count"
-                  type="number"
-                  min={1}
-                  max={maxPostsLimit}
-                  step={1}
-                  value={Number.isFinite(postCount) ? postCount : ''}
-                  onChange={(e) => {
-                    const n = Number.parseInt(e.target.value, 10);
-                    if (!Number.isFinite(n)) {
-                      onPostCountChange(1);
-                      return;
-                    }
-                    onPostCountChange(Math.min(maxPostsLimit, Math.max(1, n)));
-                  }}
+                  planMaxPosts={maxPostsLimit}
+                  planTier={planTier}
+                  profileFound={profileFound}
+                  rangeMode={rangeMode}
+                  onRangeModeChange={handleRangeModeChange}
+                  postCount={selectedIndices.length}
+                  onPostCountChange={onMaxPostsChange}
+                  rangeStart={startIndex}
+                  rangeLength={postCount}
+                  onRangeChange={handleRangeSliderChange}
+                  disabled={importing}
+                />
+                <div className="new-import-status-slot" aria-live="polite">
+                  <p className="new-import-status new-import-status--visible m-0 text-paragraph-xs text-text-sub-600">
+                    {/* <RiInformationFill
+                      size={16}
+                      className="new-import-status-icon text-text-soft-400"
+                      aria-hidden
+                    /> */}
+                    {profileFound &&
+                    preview?.mediaCount != null &&
+                    Number.isFinite(preview.mediaCount) ? (
+                      <>
+                        This Instagram has{" "}
+                        <span className="font-semibold">{preview.mediaCount}</span>{" "}
+                        {preview.mediaCount === 1 ? "post" : "posts"}
+                      </>
+                    ) : (
+                      "Posts will be imported chronologically"
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="new-import-checks">
+                <CheckboxLabel
+                  label="Import carousel images"
+                  checked={expandCarouselImages}
+                  tone="neutral"
+                  onCheckedChange={onExpandCarouselChange}
+                />
+                <CheckboxLabel
+                  label="Ignore Reels"
+                  hint="Coming soon"
+                  checked={false}
+                  tone="neutral"
+                  disabled
                 />
               </div>
-            ) : null}
-          </>
-        )}
 
-        <p className="import-hint">
-          {preview
-            ? `Estimativa atual: ${preview.estimatedImportImages} imagem(ns) para importar.`
-            : 'Escolhe o modo e vê a lista indexada acima para confirmar a posição.'}
-        </p>
-        {preview ? (
-          <p className="import-hint">
-            Capas: {preview.estimatedPostCovers} · Carrossel extra:{' '}
-            {preview.estimatedCarouselExtras} · Total: {preview.estimatedImportImages}
-          </p>
-        ) : null}
+              {quotaExceeded || exceedsImageQuota || exceedsPerImportLimit ? (
+                <p className="import-quota-warn">
+                  {exceedsPerImportLimit && !quotaExceeded && !exceedsImageQuota
+                    ? `Each import can use at most ${maxImagesLimit} images. Reduce your selection or turn off carousel expansion.`
+                    : exceedsImageQuota && !quotaExceeded
+                      ? `This import needs ${estimatedImportImages} images but you only have ${imagesRemaining} left in your quota period.`
+                      : `Image quota used up on the ${planTierLabel(planTier)} plan.`}
+                </p>
+              ) : null}
 
-        <div className="import-section-label">Preferences</div>
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={expandCarouselImages}
-            disabled={!allowCarousel}
-            onChange={(e) => onExpandCarouselChange(e.target.checked)}
-          />
-          Export all images from carousel posts
-          {!allowCarousel ? (
-            <span className="import-hint"> (Pro)</span>
-          ) : null}
-        </label>
-
-        {quotaExceeded ? (
-          <p className="import-quota-warn">
-            Quota mensal esgotada no plano {planTier === 'pro' ? 'Pro' : 'Free'}.
-          </p>
-        ) : null}
-
-        <div className="plugin-actions">
-          <button
-            type="submit"
-            className="primary"
-            disabled={importing || quotaExceeded}
-          >
-            {quotaExceeded ? 'Quota esgotada' : ctaLabel}
-          </button>
-          {quotaExceeded ? (
-            <button type="button" className="secondary" onClick={onUpgrade}>
-              Upgrade to Pro
-            </button>
-          ) : null}
-          <button type="button" className="secondary" onClick={onClose}>
-            Fechar
-          </button>
+              <div className="new-import-actions">
+                <FancyButton.Root
+                  type="submit"
+                  variant="neutral"
+                  size="medium"
+                  className="w-full"
+                  disabled={importing || !canImport}
+                >
+                  <FancyButton.Icon as={RiInstagramFill} />
+                  {quotaExceeded || exceedsImageQuota || exceedsPerImportLimit
+                    ? "Quota used up"
+                    : !canImport
+                      ? "Select images to import"
+                      : ctaLabel}
+                </FancyButton.Root>
+                {quotaExceeded && planTier === "free" ? (
+                  <Button.Root
+                    type="button"
+                    variant="primary"
+                    mode="stroke"
+                    size="medium"
+                    className="w-full"
+                    onClick={onShowUpgradeOverlay}
+                  >
+                    Upgrade
+                  </Button.Root>
+                ) : null}
+              </div>
+              {status ? (
+                <ImportStatusLine
+                  text={status}
+                  active={importing}
+                  complete={!importing && status.startsWith('All done')}
+                />
+              ) : null}
+            </form>
+          ) : (
+            <ListScreen
+              tab={listTab}
+              search={search}
+              onSearchChange={onSearchChange}
+              entries={historyEntries}
+              selectedUsername={selectedUsername}
+              onOpenImportForProfile={onSelectProfile}
+              onToggleFavorite={onToggleFavorite}
+              onRemoveFromHistory={onRemoveFromHistory}
+              listStatus={listStatus}
+            />
+          )}
         </div>
-        <p className="status-line">{status}</p>
-      </form>
+
+        <div className="new-import-right flex min-h-0 min-w-0 flex-1 flex-col" aria-live="polite">
+          <div className="profile-preview profile-preview--header">
+            <div className="profile-preview-identity flex min-w-0 flex-1 items-center gap-3">
+              <span className="profile-preview-avatar" aria-hidden>
+                {showAvatarSkeleton ? (
+                  <Skeleton className="profile-preview-avatar-skeleton" />
+                ) : preview?.profilePicUrlHd ? (
+                  <img
+                    src={preview.profilePicUrlHd}
+                    alt=""
+                    className="profile-preview-avatar-img"
+                  />
+                ) : null}
+              </span>
+              <div className="profile-preview-meta min-w-0">
+                {showProfileHeaderSkeleton ? (
+                  <Skeleton className="profile-preview-name-skeleton" />
+                ) : (
+                  <p
+                    className={cn(
+                      "profile-preview-main text-paragraph-lg",
+                      !preview?.username && "font-normal text-text-sub-600",
+                    )}
+                  >
+                    {profilePreviewLabel}
+                  </p>
+                )}
+                {preview?.isPrivate ? (
+                  <p className="profile-preview-sub">
+                    Private account — posts may not be available to import.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {trimmedUsername ? (
+              <div className="profile-preview-stats flex shrink-0 items-center gap-2">
+                <div className="profile-preview-stat flex items-center gap-1">
+                  <RiLayoutGridLine
+                    className="size-4 shrink-0 text-text-sub-600"
+                    aria-hidden
+                  />
+                  {showProfileStatsSkeleton ? (
+                    <ProfilePreviewMorseSkeleton compact />
+                  ) : (
+                    <span className="text-label-sm font-medium tabular-nums text-text-strong-950">
+                      {formatProfileStat(preview?.mediaCount)}
+                    </span>
+                  )}
+                </div>
+                <div className="profile-preview-stat flex items-center gap-1">
+                  <RiImageLine
+                    className="size-4 shrink-0 text-text-sub-600"
+                    aria-hidden
+                  />
+                  {showProfileStatsSkeleton ? (
+                    <ProfilePreviewMorseSkeleton compact />
+                  ) : (
+                    <span className="text-label-sm font-medium tabular-nums text-text-strong-950">
+                      {formatProfileStat(preview?.imageCount ?? preview?.mediaCount)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="new-import-right-body flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {showPreviewSkeletonGrid ? (
+                <PostPreviewSkeletonGrid count={PREVIEW_PAGE_SIZE} />
+              ) : preview?.postsPreview && preview.postsPreview.length > 0 ? (
+                <PostPreviewList
+                  items={preview.postsPreview}
+                  selectedIndices={selectedIndices}
+                  onToggleIndex={onTogglePostIndex}
+                  thumbsLoading={previewThumbsLoading}
+                />
+              ) : (
+                <div className="new-import-preview-empty flex h-full w-full" aria-hidden />
+              )}
+            </div>
+
+            {previewTotalPages > 1 ? (
+              <PostPreviewPagination
+                currentPage={previewPage}
+                totalPages={previewTotalPages}
+                maxAccessiblePage={maxAccessiblePreviewPageValue}
+                onPageChange={onPreviewPageChange}
+                onBlockedAdvance={onPreviewBlockedAdvance}
+              />
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <ProUpgradeOverlay
+        open={showProOverlay}
+        onClose={onCloseProOverlay}
+        onUpgrade={onBillingCheckout}
+        onUpgradeMax={onBillingCheckoutMax}
+        onOpenExternal={onOpenExternal}
+      />
     </div>
   );
 }

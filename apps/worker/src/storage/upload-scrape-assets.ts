@@ -60,18 +60,18 @@ async function fetchBytes(
     },
   });
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} ao descarregar media`);
+    throw new Error(`HTTP ${res.status} while downloading media`);
   }
   const len = res.headers.get('content-length');
   if (len !== null) {
     const n = Number.parseInt(len, 10);
     if (Number.isFinite(n) && n > MAX_BYTES) {
-      throw new Error('Ficheiro demasiado grande.');
+      throw new Error('File is too large.');
     }
   }
   const buf = Buffer.from(await res.arrayBuffer());
   if (buf.byteLength > MAX_BYTES) {
-    throw new Error('Ficheiro demasiado grande.');
+    throw new Error('File is too large.');
   }
   const ct = res.headers.get('content-type')?.split(';')[0]?.trim() || '';
   const contentType =

@@ -27,6 +27,10 @@ import {
   shouldOmitCheckoutCustomerEmail,
 } from './polar-email.util';
 import { PolarService } from './polar.service';
+import type {
+  BillingCheckoutPlan,
+  BillingCycle,
+} from '@insta2figma/shared-contracts';
 
 type WebhookPayload = {
   type?: string;
@@ -57,7 +61,7 @@ export class BillingService {
     }
 
     if (!this.polar.isConfigured()) {
-      throw new ServiceUnavailableException('Billing Polar não configurado.');
+      throw new ServiceUnavailableException('Polar billing is not configured.');
     }
 
     const client = this.polar.getClient();
@@ -100,7 +104,7 @@ export class BillingService {
       } catch (stateErr) {
         if (isPolarSdkNotFound(stateErr)) {
           throw new ServiceUnavailableException(
-            'Não foi possível criar o cliente Polar. Tenta novamente.',
+            'Could not create the Polar customer. Please try again.',
           );
         }
         throw stateErr;
@@ -108,9 +112,13 @@ export class BillingService {
     }
   }
 
-  async createCheckoutSession(userId: string): Promise<{ url: string }> {
+  async createCheckoutSession(
+    userId: string,
+    plan: BillingCheckoutPlan = 'pro',
+    cycle: BillingCycle = 'monthly',
+  ): Promise<{ url: string }> {
     if (!this.polar.isConfigured()) {
-      throw new ServiceUnavailableException('Billing Polar não configurado.');
+      throw new ServiceUnavailableException('Polar billing is not configured.');
     }
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -121,7 +129,14 @@ export class BillingService {
     const polarEmail = emailForPolar(user, placeholderDomain);
 
     const client = this.polar.getClient();
-    const productId = this.polar.getProProductId();
+    let productId: string;
+    try {
+      productId = this.polar.getProductIdForPlan(plan, cycle);
+    } catch {
+      throw new BadRequestException(
+        `Plan ${plan} (${cycle}) is not configured yet (POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()}).`,
+      );
+    }
     const successUrl =
       this.config.get<string>('POLAR_SUCCESS_URL')?.trim() ||
       'https://insta2figma.com/billing/success';
@@ -136,22 +151,22 @@ export class BillingService {
           : { customerEmail: polarEmail }),
         successUrl,
         returnUrl: returnUrl || undefined,
-        metadata: { userId },
+        metadata: { userId, plan, cycle },
       });
 
       if (!checkout.url) {
-        throw new BadRequestException('Checkout Polar sem URL.');
+        throw new BadRequestException('Polar checkout returned no URL.');
       }
       return { url: checkout.url };
     } catch (err) {
       this.logger.error('checkouts.create falhou', err);
       if (isPolarSdkValidation(err)) {
         throw new BadRequestException(
-          `Checkout inválido: ${formatPolarError(err)}. Verifica POLAR_PRODUCT_ID_PRO (sandbox).`,
+          `Invalid checkout: ${formatPolarError(err)}. Check POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()} (sandbox).`,
         );
       }
       throw new ServiceUnavailableException(
-        'Não foi possível criar a sessão de checkout.',
+        'Could not create the checkout session.',
       );
     }
 
@@ -159,7 +174,7 @@ export class BillingService {
 
   async createPortalSession(userId: string): Promise<{ url: string }> {
     if (!this.polar.isConfigured()) {
-      throw new ServiceUnavailableException('Billing Polar não configurado.');
+      throw new ServiceUnavailableException('Polar billing is not configured.');
     }
     const polarCustomerId = await this.ensurePolarCustomer(userId);
     const client = this.polar.getClient();
@@ -240,16 +255,21 @@ export class BillingService {
     state: PolarCustomerState,
   ): Promise<void> {
     const polarCustomerId = this.extractCustomerId(state);
-    const proProductId = this.polar.isConfigured()
-      ? this.polar.getProProductId()
-      : null;
+    const maxIds = this.polar.isConfigured()
+      ? this.polar.getAllProductIdsForPlan('max')
+      : [];
+    const proIds = this.polar.isConfigured()
+      ? this.polar.getAllProductIdsForPlan('pro')
+      : [];
 
     const subs = this.extractActiveSubscriptions(state);
-    const proSub = proProductId
-      ? subs.find((s) => s.productId === proProductId)
-      : subs[0];
+    const maxSub = subs.find((s) => maxIds.includes(s.productId)) ?? null;
+    const proSub = !maxSub
+      ? (subs.find((s) => proIds.includes(s.productId)) ?? null)
+      : null;
+    const activeSub = maxSub ?? proSub ?? null;
 
-    const planTier = proSub ? 'pro' : 'free';
+    const planTier = maxSub ? 'max' : proSub ? 'pro' : 'free';
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -259,19 +279,19 @@ export class BillingService {
       },
     });
 
-    if (proSub) {
+    if (activeSub) {
       await this.prisma.subscription.upsert({
-        where: { polarSubscriptionId: proSub.id },
+        where: { polarSubscriptionId: activeSub.id },
         create: {
           userId,
-          polarSubscriptionId: proSub.id,
-          productId: proSub.productId,
-          status: String(proSub.status),
-          currentPeriodEnd: proSub.currentPeriodEnd ?? null,
+          polarSubscriptionId: activeSub.id,
+          productId: activeSub.productId,
+          status: String(activeSub.status),
+          currentPeriodEnd: activeSub.currentPeriodEnd ?? null,
         },
         update: {
-          status: String(proSub.status),
-          currentPeriodEnd: proSub.currentPeriodEnd ?? null,
+          status: String(activeSub.status),
+          currentPeriodEnd: activeSub.currentPeriodEnd ?? null,
         },
       });
     }

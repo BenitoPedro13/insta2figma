@@ -13,10 +13,14 @@
     "infra:logs": "docker compose logs -f",
     "infra:logs:postgres": "docker compose logs -f postgres",
     "infra:logs:redis": "docker compose logs -f redis",
+
     "docker:build:api": "docker build -f Dockerfile.api -t insta2figma-api .",
     "docker:build:worker": "docker build -f Dockerfile.worker -t insta2figma-worker .",
     "prod:up": "docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build",
     "prod:down": "docker compose -f docker-compose.prod.yml --env-file .env.prod down",
+    "predev": "pnpm --filter @insta2figma/shared-contracts build",
+    "predev:api": "pnpm --filter @insta2figma/shared-contracts build",
+    "predev:worker": "pnpm --filter @insta2figma/shared-contracts build",
     "dev": "concurrently --kill-others-on-fail -n api,worker -c cyan,magenta \"pnpm run dev:api\" \"pnpm run dev:worker\"",
     "db:migrate:dev": "pnpm --filter @insta2figma/api exec prisma migrate dev",
     "db:migrate:deploy": "pnpm --filter @insta2figma/api exec prisma migrate deploy",
@@ -29,5 +33,8 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "turbo": "^2.3.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@tailwindcss/oxide"]
   }
 }

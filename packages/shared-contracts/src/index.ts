@@ -2,33 +2,45 @@ import { z } from 'zod';
 import {
   POST_SELECTION_MODES,
   POST_TIMELINE_ORDERS,
+  buildContiguousIndices,
   endSelectionIndex,
+  estimateImagesForJobInput,
   estimateImportImages,
+  normalizeSelectedIndices,
   orderTimelinePosts,
   resolveScrapeSelection,
+  selectionInputFromIndices,
   slicePostsBySelection,
+  toggleSelectedIndex,
   type CarouselPostEstimate,
   type ImportImageEstimate,
   type PostSelectionMode,
   type PostTimelineOrder,
   type ResolvedScrapeSelection,
   type ScrapeSelectionInput,
-} from './post-selection.js';
+} from './post-selection';
 import {
+  PREVIEW_PAGE_SIZE,
   buildIndexedPostPreview,
   parseTimelineSampleFromUserNode,
   type InstagramPostPreviewItem,
   type TimelinePostItem,
-} from './instagram-timeline-parse.js';
+} from './instagram-timeline-parse';
 
 export {
+  PREVIEW_PAGE_SIZE,
   POST_SELECTION_MODES,
   POST_TIMELINE_ORDERS,
+  buildContiguousIndices,
   endSelectionIndex,
+  estimateImagesForJobInput,
   estimateImportImages,
+  normalizeSelectedIndices,
   orderTimelinePosts,
   resolveScrapeSelection,
+  selectionInputFromIndices,
   slicePostsBySelection,
+  toggleSelectedIndex,
   buildIndexedPostPreview,
   parseTimelineSampleFromUserNode,
   type CarouselPostEstimate,
@@ -71,6 +83,10 @@ export const scrapeProfileInputSchema = z.object({
   /** Quantidade de posts no modo `range` (ignorado em `single`). */
   postCount: z.number().int().min(1).max(50).optional(),
   timelineOrder: postTimelineOrderSchema.optional(),
+  /** Posições 1-based no modo `multi`. */
+  selectedIndices: z.array(z.number().int().min(1).max(50)).min(1).max(50).optional(),
+  /** Estimativa de imagens no canvas (covers + carrossel) para reserva de quota. */
+  estimatedImportImages: z.number().int().min(1).max(1000).optional(),
 });
 
 export type ScrapeProfileInput = z.infer<typeof scrapeProfileInputSchema>;
@@ -216,15 +232,30 @@ export const jobSignedAssetDtoSchema = z.object({
 export type JobSignedAssetDto = z.infer<typeof jobSignedAssetDtoSchema>;
 
 /** Tiers de subscrição (Fase 7 — Polar). */
-export const PLAN_TIERS = ['free', 'pro'] as const;
+export const PLAN_TIERS = ['free', 'pro', 'max'] as const;
 export const planTierSchema = z.enum(PLAN_TIERS);
 export type PlanTier = z.infer<typeof planTierSchema>;
 
+export const billingCheckoutPlanSchema = z.enum(['pro', 'max']);
+export type BillingCheckoutPlan = z.infer<typeof billingCheckoutPlanSchema>;
+
+export const billingCycleSchema = z.enum(['monthly', 'yearly']);
+export type BillingCycle = z.infer<typeof billingCycleSchema>;
+
+export const billingCheckoutBodySchema = z.object({
+  plan: billingCheckoutPlanSchema.optional().default('pro'),
+  cycle: billingCycleSchema.optional().default('monthly'),
+});
+
+export type BillingCheckoutBody = z.infer<typeof billingCheckoutBodySchema>;
+
 export const meQuotasSchema = z.object({
-  jobsRemaining: z.number().int().min(0).nullable(),
-  jobsLimit: z.number().int().min(0).nullable(),
+  imagesRemaining: z.number().int().min(0).nullable(),
+  imagesLimit: z.number().int().min(0).nullable(),
   maxPosts: z.number().int().min(1),
+  maxImagesPerJob: z.number().int().min(1),
   expandCarouselImages: z.boolean(),
+  periodEnd: z.string().nullable(),
 });
 
 export type MeQuotas = z.infer<typeof meQuotasSchema>;
@@ -252,3 +283,15 @@ export const billingSessionUrlSchema = z.object({
 });
 
 export type BillingSessionUrl = z.infer<typeof billingSessionUrlSchema>;
+
+export {
+  QUOTA_PERIOD_MS,
+  resolveQuotaPeriod,
+  type ResolvedQuotaPeriod,
+} from './quota-period';
+
+export {
+  FREE_MAX_PREVIEW_PAGE,
+  PRO_MAX_PREVIEW_PAGE,
+  maxAccessiblePreviewPage,
+} from './preview-limits';
