@@ -4,15 +4,15 @@
   <input id="base" type="text" style="width:100%;box-sizing:border-box" value="http://127.0.0.1:3333" />
 </p>
 <p>
-  Email (sessão MVP)<br/>
+  Email (MVP session)<br/>
   <input id="email" type="email" style="width:100%;box-sizing:border-box" placeholder="dev@local.test" />
 </p>
 <p>
   Username Instagram<br/>
   <input id="username" type="text" style="width:100%;box-sizing:border-box" placeholder="google" />
 </p>
-<p><button id="import">Importar perfil para o canvas</button></p>
-<p><button id="cancel">Fechar</button></p>
+<p><button id="import">Import profile to canvas</button></p>
+<p><button id="cancel">Close</button></p>
 <p id="status" style="font-size:11px;color:#666;max-height:72px;overflow:auto"></p>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -39,11 +39,11 @@ $('import').onclick = () => {
   const email = String($('email').value || '').trim();
   const usernameRaw = String($('username').value || '').trim().replace(/^@+/, '');
   if (!base || !email || !usernameRaw) {
-    setStatus('Preenche API, email e username.');
+    setStatus('Enter API base URL, email, and username.');
     return;
   }
   $('import').disabled = true;
-  setStatus('A arrancar…');
+  setStatus('Starting…');
   parent.postMessage(
     {
       pluginMessage: {
@@ -70,14 +70,14 @@ window.addEventListener('message', function (ev) {
   }
   if (pm.type === 'import-error') {
     $('import').disabled = false;
-    setStatus('Erro: ' + (pm.message != null ? msgToText(pm.message) : 'desconhecido'));
+    setStatus('Error: ' + (pm.message != null ? msgToText(pm.message) : 'unknown'));
     return;
   }
   if (pm.type !== 'import-done') return;
   $('import').disabled = false;
   var t = pm.error
-    ? 'Colocação: nada importado ou erro.'
-    : 'Colocados ' + pm.placed + '/' + pm.total + ' no canvas.';
+    ? 'Placement failed: nothing imported.'
+    : 'Placed ' + pm.placed + '/' + pm.total + ' on the canvas.';
   setStatus(t);
 });
 </script>

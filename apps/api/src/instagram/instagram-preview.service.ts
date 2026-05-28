@@ -118,7 +118,7 @@ function assertPreviewPageIsNotDuplicate(
   const hasNewPost = posts.some((post) => !firstPageShortcodes.has(post.shortcode));
   if (!hasNewPost) {
     throw new BadRequestException(
-      'Não foi possível carregar a página seguinte do preview.',
+      'Could not load the next preview page.',
     );
   }
 }
@@ -263,7 +263,7 @@ export class InstagramPreviewService {
   ): Promise<ProfilePreviewResponse> {
     const username = normalizeUsername(usernameRaw);
     if (!username) {
-      throw new BadRequestException('username é obrigatório.');
+      throw new BadRequestException('username is required.');
     }
 
     const previewPage = Math.max(1, Math.floor(opts?.previewPage ?? 1));
@@ -322,7 +322,7 @@ export class InstagramPreviewService {
       const userId =
         normalizeInstagramUserId(opts?.userId) ?? base.instagramUserId;
       if (!userId) {
-        throw new BadRequestException('Paginação do preview requer userId.');
+        throw new BadRequestException('Preview pagination requires userId.');
       }
 
       const pagePosts = await this.fetchFeedPageByNumber(
@@ -367,7 +367,7 @@ export class InstagramPreviewService {
     const selectionAvailable = selectionEndIndex <= base.postsAvailable;
     let selectionWarning: string | undefined;
     if (!selectionAvailable) {
-      selectionWarning = `Só ${base.postsAvailable} post(s) visíveis no preview. A posição #${selectionEndIndex} pode não estar disponível sem paginação extra.`;
+      selectionWarning = `Only ${base.postsAvailable} post(s) visible in preview. Position #${selectionEndIndex} may require loading more posts.`;
     }
 
     return {
@@ -504,21 +504,21 @@ export class InstagramPreviewService {
       });
     } catch {
       throw new ServiceUnavailableException(
-        'Falha de rede ao consultar preview do Instagram.',
+        'Network failure while fetching Instagram preview.',
       );
     }
 
     if (res.status === 404) {
-      throw new BadRequestException('Username não encontrado no Instagram.');
+      throw new BadRequestException('Username not found on Instagram.');
     }
     if (res.status === 429) {
       throw new ServiceUnavailableException(
-        'Instagram com rate limit no preview. Aguarda ~1 minuto e tenta de novo.',
+        'Instagram rate-limited preview requests. Wait about a minute and try again.',
       );
     }
     if (!res.ok) {
       throw new ServiceUnavailableException(
-        `Instagram preview indisponível (HTTP ${res.status}).`,
+        `Instagram preview unavailable (HTTP ${res.status}).`,
       );
     }
 
@@ -527,7 +527,7 @@ export class InstagramPreviewService {
     const data = toRecord(envelope?.data);
     const user = toRecord(data?.user);
     if (!user) {
-      throw new BadRequestException('Perfil Instagram não encontrado.');
+      throw new BadRequestException('Instagram profile not found.');
     }
 
     const edge = toRecord(user.edge_owner_to_timeline_media);
@@ -778,18 +778,18 @@ export class InstagramPreviewService {
       });
     } catch {
       throw new ServiceUnavailableException(
-        'Falha de rede ao paginar preview do Instagram.',
+        'Network failure while paginating Instagram preview.',
       );
     }
 
     if (res.status === 429) {
       throw new ServiceUnavailableException(
-        'Instagram com rate limit no preview. Aguarda ~1 minuto e tenta de novo.',
+        'Instagram rate-limited preview requests. Wait about a minute and try again.',
       );
     }
     if (!res.ok) {
       throw new ServiceUnavailableException(
-        `Instagram pagination indisponível (HTTP ${res.status}).`,
+        `Instagram pagination unavailable (HTTP ${res.status}).`,
       );
     }
 
@@ -799,7 +799,7 @@ export class InstagramPreviewService {
     const posts = this.parseFeedUserItems(items, safeCount);
     if (posts.length === 0) {
       throw new ServiceUnavailableException(
-        'Resposta de paginação do Instagram inválida.',
+        'Invalid Instagram pagination response.',
       );
     }
 

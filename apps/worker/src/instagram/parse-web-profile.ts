@@ -32,14 +32,14 @@ function buildProfileSummary(
   if (typeof id !== 'string' || id.length === 0) {
     throw new InstagramUpstreamError(
       'IG_PARSE',
-      'Resposta Instagram sem id de utilizador válido.',
+      'Instagram response missing a valid user id.',
       false,
     );
   }
   if (typeof username !== 'string' || username.length === 0) {
     throw new InstagramUpstreamError(
       'IG_PARSE',
-      'Resposta Instagram sem username válido.',
+      'Instagram response missing a valid username.',
       false,
     );
   }
@@ -79,7 +79,7 @@ export function buildScrapeSummaryV5FromUserNode(
   if (!user) {
     throw new InstagramUpstreamError(
       'IG_PARSE',
-      'Payload de utilizador vazio.',
+      'Empty user payload.',
       false,
     );
   }

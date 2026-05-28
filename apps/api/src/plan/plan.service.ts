@@ -21,10 +21,10 @@ export class QuotaExceededException extends HttpException {
   constructor(planTier: PlanTier) {
     const upgradeHint =
       planTier === 'max'
-        ? 'Quota mensal esgotada.'
+        ? 'Monthly quota exhausted.'
         : planTier === 'pro'
-          ? 'Quota mensal esgotada. Faz upgrade para Max para continuar a importar.'
-          : 'Quota mensal de imagens esgotada. Faz upgrade para Pro ou Max para continuar a importar.';
+          ? 'Monthly quota exhausted. Upgrade to Max to keep importing.'
+          : 'Monthly image quota exhausted. Upgrade to Pro or Max to keep importing.';
     super(
       {
         code: QUOTA_EXCEEDED_ERROR_CODE,
@@ -83,7 +83,7 @@ export class PlanService {
       select: { quotaAnchorAt: true },
     });
     if (!user) {
-      throw new NotFoundException('Utilizador não encontrado.');
+      throw new NotFoundException('User not found.');
     }
     return resolveQuotaPeriod(user.quotaAnchorAt);
   }
@@ -95,7 +95,7 @@ export class PlanService {
       select: { quotaAnchorAt: true },
     });
     if (!user) {
-      throw new NotFoundException('Utilizador não encontrado.');
+      throw new NotFoundException('User not found.');
     }
 
     let anchor = user.quotaAnchorAt;
@@ -139,7 +139,7 @@ export class PlanService {
       },
     });
     if (!user) {
-      throw new NotFoundException('Utilizador não encontrado.');
+      throw new NotFoundException('User not found.');
     }
 
     const planTier = normalizePlanTier(user.planTier);
@@ -179,7 +179,7 @@ export class PlanService {
   ): Promise<{ planTier: PlanTier; imagesToReserve: number }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
-      throw new NotFoundException('Utilizador não encontrado.');
+      throw new NotFoundException('User not found.');
     }
     const planTier = normalizePlanTier(user.planTier);
     const limits = this.getLimitsForTier(planTier);
@@ -190,13 +190,13 @@ export class PlanService {
 
     if (imagesToReserve > limits.maxImagesPerJob) {
       throw new JobInputPlanException(
-        `Cada importação pode usar no máximo ${limits.maxImagesPerJob} imagens de uma vez. Reduz a seleção ou desativa a expansão de carrosséis.`,
+        `Each import can use at most ${limits.maxImagesPerJob} images at once. Reduce your selection or turn off carousel expansion.`,
       );
     }
 
     if (input.expandCarouselImages && !limits.expandCarouselImages) {
       throw new JobInputPlanException(
-        'Expandir carrossel está disponível apenas nos planos pagos.',
+        'Carousel expansion is only available on paid plans.',
       );
     }
 
@@ -211,7 +211,7 @@ export class PlanService {
   async getPlanTierForUser(userId: string): Promise<PlanTier> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
-      throw new NotFoundException('Utilizador não encontrado.');
+      throw new NotFoundException('User not found.');
     }
     return normalizePlanTier(user.planTier);
   }

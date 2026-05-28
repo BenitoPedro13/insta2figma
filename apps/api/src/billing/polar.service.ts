@@ -15,7 +15,7 @@ export class PolarService {
 
   getClient(): Polar {
     if (!this.isConfigured()) {
-      throw new Error('Polar não configurado (POLAR_ACCESS_TOKEN em falta).');
+      throw new Error('Polar is not configured (POLAR_ACCESS_TOKEN missing).');
     }
     if (!this.client) {
       const server =
@@ -55,7 +55,7 @@ export class PolarService {
     const id = this.getProductId(plan, cycle);
     if (!id) {
       throw new Error(
-        `POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()} em falta.`,
+        `POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()} is missing.`,
       );
     }
     return id;

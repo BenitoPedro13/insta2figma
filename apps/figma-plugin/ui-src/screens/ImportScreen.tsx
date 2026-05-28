@@ -425,7 +425,11 @@ export function ImportScreen({
                 ) : null}
               </div>
               {status ? (
-                <ImportStatusLine text={status} active={importing} />
+                <ImportStatusLine
+                  text={status}
+                  active={importing}
+                  complete={!importing && status.startsWith('All done')}
+                />
               ) : null}
             </form>
           ) : (

@@ -116,7 +116,7 @@ const SAMPLE_JPEG_URL =
 async function loadSampleImage(): Promise<Image> {
   const res = await fetch(SAMPLE_JPEG_URL);
   if (!res.ok) {
-    throw new Error(`Download da imagem falhou (${res.status})`);
+    throw new Error(`Image download failed (${res.status})`);
   }
   const bytes = new Uint8Array(await res.arrayBuffer());
   return figma.createImage(bytes);
@@ -428,7 +428,7 @@ async function placeSignedImages(
   }
 
   if (nodes.length === 0) {
-    figma.notify('Nenhuma imagem foi colocada (falhas de download).', {
+    figma.notify('No images were placed on the canvas (download failures).', {
       error: true,
     });
     figma.ui.postMessage({
@@ -632,7 +632,7 @@ async function ensureSession(base: string): Promise<{
 }> {
   const figmaUser = figma.currentUser;
   if (!figmaUser?.id) {
-    throw new Error('Inicia sessão no Figma para usar o Insta2Figma.');
+    throw new Error('Sign in to Figma to use Insta2Figma.');
   }
   const figmaUserId = figmaUser.id;
   let stored = await loadStoredSession();
@@ -1084,7 +1084,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     try {
       const { session } = await ensureSession(base);
       await openBillingCheckout(base, session.accessToken, plan, cycle);
-      figma.notify('Checkout aberto no browser.');
+      figma.notify('Checkout opened in your browser.');
     } catch (err) {
       figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
     }
@@ -1096,7 +1096,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     try {
       const { session } = await ensureSession(base);
       await openBillingPortal(base, session.accessToken);
-      figma.notify('Portal de cliente aberto no browser.');
+      figma.notify('Customer portal opened in your browser.');
     } catch (err) {
       figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
     }
@@ -1170,12 +1170,12 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     );
     const expandCarouselImages = msg.expandCarouselImages === true;
     if (!username) {
-      figma.notify('Insta2Figma: Preenche username.', {
+      figma.notify('Insta2Figma: Enter a username.', {
         error: true,
       });
       figma.ui.postMessage({
         type: 'import-error',
-        message: 'Preenche username.',
+        message: 'Enter a username.',
       });
       return;
     }
@@ -1226,7 +1226,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       figma.ui.postMessage({
         type: 'profile-preview-error',
         requestId: msg.requestId,
-        message: 'Preenche username.',
+        message: 'Enter a username.',
       });
       return;
     }
@@ -1309,7 +1309,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
   if (msg.type === 'place-images') {
     if (!Array.isArray(msg.urls) || msg.urls.length === 0) {
-      figma.notify('Lista de URLs vazia.', { error: true });
+      figma.notify('URL list is empty.', { error: true });
       return;
     }
     try {
@@ -1334,7 +1334,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     !Number.isInteger(msg.count) ||
     msg.count <= 0
   ) {
-    figma.notify('Indica um número inteiro positivo.', { error: true });
+      figma.notify('Enter a positive whole number.', { error: true });
     return;
   }
 
@@ -1342,7 +1342,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     const image = await loadSampleImageOrNull();
     if (!image) {
       figma.notify(
-        'Não foi possível carregar a imagem de exemplo (CDN). A criar rectângulos sólidos.',
+        'Could not load the sample image (CDN). Creating solid rectangles instead.',
       );
     }
     const nodes: SceneNode[] = [];

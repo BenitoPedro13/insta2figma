@@ -61,7 +61,7 @@ export class BillingService {
     }
 
     if (!this.polar.isConfigured()) {
-      throw new ServiceUnavailableException('Billing Polar não configurado.');
+      throw new ServiceUnavailableException('Polar billing is not configured.');
     }
 
     const client = this.polar.getClient();
@@ -104,7 +104,7 @@ export class BillingService {
       } catch (stateErr) {
         if (isPolarSdkNotFound(stateErr)) {
           throw new ServiceUnavailableException(
-            'Não foi possível criar o cliente Polar. Tenta novamente.',
+            'Could not create the Polar customer. Please try again.',
           );
         }
         throw stateErr;
@@ -118,7 +118,7 @@ export class BillingService {
     cycle: BillingCycle = 'monthly',
   ): Promise<{ url: string }> {
     if (!this.polar.isConfigured()) {
-      throw new ServiceUnavailableException('Billing Polar não configurado.');
+      throw new ServiceUnavailableException('Polar billing is not configured.');
     }
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -134,7 +134,7 @@ export class BillingService {
       productId = this.polar.getProductIdForPlan(plan, cycle);
     } catch {
       throw new BadRequestException(
-        `Plano ${plan} (${cycle}) ainda não configurado (POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()}).`,
+        `Plan ${plan} (${cycle}) is not configured yet (POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()}).`,
       );
     }
     const successUrl =
@@ -155,18 +155,18 @@ export class BillingService {
       });
 
       if (!checkout.url) {
-        throw new BadRequestException('Checkout Polar sem URL.');
+        throw new BadRequestException('Polar checkout returned no URL.');
       }
       return { url: checkout.url };
     } catch (err) {
       this.logger.error('checkouts.create falhou', err);
       if (isPolarSdkValidation(err)) {
         throw new BadRequestException(
-          `Checkout inválido: ${formatPolarError(err)}. Verifica POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()} (sandbox).`,
+          `Invalid checkout: ${formatPolarError(err)}. Check POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()} (sandbox).`,
         );
       }
       throw new ServiceUnavailableException(
-        'Não foi possível criar a sessão de checkout.',
+        'Could not create the checkout session.',
       );
     }
 
@@ -174,7 +174,7 @@ export class BillingService {
 
   async createPortalSession(userId: string): Promise<{ url: string }> {
     if (!this.polar.isConfigured()) {
-      throw new ServiceUnavailableException('Billing Polar não configurado.');
+      throw new ServiceUnavailableException('Polar billing is not configured.');
     }
     const polarCustomerId = await this.ensurePolarCustomer(userId);
     const client = this.polar.getClient();

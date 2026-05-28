@@ -74,7 +74,7 @@ export class JobsService {
     const parsed = createJobBodySchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException({
-        message: 'Body do job inválido.',
+        message: 'Invalid job body.',
         details: parsed.error.flatten(),
       });
     }
@@ -148,12 +148,12 @@ export class JobsService {
         data: {
           status: 'failed',
           errorCode: 'QUEUE_UNAVAILABLE',
-          errorMessage: 'Redis ou BullMQ indisponível ao enfileirar.',
+          errorMessage: 'Redis or BullMQ unavailable while enqueueing.',
           finishedAt: new Date(),
         },
       });
       throw new ServiceUnavailableException(
-        'Fila indisponível; o job foi marcado como falhado.',
+        'Queue unavailable; the job was marked as failed.',
       );
     }
 
@@ -167,10 +167,10 @@ export class JobsService {
   ): Promise<JobResponse> {
     const job = await this.prisma.job.findUnique({ where: { id: jobId } });
     if (!job) {
-      throw new NotFoundException('Job não encontrado.');
+      throw new NotFoundException('Job not found.');
     }
     if (job.userId !== userId) {
-      throw new ForbiddenException('Sem acesso a este job.');
+      throw new ForbiddenException('You do not have access to this job.');
     }
 
     if (

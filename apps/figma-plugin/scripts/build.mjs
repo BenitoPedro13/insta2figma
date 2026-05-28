@@ -1,5 +1,12 @@
 import * as esbuild from 'esbuild';
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,8 +37,7 @@ if (existsSync(indexHtml)) {
   throw new Error('[FIGMA PLUGIN] Vite não gerou dist/index.html');
 }
 
-const uiHtmlRaw = readFileSync(uiHtml, 'utf8');
-
+// __html__ is provided at runtime by Figma from manifest "ui": "ui.html".
 await esbuild.build({
   entryPoints: [join(pkgRoot, 'src', 'code.ts')],
   bundle: true,
@@ -40,11 +46,21 @@ await esbuild.build({
   format: 'iife',
   target: ['es2017'],
   logLevel: 'info',
-  define: {
-    __html__: JSON.stringify(uiHtmlRaw),
-  },
 });
 
-cpSync(join(pkgRoot, 'manifest.json'), join(dist, 'manifest.json'));
+const manifestSrc = JSON.parse(
+  readFileSync(join(pkgRoot, 'manifest.json'), 'utf8'),
+);
+
+const distManifest = {
+  ...manifestSrc,
+  main: 'code.js',
+  ui: 'ui.html',
+};
+
+writeFileSync(
+  join(dist, 'manifest.json'),
+  `${JSON.stringify(distManifest, null, 2)}\n`,
+);
 
 console.info('[FIGMA PLUGIN] Artefactos criados em', dist);

@@ -83,7 +83,7 @@ export async function processInstagramScrapeJob(
       prisma,
       row,
       'IG_PARSE',
-      'Input do job inválido ou corrompido na BD.',
+      'Invalid or corrupted job input in the database.',
     );
     return;
   }
@@ -151,7 +151,7 @@ export async function processInstagramScrapeJob(
       prisma,
       row,
       'INTERNAL',
-      truncateMessage(e instanceof Error ? e.message : 'Erro interno.'),
+      truncateMessage(e instanceof Error ? e.message : 'Internal error.'),
     );
   }
 }
