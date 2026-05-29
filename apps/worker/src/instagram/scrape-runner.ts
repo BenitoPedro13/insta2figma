@@ -110,6 +110,12 @@ export async function processInstagramScrapeJob(
       { defaultMaxPosts },
     )) as ScrapeJobResultSummaryV5;
 
+    const postsWithThumb = summary.postsSample.filter(p => !!p.thumbnailUrl).length;
+    console.info(
+      `[worker-scrape] ${row.id} @${usernameNorm} — ${summary.postsSample.length} posts, ${postsWithThumb} com thumbnail`,
+      summary.postsSample.slice(0, 3).map(p => ({ shortcode: p.shortcode, thumb: p.thumbnailUrl?.slice(0, 60) ?? null })),
+    );
+
     const expandCarousel = body.input.expandCarouselImages === true;
     const summaryWithMeta: ScrapeJobResultSummaryV5 = {
       ...summary,

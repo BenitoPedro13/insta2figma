@@ -162,6 +162,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
         if (feedRes.ok) {
           const feedBody = (await feedRes.json()) as Record<string, unknown>;
           const parsed = parseFeedItems(feedBody.items);
+          console.info(`[worker:feed] userId=${userId} → ${parsed.length} posts, ${parsed.filter(p => !!p.thumbnailUrl).length} com thumbnail`);
           if (parsed.length > 0) {
             // Converte TimelinePostItem[] para o formato edge_owner_to_timeline_media
             // que parseTimelineSampleFromUserNode espera

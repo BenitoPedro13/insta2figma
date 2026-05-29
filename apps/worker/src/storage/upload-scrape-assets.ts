@@ -136,6 +136,11 @@ export async function uploadScrapeAssets(params: {
   const expand = params.expandCarouselImages === true;
   const maxSlots = expand ? MAX_THUMBS_EXPANDED : MAX_THUMBS;
 
+  const postsWithUrl = params.summary.postsSample.filter(p => !!p.thumbnailUrl).length;
+  console.info(
+    `[storage] ${params.summary.postsSample.length} posts no sample, ${postsWithUrl} com thumbnailUrl, maxSlots=${maxSlots}`,
+  );
+
   for (const p of params.summary.postsSample) {
     if (count >= maxSlots) break;
 
@@ -148,7 +153,10 @@ export async function uploadScrapeAssets(params: {
       }
     }
 
-    if (urlsToStore.length === 0) continue;
+    if (urlsToStore.length === 0) {
+      console.warn(`[storage] post ${p.shortcode} sem URL de thumbnail — a saltar`);
+      continue;
+    }
 
     let slotIdx = 0;
     for (const url of urlsToStore) {
@@ -168,5 +176,6 @@ export async function uploadScrapeAssets(params: {
     }
   }
 
+  console.info(`[storage] upload completo — ${count} assets guardados no S3`);
   return prefix;
 }
