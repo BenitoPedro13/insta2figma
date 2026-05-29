@@ -15,10 +15,14 @@ export function getProxyAgent(): object | undefined {
   const url = process.env.HTTP_PROXY_URL?.trim();
   if (!url) return undefined;
 
-  agent = new HttpsProxyAgent(url);
-  console.info(
-    '[instagram-scraper] proxy configurado:',
-    url.replace(/:\/\/[^@]+@/, '://***@'),
-  );
+  try {
+    agent = new HttpsProxyAgent(url);
+    console.info(
+      '[instagram-scraper] proxy configurado:',
+      url.replace(/:\/\/[^@]+@/, '://***@'),
+    );
+  } catch (err) {
+    console.error('[instagram-scraper] HTTP_PROXY_URL inválido — proxy desactivado:', err);
+  }
   return agent;
 }
