@@ -206,13 +206,20 @@ async function fetchInstagramImageAsDataUrl(
       signal: AbortSignal.timeout(18_000),
       redirect: 'follow',
     });
-    if (!img.ok) return null;
+    if (!img.ok) {
+      console.warn(`[ig:thumb] HTTP ${img.status} — ${cdnUrl.slice(0, 80)}`);
+      return null;
+    }
     const buf = Buffer.from(await img.arrayBuffer());
-    if (buf.byteLength === 0 || buf.byteLength > maxBytes) return null;
+    if (buf.byteLength === 0 || buf.byteLength > maxBytes) {
+      console.warn(`[ig:thumb] tamanho inválido: ${buf.byteLength}b — ${cdnUrl.slice(0, 80)}`);
+      return null;
+    }
     const ctRaw = img.headers.get('content-type')?.split(';')[0]?.trim();
     const ct = ctRaw && ctRaw.startsWith('image/') ? ctRaw : 'image/jpeg';
     return `data:${ct};base64,${buf.toString('base64')}`;
-  } catch {
+  } catch (err) {
+    console.warn(`[ig:thumb] erro: ${err instanceof Error ? err.message : String(err)} — ${cdnUrl.slice(0, 80)}`);
     return null;
   }
 }
@@ -643,7 +650,11 @@ export class InstagramPreviewService {
     const postsPreviewRaw = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
       indexStart: 1,
     });
+    const thumbUrlCount = postsPreviewRaw.filter(p => !!p.thumbnailUrl).length;
+    console.info(`[ig:thumbs] ${postsPreviewRaw.length} posts, ${thumbUrlCount} com URL de thumbnail`);
     const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
+    const thumbDataCount = postsPreview.filter(p => p.thumbnailUrl?.startsWith('data:')).length;
+    console.info(`[ig:thumbs] ${thumbDataCount}/${postsPreview.length} thumbnails convertidos para data URL`);
 
     const pageInfo = toRecord(edge?.page_info);
     const hasNextFromProfile = pageInfo?.has_next_page === true;
