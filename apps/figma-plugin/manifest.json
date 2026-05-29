@@ -16,7 +16,8 @@
       "https://*.railway.app",
       "https://instagram.com",
       "https://*.cdninstagram.com",
-      "https://*.fbcdn.net"
+      "https://*.fbcdn.net",
+      "https://t3.storageapi.dev"
     ],
     "devAllowedDomains": [
       "http://localhost:3333"
