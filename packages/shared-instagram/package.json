@@ -15,6 +15,7 @@
     "lint": "tsc -p tsconfig.build.json --noEmit"
   },
   "dependencies": {
+    "@insta2figma/shared-contracts": "workspace:*",
     "undici": "^8.3.0"
   },
   "devDependencies": {

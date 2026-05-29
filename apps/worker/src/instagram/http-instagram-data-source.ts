@@ -2,7 +2,7 @@ import type {
   ScrapeJobResultSummaryV5,
   ScrapeSelectionInput,
 } from '@insta2figma/shared-contracts';
-import { SessionPool, getProxyAgent, fetchWithRetry } from '@insta2figma/shared-instagram';
+import { SessionPool, getProxyAgent, fetchWithRetry, parseFeedItems } from '@insta2figma/shared-instagram';
 import { InstagramUpstreamError } from './instagram-upstream-error';
 import { buildScrapeSummaryV5FromUserNode } from './parse-web-profile';
 
@@ -161,12 +161,23 @@ export class HttpInstagramDataSource implements InstagramDataSource {
         );
         if (feedRes.ok) {
           const feedBody = (await feedRes.json()) as Record<string, unknown>;
-          const items = feedBody.items;
-          if (Array.isArray(items) && items.length > 0) {
-            // Injecta os items no userNode no formato que o parser espera
+          const parsed = parseFeedItems(feedBody.items);
+          if (parsed.length > 0) {
+            // Converte TimelinePostItem[] para o formato edge_owner_to_timeline_media
+            // que parseTimelineSampleFromUserNode espera
+            const mappedEdges = parsed.map((p) => ({
+              node: {
+                shortcode: p.shortcode,
+                display_url: p.thumbnailUrl,
+                __typename: p.isVideo ? 'GraphVideo' : 'GraphImage',
+                ...(p.carouselImageUrls && p.carouselImageUrls.length > 0
+                  ? { edge_sidecar_to_children: { edges: p.carouselImageUrls.map((u) => ({ node: { display_url: u } })) } }
+                  : {}),
+              },
+            }));
             (userNode as Record<string, unknown>).edge_owner_to_timeline_media = {
               ...(edge ?? {}),
-              edges: items.map((item: Record<string, unknown>) => ({ node: item })),
+              edges: mappedEdges,
             };
           }
         }

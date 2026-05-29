@@ -18,7 +18,7 @@ import {
   type ScrapeSelectionInput,
   type TimelinePostItem,
 } from '@insta2figma/shared-contracts';
-import { SessionPool, getProxyAgent, fetchWithRetry } from '@insta2figma/shared-instagram';
+import { SessionPool, getProxyAgent, fetchWithRetry, parseFeedItems } from '@insta2figma/shared-instagram';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
 
 const IG_HEADERS: Record<string, string> = {
@@ -768,56 +768,6 @@ export class InstagramPreviewService {
       hit.payload.parsedPosts.length < hit.payload.mediaCount;
   }
 
-  private parseFeedUserItems(
-    itemsRaw: unknown,
-    maxPosts: number,
-  ): TimelinePostItem[] {
-    if (!Array.isArray(itemsRaw)) return [];
-    const out: TimelinePostItem[] = [];
-    for (const raw of itemsRaw) {
-      const item = toRecord(raw);
-      if (!item) continue;
-      const shortcode =
-        typeof item.code === 'string' && item.code.length > 0
-          ? item.code
-          : null;
-      if (!shortcode) continue;
-
-      let thumbnailUrl: string | null = null;
-      const imageVersions = toRecord(item.image_versions2);
-      const candidates = imageVersions?.candidates;
-      if (Array.isArray(candidates)) {
-        for (const candidateRaw of candidates) {
-          const candidate = toRecord(candidateRaw);
-          const url = candidate?.url;
-          if (typeof url === 'string' && url.length > 0) {
-            thumbnailUrl = url;
-            break;
-          }
-        }
-      }
-      if (
-        !thumbnailUrl &&
-        typeof item.display_uri === 'string' &&
-        item.display_uri.length > 0
-      ) {
-        thumbnailUrl = item.display_uri;
-      }
-
-      const mediaType = item.media_type;
-      const isVideo = mediaType === 2;
-
-      const parsed: TimelinePostItem = {
-        shortcode,
-        thumbnailUrl,
-        isVideo,
-      };
-      out.push(parsed);
-      if (out.length >= maxPosts) break;
-    }
-    return out;
-  }
-
   private async fetchFeedPageByNumber(
     userId: string,
     pageNumber: number,
@@ -957,7 +907,7 @@ export class InstagramPreviewService {
     const body = (await res.json().catch(() => null)) as unknown;
     const envelope = toRecord(body);
     const items = envelope?.items;
-    const posts = this.parseFeedUserItems(items, safeCount);
+    const posts = parseFeedItems(items, safeCount);
     if (posts.length === 0) {
       throw new ServiceUnavailableException(
         'Invalid Instagram pagination response.',
