@@ -1006,8 +1006,9 @@ async function previewProfileViaApi(
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const data = payload.data as Record<string, unknown> | undefined;
   if (!res.ok || !data) {
+    const apiMessage = typeof payload.message === 'string' ? payload.message : null;
     throw new Error(
-      `Preview ${res.status}: ${JSON.stringify(payload.error ?? payload).slice(0, 240)}`,
+      apiMessage ?? `Preview ${res.status}: ${JSON.stringify(payload.error ?? payload).slice(0, 240)}`,
     );
   }
   return {

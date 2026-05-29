@@ -77,6 +77,7 @@ type ImportScreenProps = {
   previewPageLoading: boolean;
   previewThumbsLoading: boolean;
   previewError: string;
+  previewErrorKind?: 'not-found' | 'service-error';
   previewPage: number;
   previewTotalPages: number;
   onPreviewPageChange: (page: number) => void;
@@ -134,6 +135,7 @@ export function ImportScreen({
   previewPageLoading,
   previewThumbsLoading,
   previewError,
+  previewErrorKind = 'not-found',
   previewPage,
   previewTotalPages,
   onPreviewPageChange,
@@ -170,7 +172,7 @@ export function ImportScreen({
     if (!trimmedUsername) return "idle" as const;
     if (previewLoading && !preview?.username) return "searching" as const;
     if (preview?.username) return "found" as const;
-    if (previewError) return "not-found" as const;
+    if (previewError) return previewErrorKind === 'service-error' ? "service-error" as const : "not-found" as const;
     return "idle" as const;
   })();
   const profileFound = usernameLookupStatus === "found";
@@ -304,6 +306,7 @@ export function ImportScreen({
                         "new-import-status new-import-status--visible text-paragraph-xs",
                         usernameLookupStatus === "found" && "text-success-base",
                         usernameLookupStatus === "not-found" && "text-warning-base",
+                        usernameLookupStatus === "service-error" && "text-error-base",
                         usernameLookupStatus === "searching" && "text-text-sub-600",
                       )}
                     >
@@ -330,6 +333,18 @@ export function ImportScreen({
                             {previewError.trim()
                               ? previewError.trim().split("\n")[0]
                               : "Username not found"}
+                          </span>
+                        </>
+                      ) : null}
+                      {usernameLookupStatus === "service-error" ? (
+                        <>
+                          <RiInformationFill
+                            className="new-import-status-icon shrink-0"
+                            size={16}
+                            aria-hidden
+                          />
+                          <span className="min-w-0 break-words">
+                            {previewError.trim().split("\n")[0]}
                           </span>
                         </>
                       ) : null}

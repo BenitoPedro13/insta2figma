@@ -123,6 +123,7 @@ export function App() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewThumbsLoading, setPreviewThumbsLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [previewErrorKind, setPreviewErrorKind] = useState<'not-found' | 'service-error'>('not-found');
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
   const [previewPage, setPreviewPage] = useState(1);
   const [previewTotalPages, setPreviewTotalPages] = useState(1);
@@ -443,6 +444,8 @@ export function App() {
           typeof pm.message === 'string' ? pm.message : 'Could not load profile preview.';
         const errBase = typeof pm.base === 'string' ? pm.base : '';
         setPreviewError(errBase ? `${errMsg}\n\nAPI: ${errBase}` : errMsg);
+        const isNotFound = /not found/i.test(errMsg);
+        setPreviewErrorKind(isNotFound ? 'not-found' : 'service-error');
         return;
       }
       if (pm.type === 'import-error') {
@@ -882,6 +885,7 @@ export function App() {
                 previewPageLoading={previewPageLoading}
                 previewThumbsLoading={previewThumbsLoading}
                 previewError={previewError}
+                previewErrorKind={previewErrorKind}
                 previewPage={previewPage}
                 previewTotalPages={previewTotalPages}
                 onPreviewPageChange={fetchPreviewPage}

@@ -34,7 +34,6 @@ import {
 } from './parse-instagram-username';
 
 export {
-  parseInstagramUsername,
   parseInstagramUsernameDetailed,
   type ParseInstagramUsernameKind,
   type ParseInstagramUsernameResult,
@@ -63,6 +62,7 @@ export {
   type TimelinePostItem,
 };
 
+export { parseInstagramUsername } from './parse-instagram-username';
 export const postSelectionModeSchema = z.enum(POST_SELECTION_MODES);
 export const postTimelineOrderSchema = z.enum(POST_TIMELINE_ORDERS);
 

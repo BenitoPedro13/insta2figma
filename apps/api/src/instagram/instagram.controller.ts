@@ -89,6 +89,7 @@ export class InstagramController {
       after,
       userId,
       planTier,
+      callerUserId: req.user.userId,
     });
   }
 }

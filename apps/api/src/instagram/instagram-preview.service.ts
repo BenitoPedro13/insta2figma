@@ -18,6 +18,10 @@ import {
   type ScrapeSelectionInput,
   type TimelinePostItem,
 } from '@insta2figma/shared-contracts';
+import { SessionPool } from './instagram-session';
+import { getProxyAgent } from './instagram-proxy';
+import { fetchWithRetry } from './instagram-retry';
+import { ScrapeTelemetryService } from './instagram-telemetry.service';
 
 const IG_HEADERS: Record<string, string> = {
   'x-ig-app-id': '936619743392459',
@@ -36,7 +40,7 @@ const IG_IMAGE_HEADERS: Record<string, string> = {
 };
 const MAX_AVATAR_BYTES = 900_000;
 const MAX_POST_THUMB_BYTES = 520_000;
-const PREVIEW_CACHE_TTL_MS = 45_000;
+const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1_000; // 5 minutos — reduz pedidos ao Instagram ~5x
 const PREVIEW_THUMB_CONCURRENCY = 4;
 const FREE_MAX_PREVIEW_PAGE = 3;
 
@@ -244,12 +248,26 @@ async function inlinePostsPreviewThumbnails(
   return out;
 }
 
+type TelemetryCtx = {
+  callerUserId?: string | null;
+  planTier?: string | null;
+};
+
 @Injectable()
 export class InstagramPreviewService {
   private readonly previewCache = new Map<
     string,
     { expiresAt: number; payload: CachedPreviewPayload }
   >();
+  private readonly sessionPool = SessionPool.load();
+
+  constructor(private readonly telemetry: ScrapeTelemetryService) {}
+
+  private buildIgHeaders(cookie: string | null): Record<string, string> {
+    const headers = { ...IG_HEADERS };
+    if (cookie) headers['Cookie'] = cookie;
+    return headers;
+  }
 
   async getProfilePreview(
     usernameRaw: string,
@@ -260,6 +278,7 @@ export class InstagramPreviewService {
       after?: string;
       userId?: string;
       planTier?: PlanTier;
+      callerUserId?: string;
     },
   ): Promise<ProfilePreviewResponse> {
     const username = normalizeUsername(usernameRaw);
@@ -285,11 +304,17 @@ export class InstagramPreviewService {
       Math.max(PREVIEW_PAGE_SIZE, selection.fetchCount),
     );
 
+    const tCtx: TelemetryCtx = {
+      callerUserId: opts?.callerUserId ?? null,
+      planTier: planTier ?? null,
+    };
+
     if (previewPage > 1) {
       const { base } = await this.getOrFetchPreviewBase(
         username,
         fetchCount,
         timelineOrder,
+        tCtx,
       );
       const start = (previewPage - 1) * PREVIEW_PAGE_SIZE;
       const cachedSlice = base.parsedPosts.slice(start, start + PREVIEW_PAGE_SIZE);
@@ -330,6 +355,7 @@ export class InstagramPreviewService {
         userId,
         previewPage,
         firstPageShortcodes,
+        tCtx,
       );
       this.appendPostsToCache(
         this.buildPreviewCacheKey(username, fetchCount, timelineOrder),
@@ -354,6 +380,7 @@ export class InstagramPreviewService {
       username,
       fetchCount,
       timelineOrder,
+      tCtx,
     );
 
     const expand = opts?.expandCarouselImages === true;
@@ -410,15 +437,26 @@ export class InstagramPreviewService {
     username: string,
     fetchCount: number,
     timelineOrder: 'newest_first' | 'oldest_first',
+    ctx: TelemetryCtx,
   ): Promise<{ base: CachedPreviewPayload; cacheKey: string }> {
     const cacheKey = this.buildPreviewCacheKey(username, fetchCount, timelineOrder);
     let base = this.readCache(cacheKey);
-    if (!base) {
-      base = await this.fetchInstagramPreviewBase(
-        username,
-        fetchCount,
-        timelineOrder,
-      );
+    if (base) {
+      this.telemetry.record({
+        endpoint: 'profile-preview',
+        igUsername: username,
+        sessionAccount: null,
+        proxyUsed: false,
+        cacheHit: true,
+        statusCode: 200,
+        retryCount: 0,
+        latencyMs: 0,
+        errorKind: null,
+        userId: ctx.callerUserId,
+        planTier: ctx.planTier,
+      });
+    } else {
+      base = await this.fetchInstagramPreviewBase(username, fetchCount, timelineOrder, ctx);
       this.writeCache(cacheKey, base);
     }
     return { base, cacheKey };
@@ -484,7 +522,7 @@ export class InstagramPreviewService {
       expiresAt: Date.now() + PREVIEW_CACHE_TTL_MS,
       payload,
     });
-    if (this.previewCache.size > 128) {
+    if (this.previewCache.size > 512) {
       const oldest = this.previewCache.keys().next().value;
       if (oldest) this.previewCache.delete(oldest);
     }
@@ -494,21 +532,70 @@ export class InstagramPreviewService {
     username: string,
     fetchCount: number,
     timelineOrder: 'newest_first' | 'oldest_first',
+    ctx: TelemetryCtx,
   ): Promise<CachedPreviewPayload> {
     const url = `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
+    const session = this.sessionPool.next();
+    const agent = getProxyAgent();
+    const t0 = Date.now();
+
     let res: Response;
+    let retryCount = 0;
     try {
-      res = await fetch(url, {
-        method: 'GET',
-        headers: IG_HEADERS,
-        signal: AbortSignal.timeout(25_000),
-      });
+      ({ res, retryCount } = await fetchWithRetry(
+        url,
+        {
+          method: 'GET',
+          headers: this.buildIgHeaders(session?.cookie ?? null),
+          signal: AbortSignal.timeout(20_000),
+          ...(agent ? { dispatcher: agent } : {}),
+        },
+        'profile-preview',
+      ));
     } catch {
+      this.telemetry.record({
+        endpoint: 'profile-preview',
+        igUsername: username,
+        sessionAccount: session?.account ?? null,
+        proxyUsed: !!agent,
+        cacheHit: false,
+        statusCode: 0,
+        retryCount,
+        latencyMs: Date.now() - t0,
+        errorKind: 'network',
+        userId: ctx.callerUserId,
+        planTier: ctx.planTier,
+      });
       throw new ServiceUnavailableException(
         'Network failure while fetching Instagram preview.',
       );
     }
 
+    const latencyMs = Date.now() - t0;
+    const errorKind = res.status === 429
+      ? 'rate_limited'
+      : res.status === 404 ? 'not_found'
+      : res.status === 401 ? 'auth'
+      : !res.ok ? 'unavailable'
+      : null;
+
+    this.telemetry.record({
+      endpoint: 'profile-preview',
+      igUsername: username,
+      sessionAccount: session?.account ?? null,
+      proxyUsed: !!agent,
+      cacheHit: false,
+      statusCode: res.status,
+      retryCount,
+      latencyMs,
+      errorKind,
+      userId: ctx.callerUserId,
+      planTier: ctx.planTier,
+    });
+
+    if (res.status === 401 && session) {
+      this.sessionPool.markInvalid(session.account);
+    }
     if (res.status === 404) {
       throw new BadRequestException('Username not found on Instagram.');
     }
@@ -571,6 +658,7 @@ export class InstagramPreviewService {
           instagramUserId,
           undefined,
           PREVIEW_PAGE_SIZE,
+          ctx,
         );
         parsedPosts = mergeUniqueTimelinePosts(parsedPosts, page1Feed.posts);
         nextPreviewCursor = normalizePreviewCursor(page1Feed.nextMaxId);
@@ -585,6 +673,7 @@ export class InstagramPreviewService {
               instagramUserId,
               nextPreviewCursor,
               PREVIEW_PAGE_SIZE,
+              ctx,
             );
             const merged = mergeUniqueTimelinePosts(parsedPosts, page2Feed.posts);
             if (merged.length > parsedPosts.length) {
@@ -715,6 +804,7 @@ export class InstagramPreviewService {
     userId: string,
     pageNumber: number,
     firstPageShortcodes: Set<string>,
+    ctx: TelemetryCtx,
   ): Promise<{
     posts: TimelinePostItem[];
     hasNextPage: boolean;
@@ -733,6 +823,7 @@ export class InstagramPreviewService {
         userId,
         maxId,
         PREVIEW_PAGE_SIZE,
+        ctx,
       );
       if (page === safePage) break;
       const next = normalizePreviewCursor(result.nextMaxId);
@@ -755,6 +846,7 @@ export class InstagramPreviewService {
     userId: string,
     maxId: string | undefined,
     count: number,
+    ctx: TelemetryCtx,
   ): Promise<{
     posts: TimelinePostItem[];
     hasNextPage: boolean;
@@ -762,27 +854,70 @@ export class InstagramPreviewService {
   }> {
     const safeCount = Math.min(50, Math.max(1, count));
     const maxIdTrimmed = String(maxId ?? '').trim();
-    const qs = new URLSearchParams({
-      count: String(safeCount),
-    });
-    if (maxIdTrimmed) {
-      qs.set('max_id', maxIdTrimmed);
-    }
+    const qs = new URLSearchParams({ count: String(safeCount) });
+    if (maxIdTrimmed) qs.set('max_id', maxIdTrimmed);
     const url = `https://i.instagram.com/api/v1/feed/user/${encodeURIComponent(userId)}/?${qs.toString()}`;
 
+    const session = this.sessionPool.next();
+    const agent = getProxyAgent();
+    const t0 = Date.now();
+
     let res: Response;
+    let retryCount = 0;
     try {
-      res = await fetch(url, {
-        method: 'GET',
-        headers: IG_HEADERS,
-        signal: AbortSignal.timeout(25_000),
-      });
+      ({ res, retryCount } = await fetchWithRetry(
+        url,
+        {
+          method: 'GET',
+          headers: this.buildIgHeaders(session?.cookie ?? null),
+          signal: AbortSignal.timeout(20_000),
+          ...(agent ? { dispatcher: agent } : {}),
+        },
+        'feed-pagination',
+      ));
     } catch {
+      this.telemetry.record({
+        endpoint: 'feed-pagination',
+        igUsername: userId,
+        sessionAccount: session?.account ?? null,
+        proxyUsed: !!agent,
+        cacheHit: false,
+        statusCode: 0,
+        retryCount,
+        latencyMs: Date.now() - t0,
+        errorKind: 'network',
+        userId: ctx.callerUserId,
+        planTier: ctx.planTier,
+      });
       throw new ServiceUnavailableException(
         'Network failure while paginating Instagram preview.',
       );
     }
 
+    const latencyMs = Date.now() - t0;
+    const errorKind = res.status === 429
+      ? 'rate_limited'
+      : res.status === 401 ? 'auth'
+      : !res.ok ? 'unavailable'
+      : null;
+
+    this.telemetry.record({
+      endpoint: 'feed-pagination',
+      igUsername: userId,
+      sessionAccount: session?.account ?? null,
+      proxyUsed: !!agent,
+      cacheHit: false,
+      statusCode: res.status,
+      retryCount,
+      latencyMs,
+      errorKind,
+      userId: ctx.callerUserId,
+      planTier: ctx.planTier,
+    });
+
+    if (res.status === 401 && session) {
+      this.sessionPool.markInvalid(session.account);
+    }
     if (res.status === 429) {
       throw new ServiceUnavailableException(
         'Instagram rate-limited preview requests. Wait about a minute and try again.',
