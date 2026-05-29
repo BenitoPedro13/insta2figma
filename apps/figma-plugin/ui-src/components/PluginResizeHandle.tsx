@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { RiExpandDiagonalLine } from '@remixicon/react';
+import * as Tooltip from './ui/tooltip';
+import { cn } from '../utils/cn';
 
 const MIN_W = 830;
 const MIN_H = 420;
@@ -8,6 +9,38 @@ const MAX_H = 900;
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+function ResizeGripIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={cn('plugin-resize-handle-icon', className)}
+      width={12}
+      height={12}
+      viewBox="0 0 12 12"
+      fill="none"
+      aria-hidden
+    >
+      <line
+        x1="4.5"
+        y1="12"
+        x2="12"
+        y2="4.5"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+      <line
+        x1="7.5"
+        y1="12"
+        x2="12"
+        y2="7.5"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 export function PluginResizeHandle() {
@@ -80,14 +113,23 @@ export function PluginResizeHandle() {
   };
 
   return (
-    <div
-      className="plugin-resize-handle"
-      role="separator"
-      aria-orientation="both"
-      aria-label="Resize plugin window"
-      onMouseDown={onMouseDown}
-    >
-      <RiExpandDiagonalLine className="plugin-resize-handle-icon" aria-hidden />
-    </div>
+    <Tooltip.Provider delayDuration={200}>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <div
+            className="plugin-resize-handle"
+            role="separator"
+            aria-orientation="both"
+            aria-label="Drag to redimension"
+            onMouseDown={onMouseDown}
+          >
+            <ResizeGripIcon />
+          </div>
+        </Tooltip.Trigger>
+        <Tooltip.Content side="top" align="end">
+          Drag to redimension
+        </Tooltip.Content>
+      </Tooltip.Root>
+    </Tooltip.Provider>
   );
 }
