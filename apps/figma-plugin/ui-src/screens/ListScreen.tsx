@@ -1,5 +1,6 @@
 import { RiCloseLine, RiSearchLine, RiStarFill, RiStarLine } from '@remixicon/react';
 import { HistoryAvatar } from '../components/HistoryAvatar';
+import { parseInstagramUsername } from '@insta2figma/shared-contracts';
 import type { HistoryEntry } from '../lib/historyStorage';
 
 export type ListTab = 'history' | 'favorites';
@@ -18,7 +19,7 @@ type ListScreenProps = {
 
 function matchesSearch(entry: HistoryEntry, q: string): boolean {
   if (!q.trim()) return true;
-  const n = q.trim().toLowerCase().replace(/^@/, '');
+  const n = parseInstagramUsername(q);
   return entry.username.includes(n);
 }
 

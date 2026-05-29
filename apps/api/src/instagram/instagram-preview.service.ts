@@ -7,6 +7,7 @@ import {
   buildIndexedPostPreview,
   endSelectionIndex,
   estimateImportImages,
+  parseInstagramUsername,
   parseTimelineSampleFromUserNode,
   PREVIEW_PAGE_SIZE,
   PRO_MAX_PREVIEW_PAGE,
@@ -53,7 +54,7 @@ function assertPreviewPageAllowed(planTier: PlanTier, previewPage: number): void
 }
 
 function normalizeUsername(raw: string): string {
-  return raw.trim().replace(/^@+/u, '').toLowerCase();
+  return parseInstagramUsername(raw);
 }
 
 function normalizeInstagramUserId(raw: unknown): string | null {
