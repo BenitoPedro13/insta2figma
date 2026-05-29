@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { initClarity } from './lib/clarity';
 import { ThemePreferenceProvider } from './lib/themePreference';
 import './globals.css';
 import './index.css';
@@ -18,3 +19,5 @@ createRoot(document.getElementById('root')!).render(
     <Root />
   </StrictMode>,
 );
+
+initClarity();
