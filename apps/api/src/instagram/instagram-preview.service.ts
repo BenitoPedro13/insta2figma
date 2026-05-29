@@ -646,15 +646,6 @@ export class InstagramPreviewService {
           : null;
 
     let parsedPosts = parseTimelineSampleFromUserNode(user, fetchCount);
-    const pageOnePosts = parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
-    const postsPreviewRaw = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
-      indexStart: 1,
-    });
-    const thumbUrlCount = postsPreviewRaw.filter(p => !!p.thumbnailUrl).length;
-    console.info(`[ig:thumbs] ${postsPreviewRaw.length} posts, ${thumbUrlCount} com URL de thumbnail`);
-    const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
-    const thumbDataCount = postsPreview.filter(p => p.thumbnailUrl?.startsWith('data:')).length;
-    console.info(`[ig:thumbs] ${thumbDataCount}/${postsPreview.length} thumbnails convertidos para data URL`);
 
     const pageInfo = toRecord(edge?.page_info);
     const hasNextFromProfile = pageInfo?.has_next_page === true;
@@ -669,7 +660,7 @@ export class InstagramPreviewService {
       parsedPosts.length > PREVIEW_PAGE_SIZE || hasNextFromProfile;
     if (
       instagramUserId &&
-      (hasNextFromProfile || mediaCount > PREVIEW_PAGE_SIZE)
+      (hasNextFromProfile || mediaCount > PREVIEW_PAGE_SIZE || parsedPosts.length === 0)
     ) {
       try {
         const page1Feed = await this.fetchTimelinePageByFeedMaxId(
@@ -710,6 +701,17 @@ export class InstagramPreviewService {
         nextPreviewCursor = null;
       }
     }
+
+    // Thumbnails construídos DEPOIS dos feed fetches para incluir posts do feed
+    const pageOnePosts = parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
+    const postsPreviewRaw = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
+      indexStart: 1,
+    });
+    const thumbUrlCount = postsPreviewRaw.filter(p => !!p.thumbnailUrl).length;
+    console.info(`[ig:thumbs] ${postsPreviewRaw.length} posts, ${thumbUrlCount} com URL de thumbnail`);
+    const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
+    const thumbDataCount = postsPreview.filter(p => p.thumbnailUrl?.startsWith('data:')).length;
+    console.info(`[ig:thumbs] ${thumbDataCount}/${postsPreview.length} thumbnails convertidos para data URL`);
 
     let profilePicDataUrl: string | null = null;
     if (hd) {
