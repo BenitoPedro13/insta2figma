@@ -9,10 +9,12 @@ function sleepWithJitter(attempt: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, exp + jitter));
 }
 
-// Node.js fetch (undici) aceita `dispatcher` como extensão mas o tipo RequestInit
-// do TypeScript não o declara. Usamos um cast para passar o proxy agent.
-type FetchFn = (url: string, init: RequestInit & { dispatcher?: object }) => Promise<Response>;
-const nodeFetch = fetch as FetchFn;
+// O fetch global do Node.js ignora o `dispatcher`. Usamos o fetch do undici
+// directamente, que é o que o Node.js usa internamente e suporta ProxyAgent.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { fetch: undiciFetch } = require('undici') as {
+  fetch: (url: string, init: RequestInit & { dispatcher?: object }) => Promise<Response>;
+};
 
 export interface FetchResult {
   res: Response;
@@ -37,7 +39,7 @@ export async function fetchWithRetry(
 
     let res: Response;
     try {
-      res = await nodeFetch(url, init);
+      res = await undiciFetch(url, init);
     } catch (err) {
       lastError = err;
       continue;

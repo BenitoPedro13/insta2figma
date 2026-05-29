@@ -1,9 +1,5 @@
-// require() necessário porque o tsconfig usa moduleResolution "node" (CommonJS)
-// e https-proxy-agent v7 usa package exports ESM-only
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { HttpsProxyAgent } = require('https-proxy-agent') as {
-  HttpsProxyAgent: new (url: string) => object;
-};
+const { ProxyAgent } = require('undici') as { ProxyAgent: new (url: string) => object };
 
 function redact(url: string): string {
   return url.replace(/:\/\/[^@]+@/, '://***@');
@@ -11,7 +7,7 @@ function redact(url: string): string {
 
 function buildAgent(url: string): object | null {
   try {
-    return new HttpsProxyAgent(url);
+    return new ProxyAgent(url);
   } catch {
     console.error('[instagram-scraper] proxy inválido ignorado:', redact(url));
     return null;
@@ -19,7 +15,6 @@ function buildAgent(url: string): object | null {
 }
 
 function loadProxyPool(): object[] {
-  // IG_PROXY_POOL: JSON array de URLs — ["http://u:p@host:port", ...]
   const poolRaw = process.env.IG_PROXY_POOL?.trim();
   if (poolRaw) {
     try {
@@ -36,7 +31,6 @@ function loadProxyPool(): object[] {
     }
   }
 
-  // Fallback: variável única HTTP_PROXY_URL
   const single = process.env.HTTP_PROXY_URL?.trim();
   if (single) {
     const agent = buildAgent(single);
