@@ -517,6 +517,28 @@ function parseApiError(payload: Record<string, unknown>): string {
   return JSON.stringify(payload).slice(0, 240);
 }
 
+const PREVIEW_RATE_LIMIT_MESSAGE =
+  'Ops...our machines are almost exploding. Wait about a minute and try again.';
+
+function formatPreviewApiError(
+  status: number,
+  payload: Record<string, unknown>,
+): string {
+  const err = payload.error as { code?: string; message?: string } | undefined;
+  if (
+    status === 503 ||
+    err?.code === 'HTTP_503' ||
+    (typeof err?.message === 'string' && err.message.includes('rate-limited'))
+  ) {
+    return PREVIEW_RATE_LIMIT_MESSAGE;
+  }
+  const message = parseApiError(payload);
+  if (message && !message.startsWith('{')) {
+    return message;
+  }
+  return 'Could not load profile preview.';
+}
+
 async function loadStoredSession(): Promise<StoredSession | null> {
   try {
     const raw = await figma.clientStorage.getAsync(SESSION_STORAGE_KEY);
@@ -1006,9 +1028,7 @@ async function previewProfileViaApi(
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const data = payload.data as Record<string, unknown> | undefined;
   if (!res.ok || !data) {
-    throw new Error(
-      `Preview ${res.status}: ${JSON.stringify(payload.error ?? payload).slice(0, 240)}`,
-    );
+    throw new Error(formatPreviewApiError(res.status, payload));
   }
   return {
     username: String(data.username ?? username),
@@ -1321,7 +1341,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         requestKind: msg.requestKind === 'page' ? 'page' : 'initial',
         requestId: msg.requestId,
         message,
-        base,
+        ...(message !== PREVIEW_RATE_LIMIT_MESSAGE ? { base } : {}),
       });
     }
     return;
