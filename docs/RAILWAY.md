@@ -70,6 +70,11 @@ POLAR_PRODUCT_ID_PRO=
 POLAR_SYNTHETIC_EMAIL_DOMAIN=mailinator.com
 POLAR_SUCCESS_URL=https://insta2figma.com/billing/success
 POLAR_RETURN_URL=
+
+# Fallback Apify (profile-preview quando Instagram rate-limita no Railway)
+APIFY_TOKEN=
+APIFY_IG_PROFILE_ACTOR=apify~instagram-profile-scraper
+APIFY_TIMEOUT_MS=120000
 ```
 
 Webhook Polar: `https://${{api.RAILWAY_PUBLIC_DOMAIN}}/v1/billing/webhooks/polar`
@@ -90,6 +95,11 @@ S3_SECRET_KEY=
 S3_FORCE_PATH_STYLE=false
 STORAGE_MAX_THUMBNAILS=12
 ASSET_FETCH_TIMEOUT_MS=20000
+
+# Fallback Apify (instagram-profile-scraper)
+APIFY_TOKEN=
+APIFY_IG_PROFILE_ACTOR=apify~instagram-profile-scraper
+APIFY_TIMEOUT_MS=120000
 ```
 
 `PUBLIC_S3_ENDPOINT` só na API (presign para o browser).

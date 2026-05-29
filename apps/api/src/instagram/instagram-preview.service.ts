@@ -18,6 +18,11 @@ import {
   type ScrapeSelectionInput,
   type TimelinePostItem,
 } from '@insta2figma/shared-contracts';
+import {
+  fetchPreviewViaApify,
+  readApifyPreviewConfig,
+  type ApifyPreviewProfile,
+} from './apify-preview.client';
 
 const IG_HEADERS: Record<string, string> = {
   'x-ig-app-id': '936619743392459',
@@ -330,6 +335,7 @@ export class InstagramPreviewService {
         userId,
         previewPage,
         firstPageShortcodes,
+        username,
       );
       this.appendPostsToCache(
         this.buildPreviewCacheKey(username, fetchCount, timelineOrder),
@@ -424,6 +430,82 @@ export class InstagramPreviewService {
     return { base, cacheKey };
   }
 
+  private async buildCachedPreviewFromApify(
+    timelineOrder: 'newest_first' | 'oldest_first',
+    apifyProfile: ApifyPreviewProfile,
+  ): Promise<CachedPreviewPayload> {
+    const pageOnePosts = apifyProfile.parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
+    const postsPreviewRaw = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
+      indexStart: 1,
+    });
+    const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
+
+    let profilePicDataUrl: string | null = null;
+    if (apifyProfile.profilePicUrlHd) {
+      profilePicDataUrl = await fetchInstagramImageAsDataUrl(
+        apifyProfile.profilePicUrlHd,
+        MAX_AVATAR_BYTES,
+      );
+    }
+
+    const mediaCount = apifyProfile.mediaCount;
+    const previewTotalPages = Math.max(
+      1,
+      Math.ceil(mediaCount / PREVIEW_PAGE_SIZE),
+    );
+    const hasNextPreviewPage =
+      apifyProfile.parsedPosts.length > PREVIEW_PAGE_SIZE ||
+      mediaCount > PREVIEW_PAGE_SIZE;
+
+    return {
+      username: apifyProfile.username,
+      instagramUserId: apifyProfile.instagramUserId,
+      profilePicUrlHd: apifyProfile.profilePicUrlHd,
+      profilePicDataUrl,
+      mediaCount,
+      isPrivate: apifyProfile.isPrivate,
+      parsedPosts: apifyProfile.parsedPosts,
+      postsPreview,
+      postsAvailable: apifyProfile.parsedPosts.length,
+      timelineOrder,
+      hasNextPreviewPage,
+      nextPreviewCursor: null,
+      previewTotalPages,
+    };
+  }
+
+  private async fetchFeedPageViaApify(
+    username: string,
+    pageNumber: number,
+  ): Promise<{
+    posts: TimelinePostItem[];
+    hasNextPage: boolean;
+    nextMaxId: string | null;
+  } | null> {
+    const config = readApifyPreviewConfig();
+    if (!config) return null;
+
+    const neededPosts = Math.min(50, pageNumber * PREVIEW_PAGE_SIZE);
+    try {
+      const apify = await fetchPreviewViaApify(config, username, neededPosts);
+      const start = (pageNumber - 1) * PREVIEW_PAGE_SIZE;
+      const posts = apify.parsedPosts.slice(start, start + PREVIEW_PAGE_SIZE);
+      if (posts.length === 0) return null;
+
+      const hasNextPage =
+        apify.parsedPosts.length > start + posts.length ||
+        apify.mediaCount > start + posts.length;
+
+      return { posts, hasNextPage, nextMaxId: null };
+    } catch (err) {
+      console.warn(
+        '[preview] paginação Apify falhou.',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    }
+  }
+
   private async buildPaginatedPreviewResponse(input: {
     username: string;
     instagramUserId: string | null;
@@ -491,6 +573,42 @@ export class InstagramPreviewService {
   }
 
   private async fetchInstagramPreviewBase(
+    username: string,
+    fetchCount: number,
+    timelineOrder: 'newest_first' | 'oldest_first',
+  ): Promise<CachedPreviewPayload> {
+    try {
+      return await this.fetchInstagramPreviewDirect(
+        username,
+        fetchCount,
+        timelineOrder,
+      );
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+
+      const config = readApifyPreviewConfig();
+      if (!config) throw err;
+
+      console.warn(
+        '[preview] Instagram direct falhou; a tentar fallback Apify.',
+        err instanceof Error ? err.message : err,
+      );
+
+      try {
+        const apify = await fetchPreviewViaApify(config, username, fetchCount);
+        console.info('[preview] fallback Apify teve sucesso.');
+        return this.buildCachedPreviewFromApify(timelineOrder, apify);
+      } catch (apifyErr) {
+        console.warn(
+          '[preview] fallback Apify também falhou.',
+          apifyErr instanceof Error ? apifyErr.message : apifyErr,
+        );
+        throw err;
+      }
+    }
+  }
+
+  private async fetchInstagramPreviewDirect(
     username: string,
     fetchCount: number,
     timelineOrder: 'newest_first' | 'oldest_first',
@@ -712,6 +830,37 @@ export class InstagramPreviewService {
   }
 
   private async fetchFeedPageByNumber(
+    userId: string,
+    pageNumber: number,
+    firstPageShortcodes: Set<string>,
+    username?: string,
+  ): Promise<{
+    posts: TimelinePostItem[];
+    hasNextPage: boolean;
+    nextMaxId: string | null;
+  }> {
+    try {
+      return await this.fetchFeedPageByNumberDirect(
+        userId,
+        pageNumber,
+        firstPageShortcodes,
+      );
+    } catch (err) {
+      if (username) {
+        const apifyPage = await this.fetchFeedPageViaApify(username, pageNumber);
+        if (apifyPage) {
+          if (pageNumber > 1) {
+            assertPreviewPageIsNotDuplicate(apifyPage.posts, firstPageShortcodes);
+          }
+          console.info('[preview] paginação via fallback Apify teve sucesso.');
+          return apifyPage;
+        }
+      }
+      throw err;
+    }
+  }
+
+  private async fetchFeedPageByNumberDirect(
     userId: string,
     pageNumber: number,
     firstPageShortcodes: Set<string>,

@@ -28,6 +28,7 @@
     "dev:api": "pnpm --filter @insta2figma/api run start:dev",
     "dev:worker": "pnpm --filter @insta2figma/worker run start:dev",
     "ig:smoke": "pnpm --filter @insta2figma/worker run ig:smoke",
+    "ig:smoke:fallback": "pnpm --filter @insta2figma/worker run ig:smoke:fallback",
     "test:ig": "pnpm --filter @insta2figma/worker run test:integration"
   },
   "devDependencies": {
