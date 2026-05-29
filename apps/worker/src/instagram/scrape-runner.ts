@@ -2,6 +2,7 @@ import type { Job, PrismaClient } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import {
   createJobBodySchema,
+  parseInstagramUsername,
   resolveScrapeSelection,
   type ScrapeJobResultSummaryV5,
 } from '@insta2figma/shared-contracts';
@@ -16,7 +17,7 @@ import {
 
 /** Normalização mínima (API já valida formato). */
 export function normalizeInstagramUsername(raw: string): string {
-  return raw.trim().replace(/^@+/u, '').toLowerCase();
+  return parseInstagramUsername(raw);
 }
 
 function truncateMessage(msg: string, max = 2000): string {

@@ -18,11 +18,27 @@ import { ImportScreen, type PostSelectionMode, type PostTimelineOrder } from './
 import {
   buildContiguousIndices,
   maxAccessiblePreviewPage,
+  parseInstagramUsername,
+  parseInstagramUsernameDetailed,
   PREVIEW_PAGE_SIZE,
   PRO_MAX_PREVIEW_PAGE,
   selectionInputFromIndices,
   toggleSelectedIndex,
 } from '@insta2figma/shared-contracts';
+
+const PROFILE_LINK_ONLY_MSG =
+  'Use a profile link or @username, not a post or reel link.';
+
+function resolveUsernameInput(raw: string): {
+  username: string;
+  unsupportedUrl: boolean;
+} {
+  const parsed = parseInstagramUsernameDetailed(raw);
+  return {
+    username: parsed.username,
+    unsupportedUrl: parsed.kind === 'unsupported_url',
+  };
+}
 import { parsePlanTier, type PlanTier } from './lib/planTier';
 
 type ProfilePreviewPost = {
@@ -513,10 +529,7 @@ export function App() {
   }, []);
 
   const selectProfile = useCallback((u: string) => {
-    const user = String(u)
-      .trim()
-      .replace(/^@+/, '')
-      .toLowerCase();
+    const user = parseInstagramUsername(String(u));
     if (!user) return;
     setActiveTab('new-import');
     setUsername(user);
@@ -527,10 +540,17 @@ export function App() {
 
   useEffect(() => {
     if (importing) return;
-    const user = String(username ?? '')
-      .trim()
-      .replace(/^@+/, '')
-      .toLowerCase();
+    const { username: user, unsupportedUrl } = resolveUsernameInput(
+      String(username ?? ''),
+    );
+    if (unsupportedUrl) {
+      previewFetchedForUsername.current = '';
+      setPreviewLoading(false);
+      resetPreviewPagination();
+      setPreview(null);
+      setPreviewError(PROFILE_LINK_ONLY_MSG);
+      return;
+    }
     if (!user) {
       previewFetchedForUsername.current = '';
       setPreviewLoading(false);
@@ -590,10 +610,7 @@ export function App() {
         return;
       }
 
-      const user = String(username ?? '')
-        .trim()
-        .replace(/^@+/, '')
-        .toLowerCase();
+      const user = parseInstagramUsername(String(username ?? ''));
       if (!user || !preview?.username) return;
 
       const cached = pagePostsCache[page];
@@ -646,10 +663,7 @@ export function App() {
   /** Slider / selection — local estimate only; no Instagram refetch. */
   useEffect(() => {
     if (importing || previewLoading) return;
-    const user = String(username ?? '')
-      .trim()
-      .replace(/^@+/, '')
-      .toLowerCase();
+    const user = parseInstagramUsername(String(username ?? ''));
     if (!user || !preview?.username) return;
     if (user !== preview.username.toLowerCase()) return;
 
@@ -734,10 +748,13 @@ export function App() {
   }, []);
 
   const onImport = useCallback(() => {
-    const user = String(username ?? '')
-      .trim()
-      .replace(/^@+/, '')
-      .toLowerCase();
+    const { username: user, unsupportedUrl } = resolveUsernameInput(
+      String(username ?? ''),
+    );
+    if (unsupportedUrl) {
+      setStatus(PROFILE_LINK_ONLY_MSG);
+      return;
+    }
     if (!user) {
       setStatus('Enter a username.');
       return;
@@ -807,6 +824,13 @@ export function App() {
     [persistEntries],
   );
 
+  const onUsernameBlur = useCallback(() => {
+    const parsed = parseInstagramUsername(username);
+    if (parsed && parsed !== username.trim()) {
+      setUsername(parsed);
+    }
+  }, [username]);
+
   const onRemoveFromHistoryRow = useCallback(
     (u: string) => {
       const key = u.trim().toLowerCase();
@@ -865,6 +889,7 @@ export function App() {
                 showProOverlay={showProOverlay}
                 onCloseProOverlay={() => setShowProOverlay(false)}
                 onUsernameChange={setUsername}
+                onUsernameBlur={onUsernameBlur}
                 onMaxPostsChange={onMaxPostsChange}
                 onSelectionModeChange={onSelectionModeChange}
                 onStartIndexChange={setStartIndex}

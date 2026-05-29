@@ -84,6 +84,7 @@ type ImportScreenProps = {
   showProOverlay: boolean;
   onCloseProOverlay: () => void;
   onUsernameChange: (v: string) => void;
+  onUsernameBlur?: () => void;
   onMaxPostsChange: (v: number) => void;
   onSelectionModeChange: (v: PostSelectionMode) => void;
   onStartIndexChange: (v: number) => void;
@@ -140,6 +141,7 @@ export function ImportScreen({
   showProOverlay,
   onCloseProOverlay,
   onUsernameChange,
+  onUsernameBlur,
   onMaxPostsChange,
   onSelectionModeChange,
   onStartIndexChange,
@@ -278,7 +280,8 @@ export function ImportScreen({
                       type="text"
                       value={username}
                       onChange={(e) => onUsernameChange(e.target.value)}
-                      placeholder="@profile"
+                      onBlur={() => onUsernameBlur?.()}
+                      placeholder="@profile or instagram.com/…"
                       autoComplete="off"
                       className="text-paragraph-md"
                     />

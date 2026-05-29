@@ -1,4 +1,4 @@
-import { JOB_TYPES } from '@insta2figma/shared-contracts';
+import { JOB_TYPES, parseInstagramUsername } from '@insta2figma/shared-contracts';
 import {
   importStatusAuth,
   importStatusAvatar,
@@ -375,10 +375,7 @@ async function placeSignedImages(
   const nodes: SceneNode[] = [];
   let ok = 0;
   let imageIndex = 0;
-  const usernameNorm = String(opts?.username ?? '')
-    .trim()
-    .replace(/^@+/, '')
-    .toLowerCase();
+  const usernameNorm = parseInstagramUsername(String(opts?.username ?? ''));
   const usePostRows = opts?.expandCarouselImages === true;
   const layoutRows = usePostRows
     ? groupAssetsIntoPostRows(assets)
@@ -1179,10 +1176,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
   if (msg.type === 'import-profile') {
     const base = await getApiBase();
-    const username = String(msg.username ?? '')
-      .trim()
-      .replace(/^@+/, '')
-      .toLowerCase();
+    const username = parseInstagramUsername(String(msg.username ?? ''));
     const maxPostsRaw = msg.maxPosts ?? 8;
     const maxPosts = Math.min(
       50,
@@ -1232,10 +1226,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
   if (msg.type === 'profile-preview') {
     const base = await getApiBase();
-    const username = String(msg.username ?? '')
-      .trim()
-      .replace(/^@+/, '')
-      .toLowerCase();
+    const username = parseInstagramUsername(String(msg.username ?? ''));
     const maxPostsRaw = msg.maxPosts ?? 12;
     const maxPosts = Math.min(
       50,

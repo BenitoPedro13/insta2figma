@@ -19,6 +19,7 @@ export default defineConfig({
   ],
   /** UI sources live under ui-src; build output goes to package dist/. */
   root: uiRoot,
+  envDir: pkgRoot,
   base: './',
   resolve: {
     alias: {

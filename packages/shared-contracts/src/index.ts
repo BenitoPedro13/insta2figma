@@ -26,8 +26,18 @@ import {
   type InstagramPostPreviewItem,
   type TimelinePostItem,
 } from './instagram-timeline-parse';
+import {
+  parseInstagramUsername,
+  parseInstagramUsernameDetailed,
+  type ParseInstagramUsernameKind,
+  type ParseInstagramUsernameResult,
+} from './parse-instagram-username';
 
 export {
+  parseInstagramUsername,
+  parseInstagramUsernameDetailed,
+  type ParseInstagramUsernameKind,
+  type ParseInstagramUsernameResult,
   PREVIEW_PAGE_SIZE,
   POST_SELECTION_MODES,
   POST_TIMELINE_ORDERS,
