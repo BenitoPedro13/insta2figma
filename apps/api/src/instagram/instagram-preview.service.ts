@@ -18,9 +18,7 @@ import {
   type ScrapeSelectionInput,
   type TimelinePostItem,
 } from '@insta2figma/shared-contracts';
-import { SessionPool } from './instagram-session';
-import { getProxyAgent } from './instagram-proxy';
-import { fetchWithRetry } from './instagram-retry';
+import { SessionPool, getProxyAgent, fetchWithRetry } from '@insta2figma/shared-instagram';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
 
 const IG_HEADERS: Record<string, string> = {

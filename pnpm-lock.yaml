@@ -26,6 +26,9 @@ importers:
       '@insta2figma/shared-contracts':
         specifier: workspace:*
         version: link:../../packages/shared-contracts
+      '@insta2figma/shared-instagram':
+        specifier: workspace:^
+        version: link:../../packages/shared-instagram
       '@nestjs/bullmq':
         specifier: ^10.2.3
         version: 10.2.3(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)(bullmq@5.76.5)
@@ -226,6 +229,9 @@ importers:
       '@insta2figma/shared-contracts':
         specifier: workspace:*
         version: link:../../packages/shared-contracts
+      '@insta2figma/shared-instagram':
+        specifier: workspace:^
+        version: link:../../packages/shared-instagram
       '@prisma/client':
         specifier: ^6.19.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
@@ -238,6 +244,9 @@ importers:
       ioredis:
         specifier: ^5.8.2
         version: 5.10.1
+      undici:
+        specifier: ^8.3.0
+        version: 8.3.0
     devDependencies:
       prisma:
         specifier: ^6.19.0
@@ -266,6 +275,19 @@ importers:
       vitest:
         specifier: ^3.1.4
         version: 3.2.4(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.2)(tsx@4.21.0)
+
+  packages/shared-instagram:
+    dependencies:
+      undici:
+        specifier: ^8.3.0
+        version: 8.3.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.17
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
 
 packages:
 

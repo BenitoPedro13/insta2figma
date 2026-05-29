@@ -10,7 +10,7 @@ function sleepWithJitter(attempt: number): Promise<void> {
 }
 
 // O fetch global do Node.js ignora o `dispatcher`. Usamos o fetch do undici
-// directamente, que é o que o Node.js usa internamente e suporta ProxyAgent.
+// directamente, que suporta ProxyAgent.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { fetch: undiciFetch } = require('undici') as {
   fetch: (url: string, init: RequestInit & { dispatcher?: object }) => Promise<Response>;

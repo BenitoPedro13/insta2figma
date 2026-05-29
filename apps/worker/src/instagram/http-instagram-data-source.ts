@@ -2,6 +2,7 @@ import type {
   ScrapeJobResultSummaryV5,
   ScrapeSelectionInput,
 } from '@insta2figma/shared-contracts';
+import { SessionPool, getProxyAgent, fetchWithRetry } from '@insta2figma/shared-instagram';
 import { InstagramUpstreamError } from './instagram-upstream-error';
 import { buildScrapeSummaryV5FromUserNode } from './parse-web-profile';
 
@@ -28,6 +29,12 @@ function webProfileUrl(username: string): string {
   return `https://i.instagram.com/api/v1/users/web_profile_info/?username=${u}`;
 }
 
+function feedUrl(userId: string, maxId?: string): string {
+  const qs = new URLSearchParams({ count: '12' });
+  if (maxId) qs.set('max_id', maxId);
+  return `https://i.instagram.com/api/v1/feed/user/${encodeURIComponent(userId)}/?${qs.toString()}`;
+}
+
 function classifyFailMessage(
   msg: string,
 ): { code: 'IG_NOT_FOUND' | 'IG_RATE_LIMIT' | 'IG_BLOCKED'; retryable: boolean } | null {
@@ -38,17 +45,22 @@ function classifyFailMessage(
   if (m.includes('wait') || m.includes('rate') || m.includes('limit')) {
     return { code: 'IG_RATE_LIMIT', retryable: true };
   }
-  if (
-    m.includes('login') ||
-    m.includes('unauthorized') ||
-    m.includes('forbidden')
-  ) {
+  if (m.includes('login') || m.includes('unauthorized') || m.includes('forbidden')) {
     return { code: 'IG_BLOCKED', retryable: false };
   }
   return null;
 }
 
-/** Fonte Instagram baseada em HTTP pública (`web_profile_info`), alinhada ao `crawler/main.py`. */
+const sessionPool = SessionPool.load();
+
+function buildHeaders(): Record<string, string> {
+  const session = sessionPool.next();
+  const headers = { ...IG_HEADERS };
+  if (session?.cookie) headers['Cookie'] = session.cookie;
+  return headers;
+}
+
+/** Fonte Instagram com proxy, sessão e retry. */
 export class HttpInstagramDataSource implements InstagramDataSource {
   constructor(
     private readonly options: { timeoutMs: number } = { timeoutMs: 30_000 },
@@ -59,14 +71,21 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     selectionInput: ScrapeSelectionInput,
     defaults?: { defaultMaxPosts?: number },
   ): Promise<ScrapeJobResultSummaryV5> {
+    const agent = getProxyAgent();
+
     let res: Response;
     try {
-      res = await fetch(webProfileUrl(usernameNormalized), {
-        method: 'GET',
-        headers: IG_HEADERS,
-        signal: AbortSignal.timeout(this.options.timeoutMs),
-        redirect: 'follow',
-      });
+      ({ res } = await fetchWithRetry(
+        webProfileUrl(usernameNormalized),
+        {
+          method: 'GET',
+          headers: buildHeaders(),
+          signal: AbortSignal.timeout(this.options.timeoutMs),
+          redirect: 'follow',
+          ...(agent ? { dispatcher: agent } : {}),
+        },
+        'worker:profile',
+      ));
     } catch (e) {
       throw new InstagramUpstreamError(
         'IG_UPSTREAM',
@@ -77,25 +96,13 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     }
 
     if (res.status === 429) {
-      throw new InstagramUpstreamError(
-        'IG_RATE_LIMIT',
-        'Instagram returned rate limit (429).',
-        true,
-      );
+      throw new InstagramUpstreamError('IG_RATE_LIMIT', 'Instagram returned rate limit (429).', true);
     }
     if (res.status === 401 || res.status === 403) {
-      throw new InstagramUpstreamError(
-        'IG_BLOCKED',
-        `Instagram returned HTTP ${res.status} (access denied).`,
-        false,
-      );
+      throw new InstagramUpstreamError('IG_BLOCKED', `Instagram returned HTTP ${res.status} (access denied).`, false);
     }
     if (res.status >= 500) {
-      throw new InstagramUpstreamError(
-        'IG_UPSTREAM',
-        `Instagram returned HTTP error ${res.status}.`,
-        true,
-      );
+      throw new InstagramUpstreamError('IG_UPSTREAM', `Instagram returned HTTP error ${res.status}.`, true);
     }
 
     const rawText = await res.text();
@@ -115,45 +122,57 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     }
 
     if (!body || typeof body !== 'object') {
-      throw new InstagramUpstreamError(
-        'IG_PARSE',
-        'Unexpected response body.',
-        false,
-      );
+      throw new InstagramUpstreamError('IG_PARSE', 'Unexpected response body.', false);
     }
 
     const envelope = body as Record<string, unknown>;
 
     if (envelope.status === 'fail') {
-      const rawMsg =
-        typeof envelope.message === 'string' ? envelope.message : 'Instagram status fail.';
+      const rawMsg = typeof envelope.message === 'string' ? envelope.message : 'Instagram status fail.';
       const classified = classifyFailMessage(rawMsg);
-      if (classified) {
-        throw new InstagramUpstreamError(classified.code, rawMsg, classified.retryable);
-      }
-      if (rawMsg.toLowerCase().includes('sorry')) {
-        throw new InstagramUpstreamError('IG_BLOCKED', rawMsg, false);
-      }
+      if (classified) throw new InstagramUpstreamError(classified.code, rawMsg, classified.retryable);
+      if (rawMsg.toLowerCase().includes('sorry')) throw new InstagramUpstreamError('IG_BLOCKED', rawMsg, false);
       throw new InstagramUpstreamError('IG_UPSTREAM', rawMsg, res.status >= 400);
     }
 
-    const data = envelope.data;
-    if (data === null || data === undefined) {
-      throw new InstagramUpstreamError(
-        'IG_NOT_FOUND',
-        'User not found or response had no data.',
-        false,
-      );
-    }
+    const data = envelope.data as Record<string, unknown> | undefined;
+    if (!data) throw new InstagramUpstreamError('IG_NOT_FOUND', 'User not found or response had no data.', false);
 
-    const dataRec = data as Record<string, unknown>;
-    const userNode = dataRec.user;
-    if (userNode === null || userNode === undefined) {
-      throw new InstagramUpstreamError(
-        'IG_NOT_FOUND',
-        'User not found.',
-        false,
-      );
+    const userNode = data.user as Record<string, unknown> | undefined;
+    if (!userNode) throw new InstagramUpstreamError('IG_NOT_FOUND', 'User not found.', false);
+
+    // Se o web_profile_info não devolveu posts, busca do feed endpoint
+    const userId = typeof userNode.id === 'string' ? userNode.id : String(userNode.id ?? '');
+    const edge = userNode.edge_owner_to_timeline_media as Record<string, unknown> | undefined;
+    const edges = Array.isArray(edge?.edges) ? edge.edges : [];
+
+    if (edges.length === 0 && userId) {
+      try {
+        const { res: feedRes } = await fetchWithRetry(
+          feedUrl(userId),
+          {
+            method: 'GET',
+            headers: buildHeaders(),
+            signal: AbortSignal.timeout(this.options.timeoutMs),
+            redirect: 'follow',
+            ...(agent ? { dispatcher: agent } : {}),
+          },
+          'worker:feed',
+        );
+        if (feedRes.ok) {
+          const feedBody = (await feedRes.json()) as Record<string, unknown>;
+          const items = feedBody.items;
+          if (Array.isArray(items) && items.length > 0) {
+            // Injecta os items no userNode no formato que o parser espera
+            (userNode as Record<string, unknown>).edge_owner_to_timeline_media = {
+              ...(edge ?? {}),
+              edges: items.map((item: Record<string, unknown>) => ({ node: item })),
+            };
+          }
+        }
+      } catch {
+        // Ignora — tentativa extra de obter posts; o parse prossegue sem eles
+      }
     }
 
     try {
@@ -165,12 +184,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
       );
     } catch (e) {
       if (e instanceof InstagramUpstreamError) throw e;
-      throw new InstagramUpstreamError(
-        'IG_PARSE',
-        'Failed to parse profile data.',
-        false,
-        { cause: e },
-      );
+      throw new InstagramUpstreamError('IG_PARSE', 'Failed to parse profile data.', false, { cause: e });
     }
   }
 }

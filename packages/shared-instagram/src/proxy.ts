@@ -16,6 +16,9 @@ function buildAgent(url: string): object | null {
 
 function loadProxyPool(): object[] {
   const poolRaw = process.env.IG_PROXY_POOL?.trim();
+  console.info(
+    `[instagram-proxy] IG_PROXY_POOL=${poolRaw ? `${poolRaw.slice(0, 40)}...` : 'não definido'}, HTTP_PROXY_URL=${process.env.HTTP_PROXY_URL ? 'definido' : 'não definido'}`,
+  );
   if (poolRaw) {
     try {
       const urls = JSON.parse(poolRaw) as unknown;

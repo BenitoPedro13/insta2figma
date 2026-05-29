@@ -12,15 +12,18 @@ COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
 COPY packages/shared-contracts/package.json packages/shared-contracts/
 COPY packages/shared-config/package.json packages/shared-config/
+COPY packages/shared-instagram/package.json packages/shared-instagram/
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY packages/shared-config packages/shared-config
 COPY packages/shared-contracts packages/shared-contracts
+COPY packages/shared-instagram packages/shared-instagram
 COPY apps/api apps/api
 COPY apps/worker apps/worker
 COPY turbo.json turbo.json
 RUN pnpm --filter @insta2figma/shared-contracts build \
+  && pnpm --filter @insta2figma/shared-instagram build \
   && pnpm --filter @insta2figma/api build \
   && pnpm --filter @insta2figma/worker build
 
