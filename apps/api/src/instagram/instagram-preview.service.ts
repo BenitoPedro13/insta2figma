@@ -539,6 +539,10 @@ export class InstagramPreviewService {
     const agent = getProxyAgent();
     const t0 = Date.now();
 
+    console.info(
+      `[ig:req] profile-preview @${username} proxy=${agent ? 'yes' : 'no'} session=${session?.account ?? 'none'}`,
+    );
+
     let res: Response;
     let retryCount = 0;
     try {
@@ -572,6 +576,9 @@ export class InstagramPreviewService {
     }
 
     const latencyMs = Date.now() - t0;
+    console.info(
+      `[ig:res] profile-preview @${username} status=${res.status} retries=${retryCount} latency=${latencyMs}ms`,
+    );
     const errorKind = res.status === 429
       ? 'rate_limited'
       : res.status === 404 ? 'not_found'
@@ -862,6 +869,10 @@ export class InstagramPreviewService {
     const agent = getProxyAgent();
     const t0 = Date.now();
 
+    console.info(
+      `[ig:req] feed-pagination userId=${userId} proxy=${agent ? 'yes' : 'no'} session=${session?.account ?? 'none'}`,
+    );
+
     let res: Response;
     let retryCount = 0;
     try {
@@ -895,6 +906,9 @@ export class InstagramPreviewService {
     }
 
     const latencyMs = Date.now() - t0;
+    console.info(
+      `[ig:res] feed-pagination userId=${userId} status=${res.status} retries=${retryCount} latency=${latencyMs}ms`,
+    );
     const errorKind = res.status === 429
       ? 'rate_limited'
       : res.status === 401 ? 'auth'
