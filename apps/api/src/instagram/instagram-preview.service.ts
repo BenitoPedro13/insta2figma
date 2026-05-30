@@ -45,9 +45,7 @@ const IG_IMAGE_HEADERS: Record<string, string> = {
   Referer: 'https://www.instagram.com/',
 };
 const MAX_AVATAR_BYTES = 900_000;
-const MAX_POST_THUMB_BYTES = 520_000;
 const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1_000; // 5 minutos — reduz pedidos ao Instagram ~5x
-const PREVIEW_THUMB_CONCURRENCY = 4;
 const FREE_MAX_PREVIEW_PAGE = 3;
 
 function assertPreviewPageAllowed(planTier: PlanTier, previewPage: number): void {
@@ -108,17 +106,6 @@ function pageOneShortcodes(posts: TimelinePostItem[]): Set<string> {
   return new Set(
     posts.slice(0, PREVIEW_PAGE_SIZE).map((post) => post.shortcode),
   );
-}
-
-function cachedPreviewPageIsReady(
-  posts: TimelinePostItem[],
-  pageNumber: number,
-): boolean {
-  const start = (pageNumber - 1) * PREVIEW_PAGE_SIZE;
-  const slice = posts.slice(start, start + PREVIEW_PAGE_SIZE);
-  if (slice.length === 0) return false;
-  const firstPage = pageOneShortcodes(posts);
-  return slice.some((post) => !firstPage.has(post.shortcode));
 }
 
 function assertPreviewPageIsNotDuplicate(
@@ -236,37 +223,6 @@ async function fetchInstagramImageAsDataUrl(
     console.warn(`[ig:thumb] erro: ${err instanceof Error ? err.message : String(err)} — ${cdnUrl.slice(0, 80)}`);
     return null;
   }
-}
-
-async function inlinePostsPreviewThumbnails(
-  items: InstagramPostPreviewItem[],
-): Promise<InstagramPostPreviewItem[]> {
-  const out: InstagramPostPreviewItem[] = new Array(items.length);
-  let next = 0;
-  async function worker(): Promise<void> {
-    while (next < items.length) {
-      const i = next;
-      next += 1;
-      const item = items[i];
-      const raw = item.thumbnailUrl;
-      if (!raw || raw.startsWith('data:')) {
-        out[i] = item;
-        continue;
-      }
-      const dataUrl = await fetchInstagramImageAsDataUrl(
-        raw,
-        MAX_POST_THUMB_BYTES,
-      );
-      out[i] = { ...item, thumbnailUrl: dataUrl };
-    }
-  }
-  await Promise.all(
-    Array.from(
-      { length: Math.min(PREVIEW_THUMB_CONCURRENCY, items.length) },
-      () => worker(),
-    ),
-  );
-  return out;
 }
 
 type TelemetryCtx = {
@@ -791,48 +747,34 @@ export class InstagramPreviewService {
     let nextPreviewCursor: string | null = null;
     let hasNextPreviewPage =
       parsedPosts.length > PREVIEW_PAGE_SIZE || hasNextFromProfile;
+    let profilePicDataUrl: string | null = null;
+
     if (
       instagramUserId &&
       (hasNextFromProfile || mediaCount > PREVIEW_PAGE_SIZE || parsedPosts.length === 0)
     ) {
-      try {
-        const page1Feed = await this.fetchTimelinePageByFeedMaxId(
-          instagramUserId,
-          undefined,
-          PREVIEW_PAGE_SIZE,
-          ctx,
-        );
+      // feed page 1 e avatar em paralelo — ambos dependem apenas de web_profile_info
+      const [page1Result, avatarResult] = await Promise.allSettled([
+        this.fetchTimelinePageByFeedMaxId(instagramUserId, undefined, PREVIEW_PAGE_SIZE, ctx),
+        hd ? fetchInstagramImageAsDataUrl(hd, MAX_AVATAR_BYTES) : Promise.resolve(null),
+      ]);
+
+      if (page1Result.status === 'fulfilled') {
+        const page1Feed = page1Result.value;
         parsedPosts = mergeUniqueTimelinePosts(parsedPosts, page1Feed.posts);
         nextPreviewCursor = normalizePreviewCursor(page1Feed.nextMaxId);
         hasNextPreviewPage =
           parsedPosts.length > PREVIEW_PAGE_SIZE ||
           Boolean(nextPreviewCursor) ||
           page1Feed.hasNextPage;
-
-        if (nextPreviewCursor && !cachedPreviewPageIsReady(parsedPosts, 2)) {
-          try {
-            const page2Feed = await this.fetchTimelinePageByFeedMaxId(
-              instagramUserId,
-              nextPreviewCursor,
-              PREVIEW_PAGE_SIZE,
-              ctx,
-            );
-            const merged = mergeUniqueTimelinePosts(parsedPosts, page2Feed.posts);
-            if (merged.length > parsedPosts.length) {
-              parsedPosts = merged;
-              nextPreviewCursor = normalizePreviewCursor(page2Feed.nextMaxId);
-              hasNextPreviewPage =
-                page2Feed.hasNextPage ||
-                Boolean(nextPreviewCursor) ||
-                parsedPosts.length < mediaCount;
-            }
-          } catch {
-            // Mantém cursor da página 1; página 2 será resolvida via walk no pedido.
-          }
-        }
-      } catch {
-        nextPreviewCursor = null;
       }
+
+      if (avatarResult.status === 'fulfilled') {
+        profilePicDataUrl = avatarResult.value;
+      }
+      // Página 2 não é pré-carregada — carregada sob pedido quando o utilizador navegar
+    } else if (hd) {
+      profilePicDataUrl = await fetchInstagramImageAsDataUrl(hd, MAX_AVATAR_BYTES);
     }
 
     // postsPreview com CDN URLs directas — download/conversão feita no browser via <img>
@@ -841,28 +783,6 @@ export class InstagramPreviewService {
       indexStart: 1,
     });
     console.info(`[ig:thumbs] ${postsPreview.length} posts, ${postsPreview.filter(p => !!p.thumbnailUrl).length} com URL de thumbnail`);
-
-    let profilePicDataUrl: string | null = null;
-    if (hd) {
-      try {
-        const img = await fetch(hd, {
-          method: 'GET',
-          headers: IG_IMAGE_HEADERS,
-          signal: AbortSignal.timeout(20_000),
-          redirect: 'follow',
-        });
-        if (img.ok) {
-          const buf = Buffer.from(await img.arrayBuffer());
-          if (buf.byteLength > 0 && buf.byteLength <= MAX_AVATAR_BYTES) {
-            const ctRaw = img.headers.get('content-type')?.split(';')[0]?.trim();
-            const ct = ctRaw && ctRaw.startsWith('image/') ? ctRaw : 'image/jpeg';
-            profilePicDataUrl = `data:${ct};base64,${buf.toString('base64')}`;
-          }
-        }
-      } catch {
-        profilePicDataUrl = null;
-      }
-    }
 
     return {
       username:
