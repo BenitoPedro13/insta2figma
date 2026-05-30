@@ -36,9 +36,13 @@ export class StorageService {
       accessKeyId.length === 0 ||
       secretAccessKey.length === 0
     ) {
+      console.warn(
+        `[storage-api] S3 NÃO configurado — endpoint=${endpoint || '(vazio)'} bucket=${bucket || '(vazio)'} accessKey=${accessKeyId ? '✓' : '(vazio)'} secretKey=${secretAccessKey ? '✓' : '(vazio)'}`,
+      );
       this.client = null;
       this.bucket = null;
     } else {
+      console.info(`[storage-api] S3 configurado — endpoint=${endpoint} bucket=${bucket}`);
       this.bucket = bucket;
       this.client = new S3Client({
         region,
