@@ -190,25 +190,6 @@ export async function fetchPreviewViaApify(
       ? profileRec.posts
       : [];
 
-  // Log temporário: ver campos reais da resposta Apify para validar o parser
-  console.info('[apify:raw] profile fields:', Object.keys(profileRec).join(', '));
-  // Mostra o primeiro post de cada tipo (Image, Video, Sidecar) para ver formato real
-  const shownTypes = new Set<string>();
-  for (const raw of latestPostsRaw) {
-    const p = asRecord(raw);
-    if (!p) continue;
-    const type = str(p.type) ?? 'unknown';
-    if (shownTypes.has(type)) continue;
-    shownTypes.add(type);
-    console.info(`[apify:raw] post type=${type} fields:`, Object.keys(p).join(', '));
-    // Para Sidecar mostra images e childPosts completos
-    if (type === 'Sidecar') {
-      console.info('[apify:raw] Sidecar images:', JSON.stringify(p.images));
-      console.info('[apify:raw] Sidecar childPosts:', JSON.stringify(p.childPosts));
-    }
-    console.info(`[apify:raw] post sample:`, JSON.stringify(p, null, 2).slice(0, 600));
-    if (shownTypes.size >= 3) break;
-  }
 
   const parsedPosts: TimelinePostItem[] = [];
   for (const raw of latestPostsRaw) {
