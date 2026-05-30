@@ -92,4 +92,4 @@ A API deve expor **CORS** para pedidos que ainda possam vir de outros contextos;
 
 ## Nota `networkAccess`
 
-`manifest.json` lista API local, Railway e CDNs Instagram. Se presigned URLs do bucket usarem outro host, acrescenta o domínio em `allowedDomains` e reimporta o manifest.
+`manifest.json` lista API local, Railway, CDNs Instagram e `https://t3.storageapi.dev` (object storage wrapped-mug). Se mudares de provider de storage, acrescenta o novo domínio em `allowedDomains`, faz rebuild do plugin e reimporta o manifest.

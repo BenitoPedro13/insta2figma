@@ -10,7 +10,7 @@ Variáveis — ver [`.env.example`](./.env.example) (`JWT_SECRET`, `DATABASE_URL
 
 ### Billing Polar.sh (sandbox)
 
-Variáveis em [`.env.example`](./.env.example) (`POLAR_*`). Endpoints:
+Variáveis em [`.env.example`](./.env.example) (`POLAR_*`, `IG_SESSION_POOL`, `IG_PROXY_POOL`, `APIFY_TOKEN`). Endpoints:
 
 | Método | Rota | Auth |
 |--------|------|------|

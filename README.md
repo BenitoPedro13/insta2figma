@@ -69,6 +69,7 @@ pnpm infra:logs:redis    # só Redis
 - `apps/api`: API Nest (`/v1`, auth MVP, jobs, preview de perfil).
 - `apps/worker`: consumidor BullMQ (scrape Instagram + uploads para S3/MinIO).
 - `packages/shared-contracts`: contratos Zod/tipos compartilhados.
+- `packages/shared-instagram`: sessões, proxy pool, retry e parsing partilhados entre API e worker.
 - `docs/`: arquitetura, plano de implementação e especificação visual da UI.
 
 ### Infra local (Postgres + Redis)
@@ -111,8 +112,8 @@ Opcional para quem testa subscrições. Requer variáveis `POLAR_*` em `apps/api
 
 | Passo | O quê |
 |-------|--------|
-| 1 | Conta e produto **Pro** em [sandbox.polar.sh](https://sandbox.polar.sh) |
-| 2 | OAT + `POLAR_ACCESS_TOKEN`, `POLAR_PRODUCT_ID_PRO`, `POLAR_SERVER=sandbox` |
+| 1 | Conta e produtos em [sandbox.polar.sh](https://sandbox.polar.sh) — Pro mensal + anual |
+| 2 | OAT + `POLAR_ACCESS_TOKEN`, `POLAR_PRODUCT_ID_PRO_MONTHLY`, `POLAR_PRODUCT_ID_PRO_YEARLY`, `POLAR_SERVER=sandbox` |
 | 3 | `ngrok http 3333` → webhook `https://<ngrok>/v1/billing/webhooks/polar` |
 | 4 | `POLAR_WEBHOOK_SECRET` no `.env` + reiniciar API |
 | 5 | Plugin Figma → **Upgrade to Pro**; cartão teste `4242 4242 4242 4242` |
@@ -158,6 +159,9 @@ pnpm prod:up                     # API + worker + Postgres + Redis + MinIO
 - `ERR_CONNECTION_REFUSED` no plugin: API não está de pé (`pnpm dev` ou `pnpm dev:api`) ou `PORT` diferente.
 - Job fica em `queued`: worker não está de pé (`pnpm dev` ou `pnpm dev:worker`) ou Redis indisponível.
 - Preview sem avatar: endpoint de preview responde sem `profilePicDataUrl` (bloqueio upstream); o fallback de UI usa placeholder.
+- `checkpoint_required` no worker: a sessão Instagram foi criada num IP diferente dos proxies. Cria a conta com o browser a correr pelo proxy — ver [docs/RAILWAY.md §7](docs/RAILWAY.md).
+- `503 Polar billing is not configured`: `POLAR_ACCESS_TOKEN` em falta.
+- `Plan pro (yearly) is not configured yet`: `POLAR_PRODUCT_ID_PRO_YEARLY` em falta.
 - Checkout Polar / plano Pro: ver [docs/DEV-POLAR-NGROK.md](docs/DEV-POLAR-NGROK.md).
 - **`P3018` / `relation "assets" does not exist`:** a migration `20260505121352` foi removida do repo (estava antes do `init`). O Postgres ficou bloqueado. Na raiz:
   ```bash
