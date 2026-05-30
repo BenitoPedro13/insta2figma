@@ -823,6 +823,7 @@ async function importProfileViaApi(
 
   notifyStatus(importStatusWaiting(1));
   let lastResultSummary: unknown = undefined;
+  let lastSignedAssets: { url?: string; storageKey?: string }[] = [];
   let status = '';
   for (let i = 0; i < 120; i++) {
     await new Promise((r) => setTimeout(r, 2000));
@@ -838,6 +839,8 @@ async function importProfileViaApi(
     notifyStatus(importStatusWaiting(i + 1));
     if (status === 'succeeded') {
       lastResultSummary = gData?.resultSummary;
+      const sa = gData?.signedAssets;
+      if (Array.isArray(sa)) lastSignedAssets = sa;
       const rs = lastResultSummary;
       if (rs !== null && typeof rs === 'object' && !Array.isArray(rs)) {
         const sm = (rs as Record<string, unknown>).scrapingMeta;
@@ -859,27 +862,7 @@ async function importProfileViaApi(
     throw new Error('Import is taking longer than expected. Try again in a moment.');
   }
 
-  notifyStatus(importStatusSigning());
-  const sr = await fetch(
-    `${base}/v1/jobs/${encodeURIComponent(jobId)}?include=signedAssets`,
-    { headers: { authorization: `Bearer ${token}` } },
-  );
-  const sj = (await sr.json().catch(() => ({}))) as Record<string, unknown>;
-  const sData = sj.data as
-    | { signedAssets?: { url?: string; storageKey?: string }[] }
-    | undefined;
-  if (!sr.ok) {
-    throw new Error('Could not prepare your images. Try again in a moment.');
-  }
-  const fromData = sData?.signedAssets;
-  const fromRoot = sj.signedAssets as
-    | { url?: string; storageKey?: string }[]
-    | undefined;
-  const list = Array.isArray(fromData)
-    ? fromData
-    : Array.isArray(fromRoot)
-      ? fromRoot
-      : [];
+  const list = lastSignedAssets;
   const profileAsset = list.find((a) =>
     typeof a?.storageKey === 'string'
       ? /\/profile\.[a-z0-9]+$/i.test(String(a.storageKey))

@@ -6,7 +6,6 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -37,15 +36,8 @@ export class JobsController {
   getOne(
     @Req() req: AuthedRequest,
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('include') include?: string,
   ) {
-    const wantSigned =
-      include
-        ?.split(',')
-        .map((s) => s.trim())
-        .includes('signedAssets') ?? false;
-    return this.jobs.getOne(req.user.userId, id, {
-      signedAssets: wantSigned,
-    });
+    // signedAssets são incluídos automaticamente quando status === 'succeeded'
+    return this.jobs.getOne(req.user.userId, id, { signedAssets: true });
   }
 }
