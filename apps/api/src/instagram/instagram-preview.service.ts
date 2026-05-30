@@ -15,19 +15,18 @@ import {
   PRO_MAX_PREVIEW_PAGE,
   resolveScrapeSelection,
   type PlanTier,
-  type InstagramPostPreviewItem,
   type InstagramPostSummaryItem,
   type ScrapeSelectionInput,
   type TimelinePostItem,
 } from '@insta2figma/shared-contracts';
-import { globalSessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, PREVIEW_RETRY, parseFeedItems, IG_HEADERS, IG_IMAGE_HEADERS, buildIgHeaders } from '@insta2figma/shared-instagram';
+import { globalSessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, PREVIEW_RETRY, parseFeedItems, IG_HEADERS, buildIgHeaders } from '@insta2figma/shared-instagram';
 import { REDIS_CACHE_CLIENT } from '../cache/redis-cache.module';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
-import {
-  fetchPreviewViaApify,
-  readApifyPreviewConfig,
-  type ApifyPreviewProfile,
-} from './apify-preview.client';
+import { fetchPreviewViaApify, readApifyPreviewConfig } from './apify-preview.client';
+import { fetchInstagramImageAsDataUrl } from './instagram-image.utils';
+import type { CachedPreviewPayload, TelemetryCtx, PreviewDataSource } from './preview-source.types';
+import { ApifyPreviewSource } from './apify-preview-source';
+import { FallbackPreviewSource } from './fallback-preview-source';
 
 const MAX_AVATAR_BYTES = 900_000;
 // TTL total no Redis: 15 minutos. Dados frescos até 5 min; dos 5–15 min servem stale
@@ -145,22 +144,6 @@ function toRecord(v: unknown): Record<string, unknown> | null {
     : null;
 }
 
-type CachedPreviewPayload = {
-  username: string;
-  instagramUserId: string | null;
-  profilePicUrlHd: string | null;
-  profilePicDataUrl: string | null;
-  mediaCount: number;
-  isPrivate: boolean;
-  parsedPosts: InstagramPostSummaryItem[];
-  postsPreview: InstagramPostPreviewItem[];
-  postsAvailable: number;
-  timelineOrder: 'newest_first' | 'oldest_first';
-  hasNextPreviewPage: boolean;
-  nextPreviewCursor: string | null;
-  previewTotalPages: number;
-};
-
 // Subconjunto sem campos derivados com base64 — o que fica guardado no Redis.
 type RedisCachedPreviewPayload = Omit<CachedPreviewPayload, 'profilePicDataUrl' | 'postsPreview'> & {
   cachedAt: number; // timestamp ms — usado para stale-while-revalidate
@@ -186,50 +169,33 @@ type ProfilePreviewResponse = Omit<CachedPreviewPayload, 'parsedPosts'> & {
   selectionWarning?: string;
 };
 
-async function fetchInstagramImageAsDataUrl(
-  cdnUrl: string,
-  maxBytes: number,
-): Promise<string | null> {
-  try {
-    const img = await fetch(cdnUrl, {
-      method: 'GET',
-      headers: IG_IMAGE_HEADERS,
-      signal: AbortSignal.timeout(18_000),
-      redirect: 'follow',
-    });
-    if (!img.ok) {
-      console.warn(`[ig:thumb] HTTP ${img.status} — ${cdnUrl.slice(0, 80)}`);
-      return null;
-    }
-    const buf = Buffer.from(await img.arrayBuffer());
-    if (buf.byteLength === 0 || buf.byteLength > maxBytes) {
-      console.warn(`[ig:thumb] tamanho inválido: ${buf.byteLength}b — ${cdnUrl.slice(0, 80)}`);
-      return null;
-    }
-    const ctRaw = img.headers.get('content-type')?.split(';')[0]?.trim();
-    const ct = ctRaw && ctRaw.startsWith('image/') ? ctRaw : 'image/jpeg';
-    return `data:${ct};base64,${buf.toString('base64')}`;
-  } catch (err) {
-    console.warn(`[ig:thumb] erro: ${err instanceof Error ? err.message : String(err)} — ${cdnUrl.slice(0, 80)}`);
-    return null;
-  }
-}
-
-type TelemetryCtx = {
-  callerUserId?: string | null;
-  planTier?: string | null;
-};
 
 @Injectable()
 export class InstagramPreviewService {
   private readonly sessionPool = globalSessionPool;
   /** Chaves de cache com revalidação em background a decorrer — evita fetches duplicados. */
   private readonly revalidating = new Set<string>();
+  private readonly previewSource: PreviewDataSource;
 
   constructor(
     private readonly telemetry: ScrapeTelemetryService,
     @Inject(REDIS_CACHE_CLIENT) private readonly redis: Redis,
-  ) {}
+  ) {
+    this.previewSource = this.buildPreviewSource();
+  }
+
+  private buildPreviewSource(): PreviewDataSource {
+    const direct: PreviewDataSource = {
+      name: 'instagram-direct',
+      fetchPreview: (username, fetchCount, timelineOrder, ctx) =>
+        this.fetchInstagramPreviewDirect(username, fetchCount, timelineOrder, ctx ?? { callerUserId: null, planTier: null }),
+    };
+
+    const config = readApifyPreviewConfig();
+    if (!config) return direct;
+
+    return new FallbackPreviewSource(direct, [new ApifyPreviewSource(config)]);
+  }
 
 
   async getProfilePreview(
@@ -443,49 +409,6 @@ export class InstagramPreviewService {
     return { base, cacheKey };
   }
 
-  private async buildCachedPreviewFromApify(
-    timelineOrder: 'newest_first' | 'oldest_first',
-    apifyProfile: ApifyPreviewProfile,
-  ): Promise<CachedPreviewPayload> {
-    const pageOnePosts = apifyProfile.parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
-    const postsPreview = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
-      indexStart: 1,
-    });
-
-    let profilePicDataUrl: string | null = null;
-    if (apifyProfile.profilePicUrlHd) {
-      profilePicDataUrl = await fetchInstagramImageAsDataUrl(
-        apifyProfile.profilePicUrlHd,
-        MAX_AVATAR_BYTES,
-      );
-    }
-
-    const mediaCount = apifyProfile.mediaCount;
-    const previewTotalPages = Math.max(
-      1,
-      Math.ceil(mediaCount / PREVIEW_PAGE_SIZE),
-    );
-    const hasNextPreviewPage =
-      apifyProfile.parsedPosts.length > PREVIEW_PAGE_SIZE ||
-      mediaCount > PREVIEW_PAGE_SIZE;
-
-    return {
-      username: apifyProfile.username,
-      instagramUserId: apifyProfile.instagramUserId,
-      profilePicUrlHd: apifyProfile.profilePicUrlHd,
-      profilePicDataUrl,
-      mediaCount,
-      isPrivate: apifyProfile.isPrivate,
-      parsedPosts: apifyProfile.parsedPosts,
-      postsPreview,
-      postsAvailable: apifyProfile.parsedPosts.length,
-      timelineOrder,
-      hasNextPreviewPage,
-      nextPreviewCursor: null,
-      previewTotalPages,
-    };
-  }
-
   private async fetchFeedPageViaApify(
     username: string,
     pageNumber: number,
@@ -585,42 +508,13 @@ export class InstagramPreviewService {
     }
   }
 
-  private async fetchInstagramPreviewBase(
+  private fetchInstagramPreviewBase(
     username: string,
     fetchCount: number,
     timelineOrder: 'newest_first' | 'oldest_first',
     ctx: TelemetryCtx,
   ): Promise<CachedPreviewPayload> {
-    try {
-      return await this.fetchInstagramPreviewDirect(
-        username,
-        fetchCount,
-        timelineOrder,
-        ctx,
-      );
-    } catch (err) {
-      if (err instanceof BadRequestException) throw err;
-
-      const config = readApifyPreviewConfig();
-      if (!config) throw err;
-
-      console.warn(
-        '[preview] Instagram direct falhou; a tentar fallback Apify.',
-        err instanceof Error ? err.message : err,
-      );
-
-      try {
-        const apify = await fetchPreviewViaApify(config, username, fetchCount);
-        console.info('[preview] fallback Apify teve sucesso.');
-        return this.buildCachedPreviewFromApify(timelineOrder, apify);
-      } catch (apifyErr) {
-        console.warn(
-          '[preview] fallback Apify também falhou.',
-          apifyErr instanceof Error ? apifyErr.message : apifyErr,
-        );
-        throw err;
-      }
-    }
+    return this.previewSource.fetchPreview(username, fetchCount, timelineOrder, ctx);
   }
 
   private async fetchInstagramPreviewDirect(
