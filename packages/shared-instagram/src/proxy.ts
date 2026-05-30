@@ -5,9 +5,16 @@ function redact(url: string): string {
   return url.replace(/:\/\/[^@]+@/, '://***@');
 }
 
+// Cache por URL — evita recriar ProxyAgent (e o seu connection pool) em cada pedido
+const agentCache = new Map<string, object>();
+
 export function buildProxyAgent(url: string): object | null {
+  const cached = agentCache.get(url);
+  if (cached) return cached;
   try {
-    return new ProxyAgent(url);
+    const agent = new ProxyAgent(url);
+    agentCache.set(url, agent);
+    return agent;
   } catch {
     console.error('[instagram-scraper] proxy inválido ignorado:', redact(url));
     return null;

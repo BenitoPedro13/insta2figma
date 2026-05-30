@@ -20,7 +20,7 @@ import {
   type ScrapeSelectionInput,
   type TimelinePostItem,
 } from '@insta2figma/shared-contracts';
-import { SessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems, IG_HEADERS, IG_IMAGE_HEADERS, buildIgHeaders } from '@insta2figma/shared-instagram';
+import { globalSessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, PREVIEW_RETRY, parseFeedItems, IG_HEADERS, IG_IMAGE_HEADERS, buildIgHeaders } from '@insta2figma/shared-instagram';
 import { REDIS_CACHE_CLIENT } from '../cache/redis-cache.module';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
 import {
@@ -30,7 +30,10 @@ import {
 } from './apify-preview.client';
 
 const MAX_AVATAR_BYTES = 900_000;
-const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1_000; // 5 minutos — reduz pedidos ao Instagram ~5x
+// TTL total no Redis: 15 minutos. Dados frescos até 5 min; dos 5–15 min servem stale
+// enquanto uma revalidação corre em background (stale-while-revalidate).
+const PREVIEW_CACHE_TTL_MS = 15 * 60 * 1_000;
+const PREVIEW_REVALIDATE_AFTER_MS = 5 * 60 * 1_000;
 const FREE_MAX_PREVIEW_PAGE = 3;
 
 function assertPreviewPageAllowed(planTier: PlanTier, previewPage: number): void {
@@ -159,11 +162,13 @@ type CachedPreviewPayload = {
 };
 
 // Subconjunto sem campos derivados com base64 — o que fica guardado no Redis.
-type RedisCachedPreviewPayload = Omit<CachedPreviewPayload, 'profilePicDataUrl' | 'postsPreview'>;
+type RedisCachedPreviewPayload = Omit<CachedPreviewPayload, 'profilePicDataUrl' | 'postsPreview'> & {
+  cachedAt: number; // timestamp ms — usado para stale-while-revalidate
+};
 
 function toRedisCachedPayload(p: CachedPreviewPayload): RedisCachedPreviewPayload {
   const { profilePicDataUrl: _d, postsPreview: _p, ...rest } = p;
-  return rest;
+  return { ...rest, cachedAt: Date.now() };
 }
 
 type ProfilePreviewResponse = Omit<CachedPreviewPayload, 'parsedPosts'> & {
@@ -217,7 +222,9 @@ type TelemetryCtx = {
 
 @Injectable()
 export class InstagramPreviewService {
-  private readonly sessionPool = SessionPool.load();
+  private readonly sessionPool = globalSessionPool;
+  /** Chaves de cache com revalidação em background a decorrer — evita fetches duplicados. */
+  private readonly revalidating = new Set<string>();
 
   constructor(
     private readonly telemetry: ScrapeTelemetryService,
@@ -412,6 +419,18 @@ export class InstagramPreviewService {
         userId: ctx.callerUserId,
         planTier: ctx.planTier,
       });
+
+      // Stale-while-revalidate: dados com mais de PREVIEW_REVALIDATE_AFTER_MS
+      // são servidos imediatamente mas actualizam-se em background.
+      const ageMs = Date.now() - (cached.cachedAt ?? 0);
+      if (ageMs > PREVIEW_REVALIDATE_AFTER_MS && !this.revalidating.has(cacheKey)) {
+        this.revalidating.add(cacheKey);
+        void this.fetchInstagramPreviewBase(username, fetchCount, timelineOrder, ctx)
+          .then((fresh) => this.writeCache(cacheKey, toRedisCachedPayload(fresh)))
+          .catch(() => {})
+          .finally(() => this.revalidating.delete(cacheKey));
+      }
+
       const pageOnePosts = cached.parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
       const postsPreview = buildIndexedPostPreview(pageOnePosts, cached.timelineOrder, { indexStart: 1 });
       return {
@@ -631,6 +650,7 @@ export class InstagramPreviewService {
           ...(agent ? { dispatcher: agent } : {}),
         },
         'profile-preview',
+        PREVIEW_RETRY,
       ));
     } catch {
       this.telemetry.record({
@@ -918,6 +938,7 @@ export class InstagramPreviewService {
           ...(agent ? { dispatcher: agent } : {}),
         },
         'feed-pagination',
+        PREVIEW_RETRY,
       ));
     } catch {
       this.telemetry.record({
