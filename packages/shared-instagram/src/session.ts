@@ -1,6 +1,8 @@
 export interface SessionEntry {
   account: string;
   cookie: string;
+  /** Proxy dedicado a esta sessão (sobrepõe o pool geral). Formato: http://user:pass@host:port */
+  proxy?: string;
 }
 
 function loadSessionPool(): SessionEntry[] {

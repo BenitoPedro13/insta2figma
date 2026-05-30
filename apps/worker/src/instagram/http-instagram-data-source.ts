@@ -2,7 +2,7 @@ import type {
   ScrapeJobResultSummaryV5,
   ScrapeSelectionInput,
 } from '@insta2figma/shared-contracts';
-import { SessionPool, getProxyAgent, fetchWithRetry, parseFeedItems } from '@insta2figma/shared-instagram';
+import { SessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems } from '@insta2figma/shared-instagram';
 import { InstagramUpstreamError } from './instagram-upstream-error';
 import { buildScrapeSummaryV5FromUserNode } from './parse-web-profile';
 
@@ -45,7 +45,12 @@ function classifyFailMessage(
   if (m.includes('wait') || m.includes('rate') || m.includes('limit')) {
     return { code: 'IG_RATE_LIMIT', retryable: true };
   }
-  if (m.includes('login') || m.includes('unauthorized') || m.includes('forbidden')) {
+  if (
+    m.includes('checkpoint') ||
+    m.includes('login') ||
+    m.includes('unauthorized') ||
+    m.includes('forbidden')
+  ) {
     return { code: 'IG_BLOCKED', retryable: false };
   }
   return null;
@@ -71,7 +76,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     selectionInput: ScrapeSelectionInput,
     defaults?: { defaultMaxPosts?: number },
   ): Promise<ScrapeJobResultSummaryV5> {
-    const agent = getProxyAgent();
+    const agent = session?.proxy ? buildProxyAgent(session.proxy) ?? getProxyAgent() : getProxyAgent();
 
     let res: Response;
     try {

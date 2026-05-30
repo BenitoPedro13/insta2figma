@@ -202,6 +202,11 @@ export class JobsService {
         })
         .filter((x): x is JobSignedAssetDto => x !== null);
 
+      console.info(
+        `[jobs] signedAssets jobId=${jobId} — ${assets.length} assets no DB, ${signedAssets.length} assinados`,
+        signedAssets.map((a) => ({ key: a.storageKey, urlPrefix: a.url.slice(0, 60) })),
+      );
+
       return this.toResponse(job, { signedAssets });
     }
 

@@ -18,7 +18,7 @@ import {
   type ScrapeSelectionInput,
   type TimelinePostItem,
 } from '@insta2figma/shared-contracts';
-import { SessionPool, getProxyAgent, fetchWithRetry, parseFeedItems } from '@insta2figma/shared-instagram';
+import { SessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems } from '@insta2figma/shared-instagram';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
 
 const IG_HEADERS: Record<string, string> = {
@@ -541,7 +541,7 @@ export class InstagramPreviewService {
   ): Promise<CachedPreviewPayload> {
     const url = `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
     const session = this.sessionPool.next();
-    const agent = getProxyAgent();
+    const agent = session?.proxy ? buildProxyAgent(session.proxy) ?? getProxyAgent() : getProxyAgent();
     const t0 = Date.now();
 
     console.info(
@@ -827,7 +827,7 @@ export class InstagramPreviewService {
     const url = `https://i.instagram.com/api/v1/feed/user/${encodeURIComponent(userId)}/?${qs.toString()}`;
 
     const session = this.sessionPool.next();
-    const agent = getProxyAgent();
+    const agent = session?.proxy ? buildProxyAgent(session.proxy) ?? getProxyAgent() : getProxyAgent();
     const t0 = Date.now();
 
     console.info(

@@ -5,7 +5,7 @@ function redact(url: string): string {
   return url.replace(/:\/\/[^@]+@/, '://***@');
 }
 
-function buildAgent(url: string): object | null {
+export function buildProxyAgent(url: string): object | null {
   try {
     return new ProxyAgent(url);
   } catch {
@@ -23,7 +23,7 @@ function loadProxyPool(): object[] {
     try {
       const urls = JSON.parse(poolRaw) as unknown;
       if (Array.isArray(urls) && urls.length > 0) {
-        const agents = (urls as string[]).map(buildAgent).filter(Boolean) as object[];
+        const agents = (urls as string[]).map(buildProxyAgent).filter(Boolean) as object[];
         if (agents.length > 0) {
           console.info(`[instagram-scraper] ${agents.length} proxies configurados`);
           return agents;
@@ -36,7 +36,7 @@ function loadProxyPool(): object[] {
 
   const single = process.env.HTTP_PROXY_URL?.trim();
   if (single) {
-    const agent = buildAgent(single);
+    const agent = buildProxyAgent(single);
     if (agent) {
       console.info('[instagram-scraper] proxy configurado:', redact(single));
       return [agent];
