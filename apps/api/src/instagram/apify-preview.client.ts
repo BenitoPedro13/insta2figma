@@ -174,12 +174,21 @@ export async function fetchPreviewViaApify(
       ? profileRec.posts
       : [];
 
+  // Log temporário: ver campos reais da resposta Apify para validar o parser
+  console.info('[apify:raw] profile fields:', Object.keys(profileRec).join(', '));
+  if (latestPostsRaw.length > 0) {
+    const firstPost = asRecord(latestPostsRaw[0]);
+    console.info('[apify:raw] first post fields:', firstPost ? Object.keys(firstPost).join(', ') : 'null');
+    console.info('[apify:raw] first post sample:', JSON.stringify(firstPost, null, 2).slice(0, 800));
+  }
+
   const parsedPosts: TimelinePostItem[] = [];
   for (const raw of latestPostsRaw) {
     const item = mapApifyPost(raw);
     if (item) parsedPosts.push(item);
     if (parsedPosts.length >= safeCount) break;
   }
+  console.info(`[apify] ${parsedPosts.length}/${latestPostsRaw.length} posts parsed, ${parsedPosts.filter(p => !!p.thumbnailUrl).length} com thumbnailUrl`);
 
   return {
     username: resolvedUsername,
