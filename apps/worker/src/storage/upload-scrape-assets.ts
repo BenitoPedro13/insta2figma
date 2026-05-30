@@ -125,57 +125,69 @@ export async function uploadScrapeAssets(params: {
     try {
       const { body, contentType } = await fetchBytes(profileUrl);
       const ext = guessExtFromMime(contentType);
-      const key = `${prefix}profile.${ext}`;
-      await persist(key, body, contentType);
+      await persist(`${prefix}profile.${ext}`, body, contentType);
     } catch (e) {
       console.warn('[storage] falha ao guardar foto de perfil', e);
     }
   }
 
-  let count = 0;
   const expand = params.expandCarouselImages === true;
   const maxSlots = expand ? MAX_THUMBS_EXPANDED : MAX_THUMBS;
 
-  const postsWithUrl = params.summary.postsSample.filter(p => !!p.thumbnailUrl).length;
-  console.info(
-    `[storage] ${params.summary.postsSample.length} posts no sample, ${postsWithUrl} com thumbnailUrl, maxSlots=${maxSlots}`,
-  );
+  // Colectar tasks upfront para poder paralelizar sem race conditions no índice
+  type ThumbTask = { url: string; slug: string; shortcode: string };
+  const tasks: ThumbTask[] = [];
 
   for (const p of params.summary.postsSample) {
-    if (count >= maxSlots) break;
+    if (tasks.length >= maxSlots) break;
 
-    const urlsToStore: string[] = [];
-    if (p.thumbnailUrl) urlsToStore.push(p.thumbnailUrl);
+    const urls: string[] = [];
+    if (p.thumbnailUrl) urls.push(p.thumbnailUrl);
     if (expand && Array.isArray(p.carouselImageUrls)) {
       for (const cu of p.carouselImageUrls) {
-        if (!cu || urlsToStore.includes(cu)) continue;
-        urlsToStore.push(cu);
+        if (cu && !urls.includes(cu)) urls.push(cu);
       }
     }
 
-    if (urlsToStore.length === 0) {
+    if (urls.length === 0) {
       console.warn(`[storage] post ${p.shortcode} sem URL de thumbnail — a saltar`);
       continue;
     }
 
-    let slotIdx = 0;
-    for (const url of urlsToStore) {
-      if (count >= maxSlots) break;
+    for (let slotIdx = 0; slotIdx < urls.length; slotIdx++) {
+      if (tasks.length >= maxSlots) break;
+      const slug = urls.length === 1 ? p.shortcode : `${p.shortcode}_${slotIdx}`;
+      tasks.push({ url: urls[slotIdx], slug, shortcode: p.shortcode });
+    }
+  }
+
+  console.info(
+    `[storage] ${params.summary.postsSample.length} posts, ${tasks.length} uploads pendentes`,
+  );
+
+  // Pool de concorrência — mesmo padrão do inlinePostsPreviewThumbnails da API
+  const UPLOAD_CONCURRENCY = 5;
+  let succeeded = 0;
+  let taskIdx = 0;
+
+  async function uploadWorker(): Promise<void> {
+    while (taskIdx < tasks.length) {
+      const task = tasks[taskIdx++];
       try {
-        const { body, contentType } = await fetchBytes(url);
+        const { body, contentType } = await fetchBytes(task.url);
         const ext = guessExtFromMime(contentType);
-        const slug =
-          urlsToStore.length <= 1 ? p.shortcode : `${p.shortcode}_${slotIdx}`;
-        slotIdx += 1;
-        const key = `${prefix}thumbs/${slug}.${ext}`;
-        await persist(key, body, contentType);
-        count += 1;
+        await persist(`${prefix}thumbs/${task.slug}.${ext}`, body, contentType);
+        succeeded++;
       } catch (e) {
-        console.warn('[storage] falha thumbnail', p.shortcode, slotIdx - 1, e);
+        console.warn('[storage] falha thumbnail', task.shortcode, e);
       }
     }
   }
 
-  console.info(`[storage] upload completo — ${count} assets guardados no S3`);
+  await Promise.all(
+    Array.from({ length: Math.min(UPLOAD_CONCURRENCY, tasks.length) }, uploadWorker),
+  );
+
+  console.info(`[storage] upload completo — ${succeeded}/${tasks.length} assets guardados no S3`);
   return prefix;
 }
