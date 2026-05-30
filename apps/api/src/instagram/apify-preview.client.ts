@@ -31,21 +31,26 @@ function num(v: unknown): number {
 
 function parseApifyCarouselUrls(post: Record<string, unknown>): string[] {
   const urls: string[] = [];
+
+  // `images` pode ser string[] ou {url: string, ...}[] conforme versão do actor
   const images = post.images;
   if (Array.isArray(images)) {
     for (const u of images) {
-      const s = str(u);
+      const s = str(u) ?? str(asRecord(u)?.url) ?? str(asRecord(u)?.displayUrl);
       if (s && !urls.includes(s)) urls.push(s);
     }
   }
+
+  // `childPosts` contém os posts filhos com displayUrl próprio
   const children = post.childPosts;
   if (Array.isArray(children)) {
     for (const c of children) {
       const child = asRecord(c);
-      const s = str(child?.displayUrl) ?? str(child?.url);
+      const s = str(child?.displayUrl) ?? str(child?.url) ?? str(child?.imageUrl);
       if (s && !urls.includes(s)) urls.push(s);
     }
   }
+
   return urls;
 }
 
@@ -53,15 +58,25 @@ function mapApifyPost(raw: unknown): TimelinePostItem | null {
   const post = asRecord(raw);
   if (!post) return null;
 
-  const shortcode = str(post.shortCode) ?? str(post.shortcode) ?? str(post.code);
+  const shortcode =
+    str(post.shortCode) ?? str(post.shortcode) ?? str(post.code) ?? str(post.id);
   if (!shortcode) return null;
 
   const type = str(post.type);
   const isVideo =
-    type === 'Video' || post.isVideo === true || str(post.videoUrl) !== null;
+    type === 'Video' ||
+    post.isVideo === true ||
+    post.isIgtv === true ||
+    post.isReel === true ||
+    str(post.videoUrl) !== null ||
+    str(post.videoViewCount as unknown) !== null;
 
+  // Apify usa displayUrl como cover principal; fallbacks para outras versões do actor
   const thumbnailUrl =
-    str(post.displayUrl) ?? str(post.thumbnailUrl) ?? str(post.imageUrl);
+    str(post.displayUrl) ??
+    str(post.thumbnailUrl) ??
+    str(post.imageUrl) ??
+    str(post.previewUrl);
 
   const item: TimelinePostItem = {
     shortcode,
@@ -69,7 +84,8 @@ function mapApifyPost(raw: unknown): TimelinePostItem | null {
     isVideo,
   };
 
-  if (type === 'Sidecar') {
+  // Carrosséis: Sidecar tem imagens filhas em `images` e/ou `childPosts`
+  if (type === 'Sidecar' || type === 'GraphSidecar') {
     const carousel = parseApifyCarouselUrls(post);
     if (carousel.length > 0) item.carouselImageUrls = carousel;
   }
@@ -200,7 +216,15 @@ export async function fetchPreviewViaApify(
     if (item) parsedPosts.push(item);
     if (parsedPosts.length >= safeCount) break;
   }
-  console.info(`[apify] ${parsedPosts.length}/${latestPostsRaw.length} posts parsed, ${parsedPosts.filter(p => !!p.thumbnailUrl).length} com thumbnailUrl`);
+  console.info(
+    `[apify] ${parsedPosts.length}/${latestPostsRaw.length} posts parsed`,
+    parsedPosts.slice(0, 5).map(p => ({
+      shortcode: p.shortcode,
+      thumb: p.thumbnailUrl ? '✓' : '✗',
+      carousel: p.carouselImageUrls?.length ?? 0,
+      video: p.isVideo,
+    })),
+  );
 
   return {
     username: resolvedUsername,
