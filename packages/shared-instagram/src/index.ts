@@ -4,3 +4,4 @@ export { getProxyAgent, buildProxyAgent } from './proxy';
 export { fetchWithRetry } from './retry';
 export type { FetchResult } from './retry';
 export { parseFeedItems } from './feed-parse';
+export { IG_HEADERS, IG_IMAGE_HEADERS, buildIgHeaders } from './headers';

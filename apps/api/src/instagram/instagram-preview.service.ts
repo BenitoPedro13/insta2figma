@@ -20,7 +20,7 @@ import {
   type ScrapeSelectionInput,
   type TimelinePostItem,
 } from '@insta2figma/shared-contracts';
-import { SessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems } from '@insta2figma/shared-instagram';
+import { SessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems, IG_HEADERS, IG_IMAGE_HEADERS, buildIgHeaders } from '@insta2figma/shared-instagram';
 import { REDIS_CACHE_CLIENT } from '../cache/redis-cache.module';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
 import {
@@ -29,21 +29,6 @@ import {
   type ApifyPreviewProfile,
 } from './apify-preview.client';
 
-const IG_HEADERS: Record<string, string> = {
-  'x-ig-app-id': '936619743392459',
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept-Language': 'en-US,en;q=0.9',
-  Accept: 'application/json, text/plain, */*',
-  Referer: 'https://www.instagram.com/',
-  Origin: 'https://www.instagram.com',
-};
-const IG_IMAGE_HEADERS: Record<string, string> = {
-  Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-  'User-Agent':
-    'Mozilla/5.0 (compatible; Insta2FigmaApi/1.0; +https://www.instagram.com/)',
-  Referer: 'https://www.instagram.com/',
-};
 const MAX_AVATAR_BYTES = 900_000;
 const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1_000; // 5 minutos — reduz pedidos ao Instagram ~5x
 const FREE_MAX_PREVIEW_PAGE = 3;
@@ -239,11 +224,6 @@ export class InstagramPreviewService {
     @Inject(REDIS_CACHE_CLIENT) private readonly redis: Redis,
   ) {}
 
-  private buildIgHeaders(cookie: string | null): Record<string, string> {
-    const headers = { ...IG_HEADERS };
-    if (cookie) headers['Cookie'] = cookie;
-    return headers;
-  }
 
   async getProfilePreview(
     usernameRaw: string,
@@ -646,7 +626,7 @@ export class InstagramPreviewService {
         url,
         {
           method: 'GET',
-          headers: this.buildIgHeaders(session?.cookie ?? null),
+          headers: buildIgHeaders(session?.cookie),
           signal: AbortSignal.timeout(20_000),
           ...(agent ? { dispatcher: agent } : {}),
         },
@@ -933,7 +913,7 @@ export class InstagramPreviewService {
         url,
         {
           method: 'GET',
-          headers: this.buildIgHeaders(session?.cookie ?? null),
+          headers: buildIgHeaders(session?.cookie),
           signal: AbortSignal.timeout(20_000),
           ...(agent ? { dispatcher: agent } : {}),
         },

@@ -2,7 +2,7 @@ import type {
   ScrapeJobResultSummaryV5,
   ScrapeSelectionInput,
 } from '@insta2figma/shared-contracts';
-import { SessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems } from '@insta2figma/shared-instagram';
+import { SessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems, buildIgHeaders } from '@insta2figma/shared-instagram';
 import { InstagramUpstreamError } from './instagram-upstream-error';
 import { buildScrapeSummaryV5FromUserNode } from './parse-web-profile';
 
@@ -13,16 +13,6 @@ export interface InstagramDataSource {
     defaults?: { defaultMaxPosts?: number },
   ): Promise<ScrapeJobResultSummaryV5>;
 }
-
-const IG_HEADERS: Record<string, string> = {
-  'x-ig-app-id': '936619743392459',
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept-Language': 'en-US,en;q=0.9',
-  Accept: 'application/json, text/plain, */*',
-  Referer: 'https://www.instagram.com/',
-  Origin: 'https://www.instagram.com',
-};
 
 function webProfileUrl(username: string): string {
   const u = encodeURIComponent(username);
@@ -58,12 +48,6 @@ function classifyFailMessage(
 
 const sessionPool = SessionPool.load();
 
-function buildHeaders(session?: { cookie?: string } | null): Record<string, string> {
-  const headers = { ...IG_HEADERS };
-  if (session?.cookie) headers['Cookie'] = session.cookie;
-  return headers;
-}
-
 /** Fonte Instagram com proxy, sessão e retry. */
 export class HttpInstagramDataSource implements InstagramDataSource {
   constructor(
@@ -84,7 +68,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
         webProfileUrl(usernameNormalized),
         {
           method: 'GET',
-          headers: buildHeaders(session),
+          headers: buildIgHeaders(session?.cookie),
           signal: AbortSignal.timeout(this.options.timeoutMs),
           redirect: 'follow',
           ...(agent ? { dispatcher: agent } : {}),
@@ -157,7 +141,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
           feedUrl(userId),
           {
             method: 'GET',
-            headers: buildHeaders(session),
+            headers: buildIgHeaders(session?.cookie),
             signal: AbortSignal.timeout(this.options.timeoutMs),
             redirect: 'follow',
             ...(agent ? { dispatcher: agent } : {}),
