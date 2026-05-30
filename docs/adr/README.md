@@ -26,6 +26,7 @@ Cada ADR segue o template MADR com os campos:
 | [ADR-004](ADR-004-retry-backoff-429.md) | Retry com backoff exponencial em respostas 429/503 | Accepted |
 | [ADR-005](ADR-005-cache-ttl-preview.md) | Estratégia de cache para previews (TTL e Redis) | Accepted |
 | [ADR-006](ADR-006-scrape-telemetria.md) | Telemetria de operações de scraping (PostgreSQL) | Accepted |
+| [ADR-007](ADR-007-redis-preview-cache.md) | Cache de previews em Redis (TTL + globalSessionPool) | Accepted |
 
 ## Contexto global
 

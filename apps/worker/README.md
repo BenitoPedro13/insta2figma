@@ -48,9 +48,13 @@ cp apps/worker/.env.example apps/worker/.env
 
 Ajusta `DATABASE_URL`, `REDIS_URL` e (para cópias no bucket) **`S3_*`** como na API.
 
-Sessões Instagram: `IG_SESSION_POOL` (JSON com `account`, `cookie` e `proxy` dedicado por conta — ver ADR-002/ADR-003) e `IG_PROXY_POOL` (proxies rotativos para requests sem sessão). Sem estas variáveis o worker faz requests sem autenticação.
+Sessões Instagram: `IG_SESSION_POOL` (JSON com `account`, `cookie` e `proxy` dedicado por conta) e `IG_PROXY_POOL` (proxies rotativos). Sem estas variáveis o worker faz requests sem autenticação.
 
-Fallback Apify: `APIFY_TOKEN` activa o `apify~instagram-profile-scraper` quando o Instagram rate-limita o endpoint de profile-preview.
+O worker usa um **`globalSessionPool` singleton** partilhado com a API. As sessões são sincronizadas via Redis a cada 60 segundos — quando actualizas via `POST /admin/sessions` na API, o worker apanha a mudança sem redeploy. Guia completo: **[docs/SESSION-MANAGEMENT.md](../../docs/SESSION-MANAGEMENT.md)**.
+
+`ALERT_WEBHOOK_URL` (opcional) — webhook Discord/Slack acionado quando uma sessão recebe 401/403.
+
+Fallback Apify: `APIFY_TOKEN` activa o `apify~instagram-profile-scraper` quando o Instagram rate-limita.
 
 Opcional: `IG_FETCH_TIMEOUT_MS`, `WORKER_CONCURRENCY`, `STORAGE_MAX_THUMBNAILS`.
 

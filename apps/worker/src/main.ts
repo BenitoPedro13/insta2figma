@@ -8,6 +8,8 @@ import {
   SCRAPE_INSTAGRAM_V1_QUEUE,
   scrapeInstagramV1JobPayloadSchema,
 } from '@insta2figma/shared-contracts';
+import { globalSessionPool, REDIS_SESSION_KEY } from '@insta2figma/shared-instagram';
+import type { SessionEntry } from '@insta2figma/shared-instagram';
 
 import { ApifyInstagramDataSource } from './instagram/apify-instagram-data-source';
 import { FallbackInstagramDataSource } from './instagram/fallback-instagram-data-source';
@@ -27,6 +29,18 @@ const prisma = new PrismaClient();
 async function main(): Promise<void> {
   const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
   const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+
+  // Polling de sessões: carrega do Redis ao arrancar e depois a cada 60s
+  async function syncSessions(): Promise<void> {
+    try {
+      const raw = await connection.get(REDIS_SESSION_KEY);
+      if (!raw) return;
+      const sessions = JSON.parse(raw) as SessionEntry[];
+      if (Array.isArray(sessions) && sessions.length > 0) globalSessionPool.reload(sessions);
+    } catch { /* ignora — continua com env var */ }
+  }
+  void syncSessions();
+  const sessionSyncTimer = setInterval(() => void syncSessions(), 60_000);
 
   const timeoutMs = Math.max(
     5_000,
@@ -158,6 +172,7 @@ async function main(): Promise<void> {
   );
 
   const shutdown = async (): Promise<void> => {
+    clearInterval(sessionSyncTimer);
     await worker.close();
     await connection.quit();
     await prisma.$disconnect();

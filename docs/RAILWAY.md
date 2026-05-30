@@ -81,11 +81,20 @@ QUOTA_MAX_IMAGES_PER_JOB=100
 # Sessões Instagram com proxy dedicado por conta (ver ADR-002, ADR-003)
 # Cria as contas com o browser a correr pelo proxy — evita checkpoint_required
 # IG_SESSION_POOL=[{"account":"bot1","cookie":"sessionid=...","proxy":"http://user:pass@host:port"},{"account":"bot2","cookie":"...","proxy":"http://user2:pass2@host:port"}]
+# Alternativa sem redeploy: POST /admin/sessions (ver docs/SESSION-MANAGEMENT.md)
 IG_SESSION_POOL=
 
 # Pool de proxies rotativos para requests sem sessão (Webshare ou similar)
 # IG_PROXY_POOL=["http://user:pass@p.webshare.io:80","http://user2:pass2@p.webshare.io:80"]
 IG_PROXY_POOL=
+
+# Admin endpoints (/admin/scrape-health, /admin/sessions) — gera com: openssl rand -base64 32
+ADMIN_KEY=
+
+# Webhook para alertas quando uma sessão Instagram expira (Discord/Slack/genérico)
+# Discord: https://discord.com/api/webhooks/<id>/<token>
+# Slack:   https://hooks.slack.com/services/<...>
+ALERT_WEBHOOK_URL=
 
 # Fallback Apify para profile-preview quando o Instagram rate-limita
 APIFY_TOKEN=
@@ -146,20 +155,15 @@ O manifest do plugin inclui `https://t3.storageapi.dev` em `networkAccess.allowe
    - Copiar o Webhook Secret → `POLAR_WEBHOOK_SECRET`
 5. Copiar IDs dos produtos para `POLAR_PRODUCT_ID_PRO_MONTHLY`, etc.
 
-## 7. Sessões Instagram — criar contas sem checkpoint
+## 7. Sessões Instagram — criar e gerir contas
 
-Para evitar `checkpoint_required`, as contas de serviço devem ser criadas com o browser a correr pelo mesmo proxy que vai usar:
+Ver guia completo em [docs/SESSION-MANAGEMENT.md](./SESSION-MANAGEMENT.md).
 
-```bash
-# Abre Chrome com o proxy da Webshare
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --proxy-server="http://user:pass@p.webshare.io:80"
-```
-
-Com o Chrome aberto assim, vai a instagram.com e cria a conta. Depois:
-1. Abre DevTools → Network → faz qualquer pedido a `i.instagram.com`
-2. Copia o header `Cookie` do request
-3. Atualiza `IG_SESSION_POOL` no Railway com o cookie e o proxy correspondente
+Resumo rápido:
+1. Cria a conta com Chrome + proxy activo (evita `checkpoint_required`)
+2. Extrai o cookie com Cookie-Editor + `node scripts/ig-cookie-helper.mjs cookies.json bot1 http://proxy:porta`
+3. Actualiza sem redeploy: `POST /admin/sessions` com header `x-admin-key: <ADMIN_KEY>`
+4. Configura `ALERT_WEBHOOK_URL` para receber alertas no Discord/Slack quando uma sessão expira
 
 ## 8. Verificar deploy
 
@@ -191,6 +195,8 @@ Se jobs ficarem `queued`, confirma que o worker está **Running** e que `REDIS_U
 | `503 Polar billing is not configured` | `POLAR_ACCESS_TOKEN` em falta na API |
 | `Plan pro (yearly) is not configured yet` | `POLAR_PRODUCT_ID_PRO_YEARLY` em falta |
 | `checkpoint_required` no worker | Sessão criada noutro IP; cria conta com Chrome + proxy (ver secção 7) |
+| Sessão inválida sem alerta | `ALERT_WEBHOOK_URL` não configurado na API |
+| Sessão inválida após renovação | Usar `POST /admin/sessions` ou redeploy para recarregar pool |
 | Imagens não carregam no Figma | `PUBLIC_S3_ENDPOINT=https://t3.storageapi.dev` na API; rebuild plugin |
 | `S3 NÃO configurado` nos logs da API | Variáveis `wrapped-mug.*` não adicionadas ao serviço da API |
 | Build usa Dockerfile errado | `RAILWAY_DOCKERFILE_PATH=Dockerfile.api` no serviço certo |

@@ -69,7 +69,7 @@ pnpm infra:logs:redis    # só Redis
 - `apps/api`: API Nest (`/v1`, auth MVP, jobs, preview de perfil).
 - `apps/worker`: consumidor BullMQ (scrape Instagram + uploads para S3/MinIO).
 - `packages/shared-contracts`: contratos Zod/tipos compartilhados.
-- `packages/shared-instagram`: sessões, proxy pool, retry e parsing partilhados entre API e worker.
+- `packages/shared-instagram`: sessões (`globalSessionPool`), proxy pool, retry e parsing partilhados entre API e worker.
 - `docs/`: arquitetura, plano de implementação e especificação visual da UI.
 
 ### Infra local (Postgres + Redis)
@@ -136,6 +136,7 @@ Guia completo (scopes do token, troubleshooting, `curl`): **[docs/DEV-POLAR-NGRO
 
 - **Railway:** **[docs/RAILWAY.md](docs/RAILWAY.md)** — Postgres + Redis + API + worker no mesmo projeto.
 - **Geral:** **[docs/DEPLOY.md](docs/DEPLOY.md)** — Docker Compose VPS, R2, plugin Figma.
+- **Sessões Instagram:** **[docs/SESSION-MANAGEMENT.md](docs/SESSION-MANAGEMENT.md)** — criar contas, extrair cookies, hot-reload sem redeploy, alertas Discord/Slack.
 
 Remotes Git:
 
@@ -159,7 +160,8 @@ pnpm prod:up                     # API + worker + Postgres + Redis + MinIO
 - `ERR_CONNECTION_REFUSED` no plugin: API não está de pé (`pnpm dev` ou `pnpm dev:api`) ou `PORT` diferente.
 - Job fica em `queued`: worker não está de pé (`pnpm dev` ou `pnpm dev:worker`) ou Redis indisponível.
 - Preview sem avatar: endpoint de preview responde sem `profilePicDataUrl` (bloqueio upstream); o fallback de UI usa placeholder.
-- `checkpoint_required` no worker: a sessão Instagram foi criada num IP diferente dos proxies. Cria a conta com o browser a correr pelo proxy — ver [docs/RAILWAY.md §7](docs/RAILWAY.md).
+- `checkpoint_required` no worker: a sessão Instagram foi criada num IP diferente dos proxies. Cria a conta com o browser a correr pelo proxy — ver [docs/SESSION-MANAGEMENT.md §1](docs/SESSION-MANAGEMENT.md).
+- Sessão Instagram expirou (401/403): configura `ALERT_WEBHOOK_URL` para receber alerta automático; renova com `node scripts/ig-cookie-helper.mjs` + `POST /admin/sessions` (sem redeploy) — ver [docs/SESSION-MANAGEMENT.md](docs/SESSION-MANAGEMENT.md).
 - `503 Polar billing is not configured`: `POLAR_ACCESS_TOKEN` em falta.
 - `Plan pro (yearly) is not configured yet`: `POLAR_PRODUCT_ID_PRO_YEARLY` em falta.
 - Checkout Polar / plano Pro: ver [docs/DEV-POLAR-NGROK.md](docs/DEV-POLAR-NGROK.md).

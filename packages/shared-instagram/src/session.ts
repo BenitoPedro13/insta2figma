@@ -1,3 +1,5 @@
+export const REDIS_SESSION_KEY = 'ig:session-pool';
+
 export interface SessionEntry {
   account: string;
   cookie: string;
@@ -27,17 +29,61 @@ function loadSessionPool(): SessionEntry[] {
   return [];
 }
 
+function fireWebhook(text: string): void {
+  const url = process.env.ALERT_WEBHOOK_URL?.trim();
+  if (!url) return;
+  // Suporta Discord (content), Slack (text) e webhooks genéricos (message)
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: text, text, message: text }),
+  }).catch(() => {});
+}
+
 export class SessionPool {
-  private readonly sessions: SessionEntry[];
+  private sessions: SessionEntry[];
   private readonly blacklisted = new Set<string>();
   private index = 0;
+  private fingerprint: string;
 
   constructor(sessions: SessionEntry[]) {
     this.sessions = sessions;
+    this.fingerprint = this.calcFingerprint(sessions);
   }
 
   static load(): SessionPool {
     return new SessionPool(loadSessionPool());
+  }
+
+  private calcFingerprint(sessions: SessionEntry[]): string {
+    return sessions.map((s) => `${s.account}:${s.cookie}`).join('|');
+  }
+
+  /**
+   * Recarrega as sessões sem reiniciar o processo. Só actualiza se as sessões
+   * mudaram (comparação por account+cookie). Contas renovadas saem da blacklist.
+   */
+  reload(newSessions: SessionEntry[]): void {
+    const newFp = this.calcFingerprint(newSessions);
+    if (newFp === this.fingerprint) return;
+
+    const newAccounts = new Set(newSessions.map((s) => s.account));
+    for (const account of [...this.blacklisted]) {
+      if (newAccounts.has(account)) this.blacklisted.delete(account);
+    }
+    this.sessions = newSessions;
+    this.fingerprint = newFp;
+    this.index = 0;
+    console.info(`[instagram-scraper] Pool recarregado: ${newSessions.length} sessão(ões)`);
+  }
+
+  /** Retorna info das sessões sem expor cookies. */
+  getStatus(): Array<{ account: string; proxy?: string; active: boolean }> {
+    return this.sessions.map((s) => ({
+      account: s.account,
+      ...(s.proxy ? { proxy: s.proxy } : {}),
+      active: !this.blacklisted.has(s.account),
+    }));
   }
 
   next(): SessionEntry | null {
@@ -56,10 +102,22 @@ export class SessionPool {
   }
 
   markInvalid(account: string): void {
-    console.error(
-      `[instagram-scraper] Sessão inválida: conta "${account}" — verificar/renovar IG_SESSION_POOL`,
-    );
     this.blacklisted.add(account);
+    const remaining = this.activeCount;
+    const total = this.size;
+
+    console.error(
+      `[instagram-scraper] Sessão inválida: conta "${account}" — ${remaining}/${total} activas`,
+    );
+
+    const lines = [
+      `⚠️ Instagram session invalid: \`${account}\``,
+      `Active sessions: ${remaining}/${total}`,
+      remaining === 0 ? `🚨 ALL sessions invalid — scraping without authentication!` : '',
+      `Renew: \`POST /admin/sessions\` or update \`IG_SESSION_POOL\` in Railway.`,
+    ].filter(Boolean);
+
+    fireWebhook(lines.join('\n'));
   }
 
   get size(): number {
@@ -70,3 +128,6 @@ export class SessionPool {
     return this.sessions.filter((s) => !this.blacklisted.has(s.account)).length;
   }
 }
+
+/** Singleton partilhado dentro do processo — API e Worker usam este. */
+export const globalSessionPool = SessionPool.load();

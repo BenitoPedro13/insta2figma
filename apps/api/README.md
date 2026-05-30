@@ -6,6 +6,13 @@
 
 Variáveis — ver [`.env.example`](./.env.example) (`JWT_SECRET`, `DATABASE_URL`, **`REDIS_URL`**, **`S3_*`** para MinIO / R2 / S3). Se Redis estiver indisponível ao criar job, pode devolver **503** (`QUEUE_UNAVAILABLE`).
 
+Variáveis de sessão e admin:
+- **`IG_SESSION_POOL`** — sessões Instagram (conta + cookie + proxy opcional). Alternativa sem redeploy: `POST /admin/sessions`.
+- **`ADMIN_KEY`** — protege `/admin/*`. Gera com `openssl rand -base64 32`.
+- **`ALERT_WEBHOOK_URL`** — webhook Discord/Slack acionado quando uma sessão expira (opcional).
+
+Guia completo de sessões: **[docs/SESSION-MANAGEMENT.md](../../docs/SESSION-MANAGEMENT.md)**.
+
 > **Auth:** o plugin Figma usa `POST /v1/auth/figma` (`figmaUserId` de `figma.currentUser`). `register`/`login` por email continuam disponíveis para testes manuais com `curl`.
 
 ### Billing Polar.sh (sandbox)
@@ -76,6 +83,9 @@ Se vires **`ERR_CONNECTION_REFUSED`**, o processo Nest não está a ouvir na por
 | POST | `/v1/jobs` | Bearer JWT; header opcional `idempotency-key` |
 | GET | `/v1/jobs/:id` | Bearer JWT; query opcional `include=signedAssets` (URLs GET assinadas para `assets` do job, só se `succeeded`) |
 | GET | `/v1/instagram/profile-preview?username=...&maxPosts=12&expandCarouselImages=true` | Bearer JWT; preview leve (avatar, mediaCount, privado + estimativa de imagens) para UX no formulário |
+| GET | `/admin/scrape-health` | Header `x-admin-key`; métricas da última hora (error rate, p50/p95, por sessão e endpoint) |
+| GET | `/admin/sessions` | Header `x-admin-key`; estado actual das sessões (sem expor cookies) |
+| POST | `/admin/sessions` | Header `x-admin-key`; body `{ sessions: [{account, cookie, proxy?}] }`; hot-reload sem redeploy |
 
 Respostas de sucesso sob envelope `{ "data": … }`; erros `{ "error": { "code", "message" } }` (ver arquitetura §7).
 

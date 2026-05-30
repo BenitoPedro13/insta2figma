@@ -2,7 +2,7 @@ import type {
   ScrapeJobResultSummaryV5,
   ScrapeSelectionInput,
 } from '@insta2figma/shared-contracts';
-import { SessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems, buildIgHeaders } from '@insta2figma/shared-instagram';
+import { globalSessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems, buildIgHeaders } from '@insta2figma/shared-instagram';
 import { InstagramUpstreamError } from './instagram-upstream-error';
 import { buildScrapeSummaryV5FromUserNode } from './parse-web-profile';
 
@@ -46,7 +46,7 @@ function classifyFailMessage(
   return null;
 }
 
-const sessionPool = SessionPool.load();
+const sessionPool = globalSessionPool;
 
 /** Fonte Instagram com proxy, sessão e retry. */
 export class HttpInstagramDataSource implements InstagramDataSource {
