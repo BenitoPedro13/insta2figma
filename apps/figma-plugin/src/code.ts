@@ -1315,7 +1315,9 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         thumbsPending: postsWithThumbs.length,
         ...(preview.profilePicDataUrl
           ? { profilePicUrlHd: preview.profilePicDataUrl }
-          : {}),
+          : preview.profilePicUrlHd
+            ? { profilePicUrlHd: preview.profilePicUrlHd }
+            : {}),
       });
       for (const item of postsWithThumbs) {
         const url = item.thumbnailUrl;

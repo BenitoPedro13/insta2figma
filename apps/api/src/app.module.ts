@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { StorageModule } from './storage/storage.module';
 import { QueueModule } from './queue/queue.module';
+import { RedisCacheModule } from './cache/redis-cache.module';
 import { AuthModule } from './auth/auth.module';
 import { JobsModule } from './jobs/jobs.module';
 import { HealthModule } from './health/health.module';
@@ -19,6 +20,7 @@ import { UsersModule } from './users/users.module';
     PrismaModule,
     StorageModule,
     QueueModule,
+    RedisCacheModule,
     AuthModule,
     JobsModule,
     HealthModule,

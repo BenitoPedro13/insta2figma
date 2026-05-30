@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import type Redis from 'ioredis';
 import {
   buildIndexedPostPreview,
   endSelectionIndex,
@@ -19,6 +21,7 @@ import {
   type TimelinePostItem,
 } from '@insta2figma/shared-contracts';
 import { SessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems } from '@insta2figma/shared-instagram';
+import { REDIS_CACHE_CLIENT } from '../cache/redis-cache.module';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
 import {
   fetchPreviewViaApify,
@@ -183,6 +186,14 @@ type CachedPreviewPayload = {
   previewTotalPages: number;
 };
 
+// Subconjunto sem campos derivados com base64 — o que fica guardado no Redis.
+type RedisCachedPreviewPayload = Omit<CachedPreviewPayload, 'profilePicDataUrl' | 'postsPreview'>;
+
+function toRedisCachedPayload(p: CachedPreviewPayload): RedisCachedPreviewPayload {
+  const { profilePicDataUrl: _d, postsPreview: _p, ...rest } = p;
+  return rest;
+}
+
 type ProfilePreviewResponse = Omit<CachedPreviewPayload, 'parsedPosts'> & {
   previewPage: number;
   previewPageSize: number;
@@ -265,13 +276,12 @@ type TelemetryCtx = {
 
 @Injectable()
 export class InstagramPreviewService {
-  private readonly previewCache = new Map<
-    string,
-    { expiresAt: number; payload: CachedPreviewPayload }
-  >();
   private readonly sessionPool = SessionPool.load();
 
-  constructor(private readonly telemetry: ScrapeTelemetryService) {}
+  constructor(
+    private readonly telemetry: ScrapeTelemetryService,
+    @Inject(REDIS_CACHE_CLIENT) private readonly redis: Redis,
+  ) {}
 
   private buildIgHeaders(cookie: string | null): Record<string, string> {
     const headers = { ...IG_HEADERS };
@@ -368,7 +378,7 @@ export class InstagramPreviewService {
         tCtx,
         username,
       );
-      this.appendPostsToCache(
+      await this.appendPostsToCache(
         this.buildPreviewCacheKey(username, fetchCount, timelineOrder),
         pagePosts.posts,
         pagePosts.nextMaxId,
@@ -451,8 +461,8 @@ export class InstagramPreviewService {
     ctx: TelemetryCtx,
   ): Promise<{ base: CachedPreviewPayload; cacheKey: string }> {
     const cacheKey = this.buildPreviewCacheKey(username, fetchCount, timelineOrder);
-    let base = this.readCache(cacheKey);
-    if (base) {
+    const cached = await this.readCache(cacheKey);
+    if (cached) {
       this.telemetry.record({
         endpoint: 'profile-preview',
         igUsername: username,
@@ -466,10 +476,16 @@ export class InstagramPreviewService {
         userId: ctx.callerUserId,
         planTier: ctx.planTier,
       });
-    } else {
-      base = await this.fetchInstagramPreviewBase(username, fetchCount, timelineOrder, ctx);
-      this.writeCache(cacheKey, base);
+      const pageOnePosts = cached.parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
+      const postsPreviewRaw = buildIndexedPostPreview(pageOnePosts, cached.timelineOrder, { indexStart: 1 });
+      const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
+      return {
+        cacheKey,
+        base: { ...cached, profilePicDataUrl: null, postsPreview },
+      };
     }
+    const base = await this.fetchInstagramPreviewBase(username, fetchCount, timelineOrder, ctx);
+    await this.writeCache(cacheKey, toRedisCachedPayload(base));
     return { base, cacheKey };
   }
 
@@ -594,24 +610,26 @@ export class InstagramPreviewService {
     };
   }
 
-  private readCache(key: string): CachedPreviewPayload | null {
-    const hit = this.previewCache.get(key);
-    if (!hit) return null;
-    if (Date.now() > hit.expiresAt) {
-      this.previewCache.delete(key);
+  private async readCache(key: string): Promise<RedisCachedPreviewPayload | null> {
+    try {
+      const raw = await this.redis.get(key);
+      if (!raw) return null;
+      return JSON.parse(raw) as RedisCachedPreviewPayload;
+    } catch {
       return null;
     }
-    return hit.payload;
   }
 
-  private writeCache(key: string, payload: CachedPreviewPayload): void {
-    this.previewCache.set(key, {
-      expiresAt: Date.now() + PREVIEW_CACHE_TTL_MS,
-      payload,
-    });
-    if (this.previewCache.size > 512) {
-      const oldest = this.previewCache.keys().next().value;
-      if (oldest) this.previewCache.delete(oldest);
+  private async writeCache(key: string, payload: RedisCachedPreviewPayload): Promise<void> {
+    try {
+      await this.redis.set(
+        key,
+        JSON.stringify(payload),
+        'EX',
+        Math.floor(PREVIEW_CACHE_TTL_MS / 1000),
+      );
+    } catch {
+      // Redis indisponível — degradação silenciosa
     }
   }
 
@@ -873,19 +891,27 @@ export class InstagramPreviewService {
     };
   }
 
-  private appendPostsToCache(
+  private async appendPostsToCache(
     cacheKey: string,
     posts: TimelinePostItem[],
     nextMaxId: string | null,
     hasNextPage: boolean,
-  ): void {
-    const hit = this.previewCache.get(cacheKey);
-    if (!hit || posts.length === 0) return;
-    hit.payload.parsedPosts = mergeUniqueTimelinePosts(hit.payload.parsedPosts, posts);
-    hit.payload.nextPreviewCursor = normalizePreviewCursor(nextMaxId);
-    hit.payload.hasNextPreviewPage =
-      hasNextPage ||
-      hit.payload.parsedPosts.length < hit.payload.mediaCount;
+  ): Promise<void> {
+    if (posts.length === 0) return;
+    try {
+      const raw = await this.redis.get(cacheKey);
+      if (!raw) return;
+      const cached = JSON.parse(raw) as RedisCachedPreviewPayload;
+      const ttl = await this.redis.ttl(cacheKey);
+      if (ttl <= 0) return;
+      cached.parsedPosts = mergeUniqueTimelinePosts(cached.parsedPosts, posts);
+      cached.nextPreviewCursor = normalizePreviewCursor(nextMaxId);
+      cached.hasNextPreviewPage =
+        hasNextPage || cached.parsedPosts.length < cached.mediaCount;
+      await this.redis.set(cacheKey, JSON.stringify(cached), 'EX', ttl);
+    } catch {
+      // Redis indisponível — saltar actualização de cache
+    }
   }
 
   private async fetchFeedPageByNumber(

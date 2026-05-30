@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { PlanModule } from '../plan/plan.module';
+import { RedisCacheModule } from '../cache/redis-cache.module';
 import { InstagramController } from './instagram.controller';
 import { InstagramPreviewService } from './instagram-preview.service';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
 
 @Module({
-  imports: [AuthModule, PlanModule],
+  imports: [AuthModule, PlanModule, RedisCacheModule],
   controllers: [InstagramController],
   providers: [InstagramPreviewService, ScrapeTelemetryService],
 })
