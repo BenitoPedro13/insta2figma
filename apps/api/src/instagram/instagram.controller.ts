@@ -54,7 +54,6 @@ export class InstagramController {
   ) {}
 
   @Get('image')
-  @UseGuards(AuthGuard('jwt'))
   async proxyImage(
     @Query('url') rawUrl: string | undefined,
     @Res() res: Response,
