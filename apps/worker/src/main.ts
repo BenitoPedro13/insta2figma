@@ -9,7 +9,12 @@ import {
   scrapeInstagramV1JobPayloadSchema,
 } from '@insta2figma/shared-contracts';
 
-import { HttpInstagramDataSource } from './instagram/http-instagram-data-source';
+import { ApifyInstagramDataSource } from './instagram/apify-instagram-data-source';
+import { FallbackInstagramDataSource } from './instagram/fallback-instagram-data-source';
+import {
+  HttpInstagramDataSource,
+  type InstagramDataSource,
+} from './instagram/http-instagram-data-source';
 import { InstagramUpstreamError } from './instagram/instagram-upstream-error';
 import { processInstagramScrapeJob } from './instagram/scrape-runner';
 
@@ -28,7 +33,31 @@ async function main(): Promise<void> {
     Number.parseInt(process.env.IG_FETCH_TIMEOUT_MS ?? '30000', 10) ||
       30_000,
   );
-  const dataSource = new HttpInstagramDataSource({ timeoutMs });
+  const httpSource = new HttpInstagramDataSource({ timeoutMs });
+
+  // Fallback Apify (profile-scraper) — só ativo se houver token configurado.
+  const apifyToken = process.env.APIFY_TOKEN?.trim();
+  let dataSource: InstagramDataSource = httpSource;
+  if (apifyToken) {
+    const apifyTimeoutMs = Math.max(
+      30_000,
+      Number.parseInt(process.env.APIFY_TIMEOUT_MS ?? '120000', 10) || 120_000,
+    );
+    const apifySource = new ApifyInstagramDataSource({
+      token: apifyToken,
+      actorId:
+        process.env.APIFY_IG_PROFILE_ACTOR?.trim() ||
+        'apify~instagram-profile-scraper',
+      timeoutMs: apifyTimeoutMs,
+    });
+    dataSource = new FallbackInstagramDataSource(
+      { name: 'http-direct', source: httpSource },
+      [{ name: 'apify-profile-scraper', source: apifySource }],
+    );
+    console.info('[worker] fallback Apify ativo (instagram-profile-scraper).');
+  } else {
+    console.info('[worker] APIFY_TOKEN ausente — sem fallback Apify.');
+  }
 
   const concurrency = Math.max(
     1,
