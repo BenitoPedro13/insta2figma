@@ -477,8 +477,7 @@ export class InstagramPreviewService {
         planTier: ctx.planTier,
       });
       const pageOnePosts = cached.parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
-      const postsPreviewRaw = buildIndexedPostPreview(pageOnePosts, cached.timelineOrder, { indexStart: 1 });
-      const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
+      const postsPreview = buildIndexedPostPreview(pageOnePosts, cached.timelineOrder, { indexStart: 1 });
       return {
         cacheKey,
         base: { ...cached, profilePicDataUrl: null, postsPreview },
@@ -494,10 +493,9 @@ export class InstagramPreviewService {
     apifyProfile: ApifyPreviewProfile,
   ): Promise<CachedPreviewPayload> {
     const pageOnePosts = apifyProfile.parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
-    const postsPreviewRaw = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
+    const postsPreview = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
       indexStart: 1,
     });
-    const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
 
     let profilePicDataUrl: string | null = null;
     if (apifyProfile.profilePicUrlHd) {
@@ -576,12 +574,11 @@ export class InstagramPreviewService {
     hasNextPreviewPage: boolean;
     nextPreviewCursor: string | null;
   }): Promise<ProfilePreviewResponse> {
-    const postsPreviewRaw = buildIndexedPostPreview(
+    const postsPreview = buildIndexedPostPreview(
       input.posts,
       input.timelineOrder,
       { indexStart: (input.previewPage - 1) * PREVIEW_PAGE_SIZE + 1 },
     );
-    const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
 
     return {
       username: input.username,
@@ -838,16 +835,12 @@ export class InstagramPreviewService {
       }
     }
 
-    // Thumbnails construídos DEPOIS dos feed fetches para incluir posts do feed
+    // postsPreview com CDN URLs directas — download/conversão feita no browser via <img>
     const pageOnePosts = parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
-    const postsPreviewRaw = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
+    const postsPreview = buildIndexedPostPreview(pageOnePosts, timelineOrder, {
       indexStart: 1,
     });
-    const thumbUrlCount = postsPreviewRaw.filter(p => !!p.thumbnailUrl).length;
-    console.info(`[ig:thumbs] ${postsPreviewRaw.length} posts, ${thumbUrlCount} com URL de thumbnail`);
-    const postsPreview = await inlinePostsPreviewThumbnails(postsPreviewRaw);
-    const thumbDataCount = postsPreview.filter(p => p.thumbnailUrl?.startsWith('data:')).length;
-    console.info(`[ig:thumbs] ${thumbDataCount}/${postsPreview.length} thumbnails convertidos para data URL`);
+    console.info(`[ig:thumbs] ${postsPreview.length} posts, ${postsPreview.filter(p => !!p.thumbnailUrl).length} com URL de thumbnail`);
 
     let profilePicDataUrl: string | null = null;
     if (hd) {

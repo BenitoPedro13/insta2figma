@@ -1304,7 +1304,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       });
       for (const item of postsWithThumbs) {
         const url = item.thumbnailUrl;
-        if (typeof url === 'string' && url.startsWith('data:') && url.length > 0) {
+        if (typeof url === 'string' && url.length > 0) {
           figma.ui.postMessage({
             type: 'profile-preview-thumb',
             requestKind,
