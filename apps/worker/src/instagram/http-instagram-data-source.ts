@@ -58,8 +58,7 @@ function classifyFailMessage(
 
 const sessionPool = SessionPool.load();
 
-function buildHeaders(): Record<string, string> {
-  const session = sessionPool.next();
+function buildHeaders(session?: { cookie?: string } | null): Record<string, string> {
   const headers = { ...IG_HEADERS };
   if (session?.cookie) headers['Cookie'] = session.cookie;
   return headers;
@@ -76,6 +75,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     selectionInput: ScrapeSelectionInput,
     defaults?: { defaultMaxPosts?: number },
   ): Promise<ScrapeJobResultSummaryV5> {
+    const session = sessionPool.next();
     const agent = session?.proxy ? buildProxyAgent(session.proxy) ?? getProxyAgent() : getProxyAgent();
 
     let res: Response;
@@ -84,7 +84,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
         webProfileUrl(usernameNormalized),
         {
           method: 'GET',
-          headers: buildHeaders(),
+          headers: buildHeaders(session),
           signal: AbortSignal.timeout(this.options.timeoutMs),
           redirect: 'follow',
           ...(agent ? { dispatcher: agent } : {}),
@@ -157,7 +157,7 @@ export class HttpInstagramDataSource implements InstagramDataSource {
           feedUrl(userId),
           {
             method: 'GET',
-            headers: buildHeaders(),
+            headers: buildHeaders(session),
             signal: AbortSignal.timeout(this.options.timeoutMs),
             redirect: 'follow',
             ...(agent ? { dispatcher: agent } : {}),
