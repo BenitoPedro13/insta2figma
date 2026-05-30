@@ -1,9 +1,21 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query, Req, Res, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import type { RequestUser } from '../auth/jwt.strategy';
 import { PlanService } from '../plan/plan.service';
 import { InstagramPreviewService } from './instagram-preview.service';
+import { IG_IMAGE_HEADERS } from '@insta2figma/shared-instagram';
+
+const ALLOWED_CDN_HOSTS = ['cdninstagram.com', 'fbcdn.net'];
+
+function isInstagramCdnUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'https:' && ALLOWED_CDN_HOSTS.some((h) => u.hostname.endsWith(h));
+  } catch {
+    return false;
+  }
+}
 import type { PostSelectionMode, PostTimelineOrder } from '@insta2figma/shared-contracts';
 
 type AuthedRequest = Request & { user: RequestUser };
@@ -40,6 +52,38 @@ export class InstagramController {
     private readonly preview: InstagramPreviewService,
     private readonly plan: PlanService,
   ) {}
+
+  @Get('image')
+  @UseGuards(AuthGuard('jwt'))
+  async proxyImage(
+    @Query('url') rawUrl: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const url = decodeURIComponent(rawUrl ?? '').trim();
+    if (!url || !isInstagramCdnUrl(url)) {
+      throw new BadRequestException('URL inválido — apenas Instagram CDN permitido.');
+    }
+
+    let imageRes: globalThis.Response;
+    try {
+      imageRes = await fetch(url, { headers: IG_IMAGE_HEADERS, redirect: 'follow' });
+    } catch {
+      throw new ServiceUnavailableException('Falha ao obter imagem do Instagram CDN.');
+    }
+
+    if (!imageRes.ok) {
+      res.status(imageRes.status).end();
+      return;
+    }
+
+    const ct = imageRes.headers.get('content-type') ?? 'image/jpeg';
+    const buf = Buffer.from(await imageRes.arrayBuffer());
+
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
+    res.setHeader('Content-Length', buf.byteLength);
+    res.status(200).send(buf);
+  }
 
   @Get('profile-preview')
   @UseGuards(AuthGuard('jwt'))

@@ -154,27 +154,6 @@ function toRedisCachedPayload(p: CachedPreviewPayload): RedisCachedPreviewPayloa
   return { ...rest, cachedAt: Date.now() };
 }
 
-/** Inline thumbnails CDN → base64 no servidor (URLs Instagram CDN não funcionam em <img> no plugin Figma). */
-async function inlineThumbnails<T extends { thumbnailUrl?: string | null }>(
-  items: T[],
-): Promise<T[]> {
-  if (items.length === 0) return items;
-  const result = [...items];
-  const queue = result
-    .map((item, i) => ({ item, i }))
-    .filter(({ item }) => !!item.thumbnailUrl && !item.thumbnailUrl.startsWith('data:'));
-
-  const workers = Array.from({ length: Math.min(5, queue.length) }, async () => {
-    while (queue.length > 0) {
-      const entry = queue.shift();
-      if (!entry) break;
-      const dataUrl = await fetchInstagramImageAsDataUrl(entry.item.thumbnailUrl!, MAX_AVATAR_BYTES);
-      if (dataUrl) result[entry.i] = { ...entry.item, thumbnailUrl: dataUrl };
-    }
-  });
-  await Promise.all(workers);
-  return result;
-}
 
 type ProfilePreviewResponse = Omit<CachedPreviewPayload, 'parsedPosts'> & {
   previewPage: number;
@@ -420,21 +399,15 @@ export class InstagramPreviewService {
       }
 
       const pageOnePosts = cached.parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
-      const postsPreview = await inlineThumbnails(
-        buildIndexedPostPreview(pageOnePosts, cached.timelineOrder, { indexStart: 1 }),
-      );
+      const postsPreview = buildIndexedPostPreview(pageOnePosts, cached.timelineOrder, { indexStart: 1 });
       return {
         cacheKey,
         base: { ...cached, profilePicDataUrl: null, postsPreview },
       };
     }
     const base = await this.fetchInstagramPreviewBase(username, fetchCount, timelineOrder, ctx);
-    // Inline thumbnails na resposta (CDN URLs não funcionam no plugin Figma).
-    // Redis guarda apenas CDN URLs (toRedisCachedPayload exclui postsPreview).
-    const postsPreviewInlined = await inlineThumbnails(base.postsPreview);
-    const baseWithThumbs = { ...base, postsPreview: postsPreviewInlined };
-    await this.writeCache(cacheKey, toRedisCachedPayload(baseWithThumbs));
-    return { base: baseWithThumbs, cacheKey };
+    await this.writeCache(cacheKey, toRedisCachedPayload(base));
+    return { base, cacheKey };
   }
 
   private async fetchFeedPageViaApify(

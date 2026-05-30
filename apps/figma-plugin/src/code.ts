@@ -1305,12 +1305,16 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       for (const item of postsWithThumbs) {
         const url = item.thumbnailUrl;
         if (typeof url === 'string' && url.length > 0) {
+          // CDN Instagram não funciona em <img> no iframe Figma — usar proxy da API
+          const proxied = url.startsWith('data:') || url.startsWith('blob:')
+            ? url
+            : `${base}/v1/instagram/image?url=${encodeURIComponent(url)}`;
           figma.ui.postMessage({
             type: 'profile-preview-thumb',
             requestKind,
             requestId: msg.requestId,
             shortcode: item.shortcode,
-            thumbnailUrl: url,
+            thumbnailUrl: proxied,
           });
         }
       }
