@@ -16,11 +16,11 @@ export interface RetryOptions {
   maxAttempts?: number;
 }
 
-/** Para o worker (background): delays conservadores — 2s, 4s. */
-export const WORKER_RETRY: RetryOptions = { baseDelayMs: 2_000, maxDelayMs: 12_000, maxAttempts: 3 };
+/** Preset único: 500ms → 1s. O BullMQ tem o seu próprio backoff de minutos para rate limits reais. */
+export const WORKER_RETRY: RetryOptions = { baseDelayMs: 500, maxDelayMs: 3_000, maxAttempts: 3 };
 
-/** Para a API (utilizador à espera): delays curtos — 500ms, 1s. */
-export const PREVIEW_RETRY: RetryOptions = { baseDelayMs: 500, maxDelayMs: 3_000, maxAttempts: 3 };
+/** Alias — mesmo preset, mantido para clareza no código da API. */
+export const PREVIEW_RETRY: RetryOptions = WORKER_RETRY;
 
 function sleepWithJitter(baseMs: number, maxMs: number, attempt: number): Promise<void> {
   const exp = Math.min(baseMs * 2 ** attempt, maxMs);
