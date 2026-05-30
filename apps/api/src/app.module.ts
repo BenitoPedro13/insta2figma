@@ -7,6 +7,7 @@ import { RedisCacheModule } from './cache/redis-cache.module';
 import { AuthModule } from './auth/auth.module';
 import { JobsModule } from './jobs/jobs.module';
 import { HealthModule } from './health/health.module';
+import { AdminModule } from './admin/admin.module';
 import { InstagramModule } from './instagram/instagram.module';
 import { BillingModule } from './billing/billing.module';
 import { UsersModule } from './users/users.module';
@@ -24,6 +25,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     JobsModule,
     HealthModule,
+    AdminModule,
     InstagramModule,
     BillingModule,
     UsersModule,
