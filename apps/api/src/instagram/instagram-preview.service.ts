@@ -572,7 +572,7 @@ export class InstagramPreviewService {
     const errorKind = res.status === 429
       ? 'rate_limited'
       : res.status === 404 ? 'not_found'
-      : res.status === 401 ? 'auth'
+      : (res.status === 401 || res.status === 400) ? 'auth'
       : !res.ok ? 'unavailable'
       : null;
 
@@ -590,7 +590,8 @@ export class InstagramPreviewService {
       planTier: ctx.planTier,
     });
 
-    if (res.status === 401 && session) {
+    // 400 com sessão activa = cookie expirado/bloqueado (Instagram devolve 400 em vez de 401)
+    if ((res.status === 401 || res.status === 400) && session) {
       this.sessionPool.markInvalid(session.account);
     }
     if (res.status === 404) {
@@ -859,7 +860,7 @@ export class InstagramPreviewService {
     );
     const errorKind = res.status === 429
       ? 'rate_limited'
-      : res.status === 401 ? 'auth'
+      : (res.status === 401 || res.status === 400) ? 'auth'
       : !res.ok ? 'unavailable'
       : null;
 
@@ -877,7 +878,7 @@ export class InstagramPreviewService {
       planTier: ctx.planTier,
     });
 
-    if (res.status === 401 && session) {
+    if ((res.status === 401 || res.status === 400) && session) {
       this.sessionPool.markInvalid(session.account);
     }
     if (res.status === 429) {

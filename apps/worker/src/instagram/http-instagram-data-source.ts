@@ -87,7 +87,8 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     if (res.status === 429) {
       throw new InstagramUpstreamError('IG_RATE_LIMIT', 'Instagram returned rate limit (429).', true);
     }
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 400 || res.status === 401 || res.status === 403) {
+      if (res.status === 400 || res.status === 401) sessionPool.markInvalid(session?.account ?? '');
       throw new InstagramUpstreamError('IG_BLOCKED', `Instagram returned HTTP ${res.status} (access denied).`, false);
     }
     if (res.status >= 500) {
