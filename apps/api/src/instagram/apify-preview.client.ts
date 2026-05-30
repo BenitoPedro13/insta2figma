@@ -113,6 +113,11 @@ export async function fetchPreviewViaApify(
     resultsLimit: safeCount,
   };
 
+  const tokenPreview = config.token.length > 8
+    ? `${config.token.slice(0, 4)}...${config.token.slice(-4)}`
+    : '(token curto)';
+  console.info(`[apify] a chamar actor=${config.actorId} username=${username} token=${tokenPreview}`);
+
   let res: Response;
   try {
     res = await fetch(buildSyncUrl(config), {
@@ -125,8 +130,10 @@ export async function fetchPreviewViaApify(
     throw new Error('Network failure or timeout while contacting Apify.');
   }
 
+  console.info(`[apify] resposta status=${res.status} username=${username}`);
+
   if (res.status === 401 || res.status === 403) {
-    throw new Error(`Apify returned HTTP ${res.status} (check APIFY_TOKEN).`);
+    throw new Error(`Apify returned HTTP ${res.status} — token=${tokenPreview} actor=${config.actorId}`);
   }
   if (res.status === 429) {
     throw new Error('Apify returned rate limit (429).');
