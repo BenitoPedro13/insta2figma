@@ -499,6 +499,14 @@ export function App() {
     lastLoadedPreviewPageRef.current = 1;
   }, []);
 
+  const resetPostSelection = useCallback(() => {
+    setSelectedIndices([]);
+    setMaxPosts(0);
+    setStartIndex(1);
+    setPostCount(1);
+    setSelectionMode('recent');
+  }, []);
+
   const onBillingCheckoutPro = useCallback(
     (cycle: 'monthly' | 'yearly' = 'monthly') => {
       parent.postMessage(
@@ -550,6 +558,7 @@ export function App() {
       previewFetchedForUsername.current = '';
       setPreviewLoading(false);
       resetPreviewPagination();
+      resetPostSelection();
       setPreview(null);
       setPreviewError(PROFILE_LINK_ONLY_MSG);
       return;
@@ -558,26 +567,26 @@ export function App() {
       previewFetchedForUsername.current = '';
       setPreviewLoading(false);
       resetPreviewPagination();
+      resetPostSelection();
       setPreview(null);
       setPreviewError('');
-      setSelectedIndices([]);
-      setMaxPosts(0);
-      setStartIndex(1);
-      setPostCount(1);
-      setSelectionMode('recent');
       return;
     }
     if (previewFetchedForUsername.current === user) {
       return;
     }
+
+    resetPreviewPagination();
+    resetPostSelection();
+    setPreview(null);
+    setPreviewError('');
+
     const timer = window.setTimeout(() => {
       const reqId = previewReqId.current + 1;
       previewReqId.current = reqId;
       previewFetchedForUsername.current = user;
-      resetPreviewPagination();
       setPreviewLoading(true);
       setPreviewThumbsLoading(false);
-      setPreviewError('');
       parent.postMessage(
         {
           pluginMessage: {
@@ -598,7 +607,7 @@ export function App() {
       );
     }, 420);
     return () => window.clearTimeout(timer);
-  }, [importing, username, maxPostsLimit, resetPreviewPagination]);
+  }, [importing, username, maxPostsLimit, resetPreviewPagination, resetPostSelection]);
 
   const fetchPreviewPage = useCallback(
     (page: number) => {
