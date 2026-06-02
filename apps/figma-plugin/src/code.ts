@@ -1339,6 +1339,13 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     return;
   }
 
+  if (msg.type === 'auth-logout') {
+    await figma.clientStorage.deleteAsync(SESSION_STORAGE_KEY);
+    figma.ui.postMessage({ type: 'show-login' });
+    figma.notify('Signed out.');
+    return;
+  }
+
   if (msg.type === 'auth-magic-link') {
     const base = await getApiBase();
     const email = typeof msg.email === 'string' ? msg.email.trim() : '';

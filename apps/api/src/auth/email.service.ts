@@ -17,6 +17,7 @@ export class EmailService {
         host: 'smtp.gmail.com',
         port: 587,
         secure: false,
+        family: 4, // força IPv4 — Railway não suporta IPv6
         auth: { user, pass },
       });
       console.info('[email] SMTP configurado via Gmail');

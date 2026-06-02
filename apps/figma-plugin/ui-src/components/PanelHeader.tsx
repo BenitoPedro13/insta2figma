@@ -10,6 +10,7 @@ type PanelHeaderProps = {
   sessionError?: string;
   onUpgrade: () => void;
   onManage: () => void;
+  onSignOut: () => void;
   onOpenExternal: (url: string) => void;
 };
 
@@ -19,6 +20,7 @@ export function PanelHeader({
   sessionError,
   onUpgrade,
   onManage,
+  onSignOut,
   onOpenExternal,
 }: PanelHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -82,6 +84,7 @@ export function PanelHeader({
                 planTier={planTier}
                 onUpgrade={onUpgrade}
                 onManage={onManage}
+                onSignOut={onSignOut}
                 onOpenExternal={onOpenExternal}
                 onClose={closeMenu}
               />

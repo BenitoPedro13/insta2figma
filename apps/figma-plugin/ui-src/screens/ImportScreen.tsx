@@ -99,6 +99,7 @@ type ImportScreenProps = {
   onBillingCheckout: (cycle?: 'monthly' | 'yearly') => void;
   onBillingCheckoutMax: (cycle?: 'monthly' | 'yearly') => void;
   onManage: () => void;
+  onSignOut: () => void;
   onOpenExternal: (url: string) => void;
 };
 
@@ -157,6 +158,7 @@ export function ImportScreen({
   onBillingCheckout,
   onBillingCheckoutMax,
   onManage,
+  onSignOut,
   onOpenExternal,
 }: ImportScreenProps) {
   const onSubmit = useCallback(
@@ -259,6 +261,7 @@ export function ImportScreen({
             sessionError={sessionError}
             onUpgrade={onShowUpgradeOverlay}
             onManage={onManage}
+            onSignOut={onSignOut}
             onOpenExternal={onOpenExternal}
           />
           <PluginTabs active={activeTab} onChange={onTabChange} />

@@ -570,6 +570,10 @@ export function App() {
     parent.postMessage({ pluginMessage: { type: 'billing-portal' } }, '*');
   }, []);
 
+  const onSignOut = useCallback(() => {
+    parent.postMessage({ pluginMessage: { type: 'auth-logout' } }, '*');
+  }, []);
+
   const onOpenExternal = useCallback((url: string) => {
     parent.postMessage({ pluginMessage: { type: 'open-external', url } }, '*');
   }, []);
@@ -889,22 +893,19 @@ export function App() {
 
   const listTab = activeTab === 'favorites' ? 'favorites' : 'history';
 
-  if (showLogin) {
-    return (
-      <LoginScreen
-        state={loginState}
-        onMagicLink={(email) =>
-          parent.postMessage({ pluginMessage: { type: 'auth-magic-link', email } }, '*')
-        }
-        onGoogle={() =>
-          parent.postMessage({ pluginMessage: { type: 'auth-google' } }, '*')
-        }
-      />
-    );
-  }
-
   return (
     <div className="plugin-shell relative flex min-h-0 flex-col">
+      {showLogin && (
+        <LoginScreen
+          state={loginState}
+          onMagicLink={(email) =>
+            parent.postMessage({ pluginMessage: { type: 'auth-magic-link', email } }, '*')
+          }
+          onGoogle={() =>
+            parent.postMessage({ pluginMessage: { type: 'auth-google' } }, '*')
+          }
+        />
+      )}
       <div className="plugin-frame flex min-h-0 flex-1">
         <PluginSidebar />
         <div className="plugin-main flex min-h-0 min-w-0 flex-1 flex-col bg-bg-white-0">
@@ -965,6 +966,7 @@ export function App() {
                 onBillingCheckout={onBillingCheckoutPro}
                 onBillingCheckoutMax={onBillingCheckoutMax}
                 onManage={onManage}
+                onSignOut={onSignOut}
                 onOpenExternal={onOpenExternal}
               />
             </div>

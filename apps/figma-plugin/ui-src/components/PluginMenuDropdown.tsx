@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import {
   RiArrowRightUpLine,
   RiFeedbackLine,
+  RiLogoutBoxRLine,
   RiMailLine,
   RiSettings3Line,
 } from '@remixicon/react';
@@ -21,6 +22,7 @@ type PluginMenuDropdownProps = {
   planTier: PlanTier;
   onUpgrade: () => void;
   onManage: () => void;
+  onSignOut: () => void;
   onOpenExternal: (url: string) => void;
   onClose: () => void;
   className?: string;
@@ -57,6 +59,7 @@ export function PluginMenuDropdown({
   planTier,
   onUpgrade,
   onManage,
+  onSignOut,
   onOpenExternal,
   onClose,
   className,
@@ -110,6 +113,14 @@ export function PluginMenuDropdown({
         icon={RiFeedbackLine}
         label="Send feedback"
         onClick={() => openLink(FEEDBACK_EMAIL)}
+      />
+
+      <MenuDivider />
+
+      <MenuItem
+        icon={RiLogoutBoxRLine}
+        label="Sign out"
+        onClick={() => { onSignOut(); onClose(); }}
       />
 
       <MenuDivider />
