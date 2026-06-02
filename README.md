@@ -135,6 +135,7 @@ Guia completo (scopes do token, troubleshooting, `curl`): **[docs/DEV-POLAR-NGRO
 ## Deploy (produção)
 
 - **Railway:** **[docs/RAILWAY.md](docs/RAILWAY.md)** — Postgres + Redis + API + worker no mesmo projeto.
+- **Auth:** **[docs/AUTH.md](docs/AUTH.md)** — magic link, Google OAuth, Gmail API, refresh token.
 - **Geral:** **[docs/DEPLOY.md](docs/DEPLOY.md)** — Docker Compose VPS, R2, plugin Figma.
 - **Sessões Instagram:** **[docs/SESSION-MANAGEMENT.md](docs/SESSION-MANAGEMENT.md)** — criar contas, extrair cookies, hot-reload sem redeploy, alertas Discord/Slack.
 

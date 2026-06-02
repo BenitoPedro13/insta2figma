@@ -13,7 +13,7 @@ Variáveis de sessão e admin:
 
 Guia completo de sessões: **[docs/SESSION-MANAGEMENT.md](../../docs/SESSION-MANAGEMENT.md)**.
 
-> **Auth:** o plugin Figma usa `POST /v1/auth/figma` (`figmaUserId` de `figma.currentUser`). `register`/`login` por email continuam disponíveis para testes manuais com `curl`.
+> **Auth:** magic link (`POST /v1/auth/magic-link`) + Google OAuth (`GET /v1/auth/google/start`) + polling (`GET /v1/auth/poll`). Refresh automático via `POST /v1/auth/refresh`. Setup completo: **[docs/AUTH.md](../../docs/AUTH.md)**. O endpoint legado `POST /v1/auth/figma` continua disponível para backwards compat.
 
 ### Billing Polar.sh (sandbox)
 

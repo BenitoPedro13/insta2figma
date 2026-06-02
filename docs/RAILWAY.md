@@ -33,6 +33,8 @@ Em cada serviço → **Settings**:
 
 ## 3. Variáveis — serviço `api`
 
+> Auth completo documentado em [docs/AUTH.md](./AUTH.md).
+
 Referências Railway (`${{...}}`) ligam plugins automaticamente.
 
 ```env
@@ -45,9 +47,17 @@ REDIS_URL=${{Redis.REDIS_URL}}
 
 # Obrigatório — gera com: openssl rand -base64 48
 JWT_SECRET=
-JWT_EXPIRES_IN=7d
+JWT_EXPIRES_IN=30d
 
 CORS_ORIGINS=
+
+# Auth — magic link + Google OAuth (ver docs/AUTH.md)
+PUBLIC_API_URL=https://<api-domain>.up.railway.app
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REFRESH_TOKEN=
+GMAIL_FROM=teu@gmail.com
+GOOGLE_CALLBACK_URL=https://<api-domain>.up.railway.app/v1/auth/google/callback
 
 # Object storage (wrapped-mug — t3.storageapi.dev)
 S3_ENDPOINT=${{wrapped-mug.ENDPOINT}}
@@ -192,6 +202,10 @@ Se jobs ficarem `queued`, confirma que o worker está **Running** e que `REDIS_U
 
 | Problema | Solução |
 |----------|---------|
+| Login overlay nunca fecha | `PUBLIC_API_URL` errado ou em falta |
+| Magic link 500 | `GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN` em falta ou `GMAIL_FROM` vazio |
+| Google OAuth 400 callback | `GOOGLE_CALLBACK_URL` não corresponde ao URI configurado no Google Cloud |
+| Refresh token expirou (7 dias) | App ainda em "Testing" no Google Cloud → publicar; regenerar token em [AUTH.md](./AUTH.md) |
 | `503 Polar billing is not configured` | `POLAR_ACCESS_TOKEN` em falta na API |
 | `Plan pro (yearly) is not configured yet` | `POLAR_PRODUCT_ID_PRO_YEARLY` em falta |
 | `checkpoint_required` no worker | Sessão criada noutro IP; cria conta com Chrome + proxy (ver secção 7) |
