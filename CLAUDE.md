@@ -1,0 +1,116 @@
+# Insta2Figma — Codebase Guide for Claude
+
+## What this project does
+
+Insta2Figma imports Instagram posts (images, carousels) directly onto a design canvas. It ships as two plugins — **Figma** and **Framer** — backed by a shared NestJS API and a BullMQ worker.
+
+## Monorepo layout
+
+```
+apps/
+  api/              NestJS API — auth, jobs, billing (Polar), quotas
+  worker/           BullMQ consumer — Instagram scrape, S3 upload
+  figma-plugin/     Figma plugin (code.ts main thread + shared UI)
+  framer-plugin/    Framer plugin (FramerHost + shared UI)
+packages/
+  plugin-ui/        Shared React UI for both plugins (App.tsx, all components)
+  shared-contracts/ Zod schemas + types shared by API, worker, and plugins
+  shared-instagram/ Instagram session pool, proxy pool, retry logic
+  shared-config/    Base tsconfig + ESLint config
+docs/               Architecture, ADRs, deployment guides
+scripts/            Dev onboarding (setup.mjs), cookie helper
+```
+
+## Key architecture: PluginHost pattern
+
+Both plugins render the same `<App host={host} />` from `packages/plugin-ui`.
+The `PluginHost` interface (defined in `packages/plugin-ui/src/host.ts`) abstracts
+all platform differences:
+
+```ts
+interface PluginHost {
+  send(msg: HostMessage): void         // UI → host (trigger action)
+  subscribe(handler) => () => void     // host → UI (receive results)
+  readonly canResize?: boolean         // false in Framer (noop resize handle)
+}
+```
+
+- **`FigmaHost`** (`apps/figma-plugin/ui-src/FigmaHost.ts`): wraps `parent.postMessage`
+  / `window.addEventListener`. The Figma plugin's `code.ts` handles the heavy work.
+- **`FramerHost`** (`apps/framer-plugin/src/FramerHost.ts`): calls the API directly
+  from the plugin iframe (CORS allowed). Uses `framer.uploadImage` + `framer.createFrameNode`
+  for canvas placement. Stores token in `localStorage`.
+
+**Adding a feature to both plugins:**
+1. Add the message type to `PluginHost` (`packages/plugin-ui/src/host.ts`)
+2. Handle it in `App.tsx` (`packages/plugin-ui/src/App.tsx`) using `host.send()`
+3. Implement in `FigmaHost` + `code.ts` for Figma
+4. Implement in `FramerHost` for Framer
+
+## Build commands
+
+```bash
+pnpm bootstrap          # first-time onboarding (env, Docker, DB, deps)
+pnpm dev                # API + worker (same terminal)
+
+# Figma plugin
+node apps/figma-plugin/scripts/build.mjs   # full build → dist/
+# or
+pnpm --filter @insta2figma/figma-plugin run build
+
+# Framer plugin
+cd apps/framer-plugin && pnpm dev    # dev server at https://localhost:5173
+cd apps/framer-plugin && pnpm build  # production build
+```
+
+## CSS / Tailwind
+
+`packages/plugin-ui/src/globals.css` imports Tailwind v4 with `@source "."`.
+The `@source "."` directive is **required** — without it, Tailwind v4 only scans
+within the Vite root (`ui-src/` for Figma) and misses the package components.
+
+Both plugins add an alias in their `vite.config.ts`:
+```ts
+'@insta2figma/plugin-ui': resolve(pluginUiSrc, 'index.ts'),
+'@': pluginUiSrc,   // resolves @/utils/cn etc. to packages/plugin-ui/src/
+```
+
+## API base resolution
+
+**Figma plugin (`code.ts`):** probes `localhost:3333/v1/health` at startup (2s timeout);
+falls back to Railway. Build mode can be forced: `INSTA2FIGMA_API_MODE=local|production`.
+
+**Framer plugin (`FramerHost.ts`):** hardcoded to Railway production. For local dev,
+update `API` constant to `http://localhost:3333` and add
+`CORS_ORIGINS=https://localhost:5173` to `apps/api/.env`.
+
+## Auth flow
+
+Magic link: `POST /v1/auth/magic-link` → returns `pollingId` → poll `GET /v1/auth/poll`
+every 3s → receive JWT. Google OAuth: `GET /v1/auth/google/start` → open URL in browser
+→ same polling.
+
+**Figma:** JWT stored in `figma.clientStorage` via the main thread (`code.ts`).
+**Framer:** JWT stored in `localStorage` (key: `insta2figma:token:v1`).
+
+## Import flow
+
+1. UI sends `import-profile` message with username + selection params.
+2. **Figma:** `code.ts` calls `POST /v1/jobs` → polls job → downloads images in parallel
+   (pool of 5) → `figma.createImage` + `figma.createRectangle` on canvas.
+3. **Framer:** `FramerHost` calls `POST /v1/jobs` → polls → `fetch` images → 
+   `framer.uploadImage` → `framer.createFrameNode` in a nested stack layout
+   (outer = vertical stack, rows = horizontal stack, leaves = image frames).
+4. Both use `storageKey` to group carousel images per post row when `expandCarouselImages=true`.
+
+## Monorepo pitfalls
+
+- **pnpm workspace deps**: `packages/plugin-ui` must declare all its npm deps in its
+  own `package.json` (Radix UI, Remix Icons, Tailwind, etc.) or Rollup can't resolve them.
+- **React deduplication**: `framer-plugin`'s `vite.config.ts` sets `resolve.dedupe: ['react', 'react-dom']`
+  to avoid the "multiple React instances" error with the workspace symlink.
+- **Framer `isAllowedTo`**: pass the **method name** (`"createFrameNode"`, `"addImage"`),
+  NOT the permission identifier (`"createNode"`). Calling with wrong string throws
+  `TypeError: We[t] is not iterable`.
+- **Framer pin positioning**: child frame position inside a parent uses `WithPinsTrait`
+  (`left: "Npx"`, `top: "Npx"`), NOT `x`/`y`. Use stack layout to avoid manual positioning.

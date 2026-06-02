@@ -1,7 +1,8 @@
 # ADR-009: Suportar o plugin no Framer reutilizando a UI no monorepo
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-06-02
+**Implemented:** 2026-06-02
 **Deciders:** Benito Pedro
 **Tags:** plugin, framer, figma, monorepo, arquitetura, reuse, ui
 

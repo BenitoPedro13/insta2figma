@@ -2,5 +2,8 @@
   "name": "@insta2figma/shared-config",
   "version": "0.0.1",
   "private": true,
-  "files": ["typescript"]
+  "files": [
+    "typescript"
+  ],
+  "description": "Shared tsconfig and ESLint config for the monorepo"
 }

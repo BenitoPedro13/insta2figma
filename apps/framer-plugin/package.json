@@ -1,5 +1,5 @@
 {
-  "name": "framer-plugin",
+  "name": "@insta2figma/framer-plugin",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -32,5 +32,6 @@
     "globals": "^15.9.0",
     "typescript": "^5.9",
     "vite": "^8"
-  }
+  },
+  "description": "Insta2Figma — Framer plugin (shared UI + FramerHost)"
 }

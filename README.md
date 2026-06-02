@@ -2,9 +2,9 @@
 
 Monorepo descrito em [docs/ARQUITETURA-INSTA2FIGMA.md](docs/ARQUITETURA-INSTA2FIGMA.md).
 
-Estado atual: plugin Figma com UI React/Vite, histórico/favoritos persistidos em
-`figma.clientStorage`, preview de perfil (avatar + estimativas) e import assíncrono
-via API Nest + worker BullMQ.
+Estado atual: **dois plugins** (Figma + Framer) com UI partilhada via `packages/plugin-ui`,
+histórico/favoritos persistidos, preview de perfil (avatar + estimativas) e import
+assíncrono via API Nest + worker BullMQ. Billing via Polar.sh (Free / Pro / Max).
 
 ## Requisitos
 
@@ -65,12 +65,19 @@ pnpm infra:logs:redis    # só Redis
 
 ## Mapa do monorepo
 
-- `apps/figma-plugin`: plugin (UI + `code.ts` no main thread do Figma).
-- `apps/api`: API Nest (`/v1`, auth MVP, jobs, preview de perfil).
-- `apps/worker`: consumidor BullMQ (scrape Instagram + uploads para S3/MinIO).
-- `packages/shared-contracts`: contratos Zod/tipos compartilhados.
-- `packages/shared-instagram`: sessões (`globalSessionPool`), proxy pool, retry e parsing partilhados entre API e worker.
-- `docs/`: arquitetura, plano de implementação e especificação visual da UI.
+| Pasta | Descrição |
+|-------|-----------|
+| `apps/figma-plugin` | Plugin Figma — `code.ts` (main thread) + UI via `packages/plugin-ui` |
+| `apps/framer-plugin` | Plugin Framer — `FramerHost` chama a API directamente (sem bridge) |
+| `apps/api` | API NestJS — auth, jobs, billing Polar, quotas, preview |
+| `apps/worker` | Consumidor BullMQ — scrape Instagram + uploads S3/MinIO |
+| `packages/plugin-ui` | **UI partilhada** — `App.tsx`, todos os componentes, `PluginHost` interface |
+| `packages/shared-contracts` | Contratos Zod/tipos partilhados (API, worker, plugins) |
+| `packages/shared-instagram` | Sessões, proxy pool, retry — partilhados entre API e worker |
+| `packages/shared-config` | `tsconfig` base, ESLint partilhado |
+| `docs/` | Arquitetura, ADRs, guias de deploy e sessões |
+
+Ver [CLAUDE.md](CLAUDE.md) para o guia de arquitectura e padrões de código.
 
 ### Infra local (Postgres + Redis)
 
@@ -104,7 +111,9 @@ Copia também `apps/worker/.env.example` → `apps/worker/.env` (BD + Redis alin
 Rotas e exemplos `curl`: [apps/api/README.md](apps/api/README.md).  
 Worker e política de assets: [apps/worker/README.md](apps/worker/README.md).
 
-Importar no Figma após `pnpm build`: `apps/figma-plugin/dist/manifest.json` — ver [apps/figma-plugin/README.md](apps/figma-plugin/README.md).
+**Figma:** após `pnpm build`, importar `apps/figma-plugin/dist/manifest.json` — ver [apps/figma-plugin/README.md](apps/figma-plugin/README.md).
+
+**Framer:** `cd apps/framer-plugin && pnpm dev` → apontar o Framer para `https://localhost:5173` — ver [apps/framer-plugin/README.md](apps/framer-plugin/README.md).
 
 ### Billing Polar.sh + ngrok (checkout Pro, webhooks)
 

@@ -20,6 +20,21 @@ ou `pnpm build` (builda todos os pacotes).
 
 O `manifest.json` na pasta `dist/` referencia `code.js` e `ui.html` no mesmo directório (ver [ARQUITETURA-INSTA2FIGMA.md](../../docs/ARQUITETURA-INSTA2FIGMA.md) §4.4).
 
+## Shared UI (`packages/plugin-ui`)
+
+A UI do plugin vive em `packages/plugin-ui/src/` — **não** em `ui-src/` (que só contém o entry point `main.tsx` e `FigmaHost.ts`).
+
+| Ficheiro | Propósito |
+|----------|-----------|
+| `packages/plugin-ui/src/App.tsx` | Componente raíz; recebe `{ host: PluginHost }` |
+| `packages/plugin-ui/src/host.ts` | Interface `PluginHost` + tipos de mensagem |
+| `packages/plugin-ui/src/HostContext.tsx` | React context para aceder ao host em componentes filhos |
+| `apps/figma-plugin/ui-src/FigmaHost.ts` | Implementação Figma — wraps `parent.postMessage` |
+
+O alias `@insta2figma/plugin-ui` e `@` em `vite.config.ts` apontam para `packages/plugin-ui/src/`, por isso imports com `@/utils/cn` resolvem correctamente.
+
+O Tailwind v4 precisa de `@source "."` em `packages/plugin-ui/src/globals.css` para varrer os componentes do package (fora do `root` Vite).
+
 ## AlignUI (design system)
 
 Tailwind v4 + tokens AlignUI em `ui-src/globals.css`. Componentes em `ui-src/components/ui/` (ex.: `Button.Root`, `Button.Icon`) e ícones `@remixicon/react`.

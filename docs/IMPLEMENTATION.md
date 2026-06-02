@@ -11,7 +11,8 @@ Este guia **desdobra** o [roadmap (secção 13)](./ARQUITETURA-INSTA2FIGMA.md#13
 - [x] **Fase 5** — Scrape Instagram real (`InstagramDataSource`, erros classificados)
 - [x] **Fase 6** — MinIO/S3-compat, uploads worker, presign API e plugin (`polling`, thumbnails no canvas)
 - [x] **Fase 7** — Polar.sh + quotas atómicas + `GET /v1/me` + auth Figma + plugin billing
-- [ ] **Fase 8** — CORS, rate limits, observabilidade, DLQ + [checklist secção 14](./ARQUITETURA-INSTA2FIGMA.md#14-checklist-anti-padrões-llms-devem-evitar)
+- [x] **Fase 8a** — Plugin Framer: `packages/plugin-ui` (UI partilhada), `PluginHost` pattern, `FramerHost`, grid layout (ver [ADR-009](adr/ADR-009-framer-plugin-monorepo.md))
+- [ ] **Fase 8b** — CORS, rate limits, observabilidade, DLQ + [checklist secção 14](./ARQUITETURA-INSTA2FIGMA.md#14-checklist-anti-padrões-llms-devem-evitar)
 
 ## Onboarding DX (estado atual)
 
