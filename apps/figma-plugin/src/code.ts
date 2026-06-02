@@ -831,26 +831,42 @@ async function ensureSession(base: string): Promise<{
   }
   const figmaUserId = figmaUser.id;
   let stored = await loadStoredSession();
-  if (!stored || stored.figmaUserId !== figmaUserId) {
-    stored = await authFigmaUser(
-      base,
-      figmaUserId,
-      figmaUser.name ?? undefined,
-    );
+
+  // If there's a valid session (from magic link / Google / figma), use it directly.
+  // Only fall back to figma auto-auth if there's truly no session at all — this
+  // handles legacy users who never went through the new login screen.
+  if (!stored) {
+    stored = await authFigmaUser(base, figmaUserId, figmaUser.name ?? undefined);
   }
 
   try {
     const me = await fetchMe(base, stored.accessToken);
+    // Silently link figmaUserId if not yet linked (covers sessions from magic link / Google)
+    if (!stored.figmaUserId || stored.figmaUserId !== figmaUserId) {
+      stored = { ...stored, figmaUserId };
+      await saveStoredSession(stored);
+      try {
+        await apiFetch(`${base}/v1/auth/link-figma`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${stored.accessToken}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ figmaUserId }),
+        });
+      } catch (e) {
+        console.warn('[Insta2Figma] ensureSession link-figma failed (non-fatal)', e);
+      }
+    }
     return { session: stored, me };
   } catch (err) {
     const status = (err as { status?: number }).status;
     if (status !== 401) throw err;
-
-    stored = await authFigmaUser(
-      base,
-      figmaUserId,
-      figmaUser.name ?? undefined,
-    );
+    // Token expired — try refresh, then figma fallback
+    const refreshed = await tryRefreshSession(base, stored);
+    if (refreshed) {
+      const me = await fetchMe(base, refreshed.accessToken);
+      return { session: refreshed, me };
+    }
+    // Last resort: figma auto-auth (legacy path)
+    stored = await authFigmaUser(base, figmaUserId, figmaUser.name ?? undefined);
     const me = await fetchMe(base, stored.accessToken);
     return { session: stored, me };
   }
@@ -889,8 +905,11 @@ async function bootstrapSession(): Promise<void> {
             const me = await fetchMe(base, refreshed.accessToken);
             figma.ui.postMessage({ type: 'session-data', ...me });
             return;
-          } catch { /* fall through */ }
+          } catch (e) {
+            console.warn('[Insta2Figma] fetchMe after refresh failed', e);
+          }
         }
+        console.warn('[Insta2Figma] session expired and refresh failed — showing login');
         figma.ui.postMessage({ type: 'show-login' });
       } else {
         throw err;

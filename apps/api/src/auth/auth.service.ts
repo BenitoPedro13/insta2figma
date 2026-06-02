@@ -81,7 +81,7 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
 
     await this.prisma.authToken.create({
-      data: { token, pollingId, type: 'magic_link', expiresAt },
+      data: { token, pollingId, type: 'magic_link', email: emailNorm, expiresAt },
     });
 
     const publicUrl = this.config.get<string>('PUBLIC_API_URL')?.trim() ?? '';
@@ -103,36 +103,10 @@ export class AuthService {
     }
     if (record.jwt) return; // already verified
 
-    // We don't know the email at this point — it's stored on the token via the link
-    // We resolve: find or create the user when plugin calls poll with the email
-    // For now just mark the token as used by storing a placeholder
-    // The actual user lookup happens in pollAuth where the email is provided
-    const jwtPlaceholder = '__pending__';
-    await this.prisma.authToken.update({
-      where: { id: record.id },
-      data: { jwt: jwtPlaceholder },
-    });
-  }
+    const emailNorm = record.email?.trim().toLowerCase();
+    if (!emailNorm) throw new BadRequestException('Token missing email.');
 
-  async verifyMagicLinkWithEmail(
-    token: string,
-    pollingId: string,
-    emailInput: string,
-  ): Promise<void> {
-    const emailNorm = emailInput.trim().toLowerCase();
-    const record = await this.prisma.authToken.findUnique({ where: { token } });
-    if (!record || record.type !== 'magic_link' || record.pollingId !== pollingId) {
-      throw new NotFoundException('Invalid or expired link.');
-    }
-    if (record.expiresAt < new Date()) {
-      await this.prisma.authToken.delete({ where: { id: record.id } });
-      throw new UnauthorizedException('Link expired.');
-    }
-    if (record.jwt && record.jwt !== '__pending__') return;
-
-    let user = await this.prisma.user.findFirst({
-      where: { email: emailNorm },
-    });
+    let user = await this.prisma.user.findFirst({ where: { email: emailNorm } });
     if (!user) {
       user = await this.prisma.user.create({
         data: { email: emailNorm, emailVerified: true },

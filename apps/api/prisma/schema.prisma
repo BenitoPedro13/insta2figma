@@ -32,6 +32,7 @@ model AuthToken {
   token     String   @unique
   pollingId String   @unique @map("polling_id")
   userId    String?  @map("user_id") @db.Uuid
+  email     String?  // email do utilizador (magic link)
   type      String   // 'magic_link' | 'google_oauth'
   jwt       String?  @db.Text
   expiresAt DateTime @map("expires_at") @db.Timestamptz(6)

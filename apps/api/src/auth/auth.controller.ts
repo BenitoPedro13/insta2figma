@@ -112,15 +112,10 @@ export class AuthController {
   async verifyMagicLink(
     @Query('token') token: string,
     @Query('pollingId') pollingId: string,
-    @Query('email') emailQuery: string | undefined,
     @Res() res: Response,
   ) {
     try {
-      if (emailQuery) {
-        await this.auth.verifyMagicLinkWithEmail(token, pollingId, emailQuery);
-      } else {
-        await this.auth.verifyMagicLink(token, pollingId);
-      }
+      await this.auth.verifyMagicLink(token, pollingId);
       res.setHeader('Content-Type', 'text/html').status(200).send(SUCCESS_HTML('Signed in!'));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Invalid or expired link.';
