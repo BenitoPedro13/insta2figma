@@ -284,7 +284,7 @@ export class InstagramPreviewService {
       }
 
       const cachedCursor = normalizePreviewCursor(
-        (base as RedisCachedPreviewPayload).pageCursors?.[String(previewPage)] ?? null,
+        (base as unknown as RedisCachedPreviewPayload).pageCursors?.[String(previewPage)] ?? null,
       ) ?? undefined;
       const pagePosts = await this.fetchFeedPageByNumber(
         userId,
