@@ -1,32 +1,47 @@
-import { Injectable } from '@nestjs/common';
+import { resolve4 } from 'dns/promises';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 
 @Injectable()
-export class EmailService {
-  private readonly transporter: nodemailer.Transporter | null;
+export class EmailService implements OnModuleInit {
+  private transporter: nodemailer.Transporter | null = null;
   private readonly from: string;
+  private readonly user: string | undefined;
+  private readonly pass: string | undefined;
 
   constructor(private readonly config: ConfigService) {
-    const user = config.get<string>('SMTP_USER')?.trim();
-    const pass = config.get<string>('SMTP_PASS')?.trim();
-    this.from = config.get<string>('SMTP_FROM')?.trim() ?? user ?? 'noreply@insta2figma.app';
+    this.user = config.get<string>('SMTP_USER')?.trim();
+    this.pass = config.get<string>('SMTP_PASS')?.trim();
+    this.from = config.get<string>('SMTP_FROM')?.trim() ?? this.user ?? 'noreply@insta2figma.app';
+  }
 
-    if (user && pass) {
-      const smtpOptions: SMTPTransport.Options = {
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
-        family: 4, // força IPv4 — Railway não suporta IPv6
-        auth: { user, pass },
-      };
-      this.transporter = nodemailer.createTransport(smtpOptions);
-      console.info('[email] SMTP configurado via Gmail');
-    } else {
-      this.transporter = null;
+  async onModuleInit(): Promise<void> {
+    if (!this.user || !this.pass) {
       console.warn('[email] SMTP_USER / SMTP_PASS não definidos — emails desactivados');
+      return;
     }
+    // Resolve smtp.gmail.com to IPv4 explicitly — Railway's DNS returns IPv6 first
+    // which triggers ENETUNREACH since Railway doesn't support outbound IPv6.
+    let host = 'smtp.gmail.com';
+    try {
+      const [ipv4] = await resolve4('smtp.gmail.com');
+      host = ipv4;
+      console.info(`[email] smtp.gmail.com resolvido para ${ipv4}`);
+    } catch (e) {
+      console.warn('[email] falha ao resolver smtp.gmail.com, usando hostname:', e);
+    }
+
+    const smtpOptions: SMTPTransport.Options = {
+      host,
+      port: 587,
+      secure: false,
+      tls: { servername: 'smtp.gmail.com' },
+      auth: { user: this.user, pass: this.pass },
+    };
+    this.transporter = nodemailer.createTransport(smtpOptions);
+    console.info('[email] SMTP configurado via Gmail');
   }
 
   isConfigured(): boolean {
