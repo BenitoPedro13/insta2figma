@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { useHost } from '../HostContext';
 import {
   RiCloseLine,
   RiCustomerService2Line,
@@ -105,6 +106,7 @@ export function ProUpgradeOverlay({
   onUpgradeMax,
   onOpenExternal,
 }: ProUpgradeOverlayProps) {
+  const host = useHost();
   const [billingPeriod, setBillingPeriod] = useState<'yearly' | 'monthly'>(
     'yearly',
   );
@@ -127,10 +129,7 @@ export function ProUpgradeOverlay({
       onOpenExternal(PPP_EMAIL);
       return;
     }
-    parent.postMessage(
-      { pluginMessage: { type: 'open-external', url: PPP_EMAIL } },
-      '*',
-    );
+    host.send({ type: 'open-external', url: PPP_EMAIL });
   };
 
   return (

@@ -1,15 +1,14 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './App';
-import { initClarity } from './lib/clarity';
-import { ThemePreferenceProvider } from './lib/themePreference';
-import './globals.css';
-import './index.css';
+import { App, ThemePreferenceProvider, initClarity } from '@insta2figma/plugin-ui';
+import { FigmaHost } from './FigmaHost';
+
+const host = new FigmaHost();
 
 function Root() {
   return (
     <ThemePreferenceProvider>
-      <App />
+      <App host={host} />
     </ThemePreferenceProvider>
   );
 }

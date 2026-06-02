@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PluginHost } from './host';
+import { HostProvider } from './HostContext';
+import './globals.css';
+import './index.css';
 import { PluginFooter } from './components/PluginFooter';
 import { PluginResizeHandle } from './components/PluginResizeHandle';
 import { PluginSidebar } from './components/PluginSidebar';
@@ -98,7 +102,7 @@ function parseInstagramUserId(raw: unknown): string | null {
   return null;
 }
 
-export function App() {
+export function App({ host }: { host: PluginHost }) {
   const [activeTab, setActiveTab] = useState<ShellTab>('new-import');
   const [search, setSearch] = useState('');
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
@@ -157,25 +161,24 @@ export function App() {
   const quotaExceeded = imagesRemaining != null && imagesRemaining <= 0;
 
   const onCancel = useCallback(() => {
-    parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
-  }, []);
+    host.send({ type: 'cancel' });
+  }, [host]);
 
   const persistEntries = useCallback(
     (updater: HistoryEntry[] | ((prev: HistoryEntry[]) => HistoryEntry[])) => {
       setHistoryEntries((prev) => {
         const next = typeof updater === 'function' ? updater(prev) : updater;
-        parent.postMessage({ pluginMessage: { type: 'history-save', entries: next } }, '*');
+        host.send({ type: 'history-save', entries: next });
         return next;
       });
     },
-    [],
+    [host],
   );
 
   useEffect(() => {
-    const onMsg = (ev: MessageEvent<{ pluginMessage?: unknown }>) => {
-      const pm = ev.data?.pluginMessage as Record<string, unknown> | undefined;
-      if (!pm || typeof pm.type !== 'string') return;
-
+    host.send({ type: 'session-request' });
+    host.send({ type: 'history-request' });
+    return host.subscribe((pm) => {
       if (pm.type === 'session-data') {
         setSessionError('');
         setPlanTier(parsePlanTier(pm.planTier));
@@ -277,7 +280,7 @@ export function App() {
           if (legacy.length > 0) {
             entries = sortHistory(legacy);
             clearLegacyIframeHistory();
-            parent.postMessage({ pluginMessage: { type: 'history-save', entries } }, '*');
+            host.send({ type: 'history-save', entries });
           }
         } else {
           clearLegacyIframeHistory();
@@ -516,12 +519,8 @@ export function App() {
           }),
         );
       }
-    };
-    window.addEventListener('message', onMsg);
-    parent.postMessage({ pluginMessage: { type: 'session-request' } }, '*');
-    parent.postMessage({ pluginMessage: { type: 'history-request' } }, '*');
-    return () => window.removeEventListener('message', onMsg);
-  }, [persistEntries]);
+    });
+  }, [host, persistEntries]);
 
   const resetPreviewPagination = useCallback(() => {
     previewPageReqId.current += 1;
@@ -544,22 +543,16 @@ export function App() {
 
   const onBillingCheckoutPro = useCallback(
     (cycle: 'monthly' | 'yearly' = 'monthly') => {
-      parent.postMessage(
-        { pluginMessage: { type: 'billing-checkout', plan: 'pro', cycle } },
-        '*',
-      );
+      host.send({ type: 'billing-checkout', plan: 'pro', cycle });
     },
-    [],
+    [host],
   );
 
   const onBillingCheckoutMax = useCallback(
     (cycle: 'monthly' | 'yearly' = 'monthly') => {
-      parent.postMessage(
-        { pluginMessage: { type: 'billing-checkout', plan: 'max', cycle } },
-        '*',
-      );
+      host.send({ type: 'billing-checkout', plan: 'max', cycle });
     },
-    [],
+    [host],
   );
 
   const openUpgradeOverlay = useCallback(() => {
@@ -567,16 +560,16 @@ export function App() {
   }, []);
 
   const onManage = useCallback(() => {
-    parent.postMessage({ pluginMessage: { type: 'billing-portal' } }, '*');
-  }, []);
+    host.send({ type: 'billing-portal' });
+  }, [host]);
 
   const onSignOut = useCallback(() => {
-    parent.postMessage({ pluginMessage: { type: 'auth-logout' } }, '*');
-  }, []);
+    host.send({ type: 'auth-logout' });
+  }, [host]);
 
   const onOpenExternal = useCallback((url: string) => {
-    parent.postMessage({ pluginMessage: { type: 'open-external', url } }, '*');
-  }, []);
+    host.send({ type: 'open-external', url });
+  }, [host]);
 
   const selectProfile = useCallback((u: string) => {
     const user = parseInstagramUsername(String(u));
@@ -626,24 +619,19 @@ export function App() {
       previewFetchedForUsername.current = user;
       setPreviewLoading(true);
       setPreviewThumbsLoading(false);
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'profile-preview',
-            requestId: reqId,
-            username: user,
-            maxPosts: Math.max(1, maxPostsLimit),
-            expandCarouselImages: false,
-            selectionMode: 'recent',
-            startIndex: 1,
-            postCount: maxPostsLimit,
-            timelineOrder: 'newest_first',
-            previewListSize: PREVIEW_PAGE_SIZE,
-            previewPage: 1,
-          },
-        },
-        '*',
-      );
+      host.send({
+        type: 'profile-preview',
+        requestId: reqId,
+        username: user,
+        maxPosts: Math.max(1, maxPostsLimit),
+        expandCarouselImages: false,
+        selectionMode: 'recent',
+        startIndex: 1,
+        postCount: maxPostsLimit,
+        timelineOrder: 'newest_first',
+        previewListSize: PREVIEW_PAGE_SIZE,
+        previewPage: 1,
+      });
     }, 420);
     return () => window.clearTimeout(timer);
   }, [importing, username, maxPostsLimit, resetPreviewPagination, resetPostSelection]);
@@ -678,29 +666,25 @@ export function App() {
       setPreviewPageLoading(true);
       setPreviewThumbsLoading(false);
       setPreviewError('');
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'profile-preview',
-            requestKind: 'page',
-            requestId: reqId,
-            username: user,
-            maxPosts: Math.max(1, maxPostsLimit),
-            expandCarouselImages: false,
-            selectionMode: 'recent',
-            startIndex: 1,
-            postCount: maxPostsLimit,
-            timelineOrder: 'newest_first',
-            previewListSize: PREVIEW_PAGE_SIZE,
-            previewPage: page,
-            ...(pageCursors[page] ? { after: pageCursors[page] } : {}),
-            ...(instagramUserId ? { userId: instagramUserId } : {}),
-          },
-        },
-        '*',
-      );
+      host.send({
+        type: 'profile-preview',
+        requestKind: 'page',
+        requestId: reqId,
+        username: user,
+        maxPosts: Math.max(1, maxPostsLimit),
+        expandCarouselImages: false,
+        selectionMode: 'recent',
+        startIndex: 1,
+        postCount: maxPostsLimit,
+        timelineOrder: 'newest_first',
+        previewListSize: PREVIEW_PAGE_SIZE,
+        previewPage: page,
+        ...(pageCursors[page] ? { after: pageCursors[page] } : {}),
+        ...(instagramUserId ? { userId: instagramUserId } : {}),
+      });
     },
     [
+      host,
       planTier,
       username,
       preview?.username,
@@ -844,19 +828,15 @@ export function App() {
       rangeMode: selectionMode === 'range',
       timelineOrder,
     });
-    parent.postMessage(
-      {
-        pluginMessage: {
-          type: 'import-profile',
-          username: user,
-          expandCarouselImages,
-          estimatedImportImages: estimatedImages,
-          ...scrapeInput,
-        },
-      },
-      '*',
-    );
+    host.send({
+      type: 'import-profile',
+      username: user,
+      expandCarouselImages,
+      estimatedImportImages: estimatedImages,
+      ...scrapeInput,
+    });
   }, [
+    host,
     username,
     selectedIndices,
     expandCarouselImages,
@@ -894,16 +874,13 @@ export function App() {
   const listTab = activeTab === 'favorites' ? 'favorites' : 'history';
 
   return (
+    <HostProvider value={host}>
     <div className="plugin-shell relative flex min-h-0 flex-col">
       {showLogin && (
         <LoginScreen
           state={loginState}
-          onMagicLink={(email) =>
-            parent.postMessage({ pluginMessage: { type: 'auth-magic-link', email } }, '*')
-          }
-          onGoogle={() =>
-            parent.postMessage({ pluginMessage: { type: 'auth-google' } }, '*')
-          }
+          onMagicLink={(email) => host.send({ type: 'auth-magic-link', email })}
+          onGoogle={() => host.send({ type: 'auth-google' })}
         />
       )}
       <div className="plugin-frame flex min-h-0 flex-1">
@@ -982,5 +959,6 @@ export function App() {
       </div>
       <PluginResizeHandle />
     </div>
+    </HostProvider>
   );
 }

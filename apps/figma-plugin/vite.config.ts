@@ -7,6 +7,7 @@ import { defineConfig } from 'vite';
 
 const pkgRoot = dirname(fileURLToPath(import.meta.url));
 const uiRoot = resolve(pkgRoot, 'ui-src');
+const pluginUiSrc = resolve(pkgRoot, '../../packages/plugin-ui/src');
 
 export default defineConfig({
   plugins: [
@@ -23,10 +24,14 @@ export default defineConfig({
   base: './',
   resolve: {
     alias: {
-      '@': uiRoot,
+      '@': pluginUiSrc,
       '@insta2figma/shared-contracts': resolve(
         pkgRoot,
         '../../packages/shared-contracts/src/index.ts',
+      ),
+      '@insta2figma/plugin-ui': resolve(
+        pkgRoot,
+        '../../packages/plugin-ui/src/index.ts',
       ),
     },
   },

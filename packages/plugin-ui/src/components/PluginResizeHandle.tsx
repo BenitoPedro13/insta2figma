@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as Tooltip from './ui/tooltip';
 import { cn } from '../utils/cn';
+import { useHost } from '../HostContext';
 
 const MIN_W = 830;
 const MIN_H = 420;
@@ -44,6 +45,7 @@ function ResizeGripIcon({ className }: { className?: string }) {
 }
 
 export function PluginResizeHandle() {
+  const host = useHost();
   const drag = useRef({
     active: false,
     startX: 0,
@@ -54,18 +56,12 @@ export function PluginResizeHandle() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const postResize = useCallback((width: number, height: number) => {
-    parent.postMessage(
-      { pluginMessage: { type: 'ui-resize', width, height, persist: false } },
-      '*',
-    );
-  }, []);
+    host.send({ type: 'ui-resize', width, height, persist: false });
+  }, [host]);
 
   const postResizePersist = useCallback((width: number, height: number) => {
-    parent.postMessage(
-      { pluginMessage: { type: 'ui-resize', width, height, persist: true } },
-      '*',
-    );
-  }, []);
+    host.send({ type: 'ui-resize', width, height, persist: true });
+  }, [host]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
