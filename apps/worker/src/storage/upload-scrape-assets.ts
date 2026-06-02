@@ -179,7 +179,8 @@ export async function uploadScrapeAssets(params: {
         await persist(`${prefix}thumbs/${task.slug}.${ext}`, body, contentType);
         succeeded++;
       } catch (e) {
-        console.warn('[storage] falha thumbnail', task.shortcode, e);
+        const reason = e instanceof Error ? e.message : String(e);
+        console.warn('[storage] falha thumbnail', task.shortcode, { url: task.url.slice(0, 80), reason });
       }
     }
   }

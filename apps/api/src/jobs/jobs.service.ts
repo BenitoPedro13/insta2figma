@@ -211,6 +211,7 @@ export class JobsService {
     }
 
     if (opts?.signedAssets && job.status === 'succeeded') {
+      console.warn(`[jobs] signedAssets jobId=${jobId} — storage NÃO configurado, retornando lista vazia`);
       return this.toResponse(job, { signedAssets: [] });
     }
 

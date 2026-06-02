@@ -738,6 +738,28 @@ async function openBillingCheckout(
   figma.openExternal(data.url);
 }
 
+async function pollForPlanChange(
+  base: string,
+  token: string,
+  knownTier: string,
+): Promise<void> {
+  const MAX_ATTEMPTS = 60;
+  const INTERVAL_MS = 5_000;
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    await new Promise((r) => setTimeout(r, INTERVAL_MS));
+    try {
+      const me = await fetchMe(base, token);
+      if (me.planTier !== knownTier) {
+        figma.ui.postMessage({ type: 'session-data', ...me });
+        figma.notify(`✅ Plan updated to ${me.planTier}!`);
+        return;
+      }
+    } catch {
+      // network blip — keep trying
+    }
+  }
+}
+
 async function openBillingPortal(base: string, token: string): Promise<void> {
   const res = await apiFetch(`${base}/v1/billing/portal-session`, {
     method: 'POST',
@@ -885,6 +907,11 @@ async function importProfileViaApi(
     .filter((a) => a.url.length > 0);
 
   if (imageAssets.length === 0) {
+    console.error('[Insta2Figma] imageAssets vazios — signedAssets do job:', {
+      total: lastSignedAssets.length,
+      keys: lastSignedAssets.map((a) => a.storageKey ?? '(sem key)').slice(0, 10),
+      urls: lastSignedAssets.map((a) => (a.url ?? '').slice(0, 60)).slice(0, 10),
+    });
     throw new Error('No images came back from the import. Try again in a moment.');
   }
 
@@ -896,7 +923,8 @@ async function importProfileViaApi(
   } else if (rawProfilePic) {
     notifyStatus(importStatusAvatar());
     profilePicForHistory =
-      (await fetchInstagramAvatarAsDataUrl(rawProfilePic)) ?? rawProfilePic;
+      (await fetchInstagramAvatarAsDataUrl(rawProfilePic)) ??
+      `${base}/v1/instagram/image?url=${encodeURIComponent(rawProfilePic)}`;
   }
   await placeSignedImages(imageAssets, {
     username,
@@ -1111,8 +1139,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     const cycle = msg.cycle === 'yearly' ? 'yearly' : 'monthly';
     try {
       const { session } = await ensureSession(base);
+      const me = await fetchMe(base, session.accessToken);
       await openBillingCheckout(base, session.accessToken, plan, cycle);
       figma.notify('Checkout opened in your browser.');
+      void pollForPlanChange(base, session.accessToken, me.planTier);
     } catch (err) {
       figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
     }
@@ -1123,8 +1153,10 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     const base = await getApiBase();
     try {
       const { session } = await ensureSession(base);
+      const me = await fetchMe(base, session.accessToken);
       await openBillingPortal(base, session.accessToken);
       figma.notify('Customer portal opened in your browser.');
+      void pollForPlanChange(base, session.accessToken, me.planTier);
     } catch (err) {
       figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
     }
@@ -1299,7 +1331,12 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         ...(preview.profilePicDataUrl
           ? { profilePicUrlHd: preview.profilePicDataUrl }
           : preview.profilePicUrlHd
-            ? { profilePicUrlHd: preview.profilePicUrlHd }
+            ? {
+                profilePicUrlHd:
+                  preview.profilePicUrlHd.startsWith('data:') || preview.profilePicUrlHd.startsWith('blob:')
+                    ? preview.profilePicUrlHd
+                    : `${base}/v1/instagram/image?url=${encodeURIComponent(preview.profilePicUrlHd)}`,
+              }
             : {}),
       });
       for (const item of postsWithThumbs) {
