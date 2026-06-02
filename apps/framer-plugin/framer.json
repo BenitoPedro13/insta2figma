@@ -1,0 +1,11 @@
+{
+  "id": "9d8322",
+  "name": "Framer Plugin",
+  "modes": [
+    "canvas"
+  ],
+  "permissions": [
+    "addImage"
+  ],
+  "icon": "/icon.svg"
+}

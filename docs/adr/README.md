@@ -28,6 +28,7 @@ Cada ADR segue o template MADR com os campos:
 | [ADR-006](ADR-006-scrape-telemetria.md) | Telemetria de operações de scraping (PostgreSQL) | Accepted |
 | [ADR-007](ADR-007-redis-preview-cache.md) | Cache de previews em Redis (TTL + globalSessionPool) | Accepted |
 | [ADR-008](ADR-008-plan-update-instantaneo.md) | Atualização instantânea do plano após checkout (long-polling vs SSE) | Accepted |
+| [ADR-009](ADR-009-framer-plugin-monorepo.md) | Suportar o plugin no Framer reutilizando a UI no monorepo | Proposed |
 
 ## Contexto global
 
