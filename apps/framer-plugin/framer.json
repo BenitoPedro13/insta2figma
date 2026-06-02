@@ -1,11 +1,13 @@
 {
   "id": "9d8322",
-  "name": "Framer Plugin",
+  "name": "Insta2Figma",
+  "description": "Import Instagram posts directly to your Framer canvas.",
   "modes": [
     "canvas"
   ],
   "permissions": [
-    "addImage"
+    "addImage",
+    "createNode"
   ],
   "icon": "/icon.svg"
 }

@@ -46,6 +46,12 @@ function ResizeGripIcon({ className }: { className?: string }) {
 
 export function PluginResizeHandle() {
   const host = useHost();
+  if (host.canResize === false) return null;
+  return <ResizeHandleInner />;
+}
+
+function ResizeHandleInner() {
+  const host = useHost();
   const drag = useRef({
     active: false,
     startX: 0,
