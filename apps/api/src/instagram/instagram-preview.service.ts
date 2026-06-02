@@ -147,6 +147,8 @@ function toRecord(v: unknown): Record<string, unknown> | null {
 // Subconjunto sem campos derivados com base64 — o que fica guardado no Redis.
 type RedisCachedPreviewPayload = Omit<CachedPreviewPayload, 'profilePicDataUrl' | 'postsPreview'> & {
   cachedAt: number; // timestamp ms — usado para stale-while-revalidate
+  // cursor para cada página adicional: key = página destino (ex: "2" → cursor para começar página 2)
+  pageCursors?: Record<string, string>;
 };
 
 function toRedisCachedPayload(p: CachedPreviewPayload): RedisCachedPreviewPayload {
@@ -281,18 +283,23 @@ export class InstagramPreviewService {
         throw new BadRequestException('Preview pagination requires userId.');
       }
 
+      const cachedCursor = normalizePreviewCursor(
+        (base as RedisCachedPreviewPayload).pageCursors?.[String(previewPage)] ?? null,
+      ) ?? undefined;
       const pagePosts = await this.fetchFeedPageByNumber(
         userId,
         previewPage,
         firstPageShortcodes,
         tCtx,
         username,
+        cachedCursor,
       );
       await this.appendPostsToCache(
         this.buildPreviewCacheKey(username, fetchCount, timelineOrder),
         pagePosts.posts,
         pagePosts.nextMaxId,
         pagePosts.hasNextPage,
+        previewPage,
       );
       return this.buildPaginatedPreviewResponse({
         username: base.username,
@@ -705,6 +712,7 @@ export class InstagramPreviewService {
     posts: TimelinePostItem[],
     nextMaxId: string | null,
     hasNextPage: boolean,
+    fetchedPage?: number,
   ): Promise<void> {
     if (posts.length === 0) return;
     try {
@@ -717,6 +725,10 @@ export class InstagramPreviewService {
       cached.nextPreviewCursor = normalizePreviewCursor(nextMaxId);
       cached.hasNextPreviewPage =
         hasNextPage || cached.parsedPosts.length < cached.mediaCount;
+      // Guardar cursor para a próxima página — permite saltar directamente sem recomeçar do início
+      if (fetchedPage && nextMaxId) {
+        cached.pageCursors = { ...(cached.pageCursors ?? {}), [String(fetchedPage + 1)]: nextMaxId };
+      }
       await this.redis.set(cacheKey, JSON.stringify(cached), 'EX', ttl);
     } catch {
       // Redis indisponível — saltar actualização de cache
@@ -729,6 +741,7 @@ export class InstagramPreviewService {
     firstPageShortcodes: Set<string>,
     ctx: TelemetryCtx,
     username?: string,
+    cachedCursor?: string,
   ): Promise<{
     posts: TimelinePostItem[];
     hasNextPage: boolean;
@@ -740,6 +753,7 @@ export class InstagramPreviewService {
         pageNumber,
         firstPageShortcodes,
         ctx,
+        cachedCursor,
       );
     } catch (err) {
       if (username) {
@@ -761,20 +775,23 @@ export class InstagramPreviewService {
     pageNumber: number,
     firstPageShortcodes: Set<string>,
     ctx: TelemetryCtx,
+    cachedCursor?: string,
   ): Promise<{
     posts: TimelinePostItem[];
     hasNextPage: boolean;
     nextMaxId: string | null;
   }> {
     const safePage = Math.max(1, Math.floor(pageNumber));
-    let maxId: string | undefined;
+    // Se temos cursor em cache para esta página, saltamos directamente — 1 chamada ao invés de N.
+    const resumePage = cachedCursor ? safePage : 1;
+    let maxId: string | undefined = cachedCursor ?? undefined;
     let result: {
       posts: TimelinePostItem[];
       hasNextPage: boolean;
       nextMaxId: string | null;
     } = { posts: [], hasNextPage: false, nextMaxId: null };
 
-    for (let page = 1; page <= safePage; page++) {
+    for (let page = resumePage; page <= safePage; page++) {
       result = await this.fetchTimelinePageByFeedMaxId(
         userId,
         maxId,

@@ -315,9 +315,10 @@ async function loadImageRect(
   asset: SignedImageAsset,
   colWidth: number,
   label?: string,
+  preloadedBytes?: Uint8Array,
 ): Promise<LoadedImageRect | null> {
   try {
-    const bytes = await fetchImageBytes(asset.url);
+    const bytes = preloadedBytes ?? await fetchImageBytes(asset.url);
     const image = figma.createImage(bytes);
     const { width: imageWidth, height: imageHeight } = await image.getSizeAsync();
     if (imageWidth <= 0 || imageHeight <= 0) return null;
@@ -334,6 +335,28 @@ async function loadImageRect(
     console.warn('[Insta2Figma] skip URL', asset.url.slice(0, 80), e);
     return null;
   }
+}
+
+/** Descarrega todos os assets em paralelo com pool de concorrência.
+ *  Retorna array alinhado com `assets` — null em caso de falha. */
+async function prefetchAssetBytes(
+  assets: SignedImageAsset[],
+  concurrency = 5,
+): Promise<(Uint8Array | null)[]> {
+  const results = new Array<Uint8Array | null>(assets.length).fill(null);
+  let idx = 0;
+  async function worker() {
+    while (idx < assets.length) {
+      const i = idx++;
+      try {
+        results[i] = await fetchImageBytes(assets[i].url);
+      } catch (e) {
+        console.warn('[Insta2Figma] prefetch falhou', assets[i].url.slice(0, 80), e);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, assets.length) }, worker));
+  return results;
 }
 
 /** Top-align numa linha; retorna a altura da linha (maior retângulo). */
@@ -387,16 +410,22 @@ async function placeSignedImages(
     return `@${usernameNorm} - #${imageIndex}`;
   };
 
+  // Descarrega todos os bytes em paralelo antes de criar nós Figma.
+  // Reduz o tempo de import de N×latência para ~1×latência (pool de 5).
+  const flatAssets = layoutRows.flat();
+  const prefetched = await prefetchAssetBytes(flatAssets);
+  const bytesMap = new Map<SignedImageAsset, Uint8Array | null>(
+    flatAssets.map((a, i) => [a, prefetched[i]]),
+  );
+
   if (usePostRows) {
     let y = 0;
     for (const row of layoutRows) {
       const loaded: LoadedImageRect[] = [];
       for (const asset of row) {
-        const item = await loadImageRect(
-          asset,
-          LAYOUT_COL_WIDTH,
-          labelForNext(),
-        );
+        const bytes = bytesMap.get(asset) ?? undefined;
+        if (!bytes) continue;
+        const item = await loadImageRect(asset, LAYOUT_COL_WIDTH, labelForNext(), bytes);
         if (item) {
           loaded.push(item);
           ok += 1;
@@ -416,11 +445,9 @@ async function placeSignedImages(
   } else {
     const loaded: LoadedImageRect[] = [];
     for (const asset of assets) {
-      const item = await loadImageRect(
-        asset,
-        LAYOUT_COL_WIDTH,
-        labelForNext(),
-      );
+      const bytes = bytesMap.get(asset) ?? undefined;
+      if (!bytes) continue;
+      const item = await loadImageRect(asset, LAYOUT_COL_WIDTH, labelForNext(), bytes);
       if (item) {
         loaded.push(item);
         ok += 1;
