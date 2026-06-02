@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 
 @Injectable()
 export class EmailService {
@@ -13,13 +14,14 @@ export class EmailService {
     this.from = config.get<string>('SMTP_FROM')?.trim() ?? user ?? 'noreply@insta2figma.app';
 
     if (user && pass) {
-      this.transporter = nodemailer.createTransport({
+      const smtpOptions: SMTPTransport.Options = {
         host: 'smtp.gmail.com',
         port: 587,
         secure: false,
         family: 4, // força IPv4 — Railway não suporta IPv6
         auth: { user, pass },
-      });
+      };
+      this.transporter = nodemailer.createTransport(smtpOptions);
       console.info('[email] SMTP configurado via Gmail');
     } else {
       this.transporter = null;
