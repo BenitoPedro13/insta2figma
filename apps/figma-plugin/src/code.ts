@@ -109,6 +109,7 @@ type StoredSession = {
   accessToken: string;
   userId: string;
   figmaUserId: string;
+  expiresAt?: number; // ms timestamp
 };
 
 type SessionQuotas = {
@@ -689,6 +690,137 @@ async function fetchMe(base: string, token: string): Promise<SessionPayload> {
   };
 }
 
+async function pollAuthUntilDone(
+  base: string,
+  pollingId: string,
+): Promise<{ jwt: string; userId: string; expiresIn: string }> {
+  const MAX = 120;
+  const INTERVAL = 3_000;
+  for (let i = 0; i < MAX; i++) {
+    await new Promise((r) => setTimeout(r, INTERVAL));
+    try {
+      const res = await apiFetch(`${base}/v1/auth/poll?pollingId=${pollingId}`);
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = body.data as Record<string, unknown> | undefined;
+      if (data?.status === 'done' && typeof data.jwt === 'string') {
+        return {
+          jwt: data.jwt,
+          userId: String(data.userId ?? ''),
+          expiresIn: String(data.expiresIn ?? '7d'),
+        };
+      }
+    } catch {
+      // network blip — keep trying
+    }
+  }
+  throw new Error('Sign-in timed out. Please try again.');
+}
+
+function parseExpiresIn(expiresIn: string): number {
+  // e.g. "7d", "30d", "24h", "3600"
+  const match = String(expiresIn ?? '').match(/^(\d+)([dhms]?)$/);
+  if (!match) return 7 * 24 * 3600 * 1000;
+  const n = Number(match[1]);
+  const unit = match[2];
+  const ms = unit === 'd' ? n * 86400_000
+    : unit === 'h' ? n * 3600_000
+    : unit === 'm' ? n * 60_000
+    : n * 1000;
+  return ms;
+}
+
+async function storeAuthSession(
+  base: string,
+  jwt: string,
+  userId: string,
+  expiresIn?: string,
+): Promise<void> {
+  const figmaUser = figma.currentUser;
+  const figmaUserId = figmaUser?.id ?? '';
+  const expiresAt = Date.now() + parseExpiresIn(expiresIn ?? '7d');
+  const session: StoredSession = { accessToken: jwt, userId, figmaUserId, expiresAt };
+  await saveStoredSession(session);
+  if (figmaUserId) {
+    try {
+      await apiFetch(`${base}/v1/auth/link-figma`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ figmaUserId }),
+      });
+    } catch (e) {
+      console.warn('[Insta2Figma] link-figma failed (non-fatal)', e);
+    }
+  }
+}
+
+async function tryRefreshSession(base: string, stored: StoredSession): Promise<StoredSession | null> {
+  try {
+    const res = await apiFetch(`${base}/v1/auth/refresh`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${stored.accessToken}` },
+    });
+    if (!res.ok) {
+      console.warn('[Insta2Figma] refresh failed — HTTP', res.status);
+      return null;
+    }
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const data = body.data as Record<string, unknown> | undefined;
+    if (!data?.accessToken) return null;
+    const jwt = String(data.accessToken);
+    const expiresAt = Date.now() + parseExpiresIn(String(data.expiresIn ?? '7d'));
+    const refreshed: StoredSession = { ...stored, accessToken: jwt, expiresAt };
+    await saveStoredSession(refreshed);
+    console.info('[Insta2Figma] session refreshed, expires', new Date(expiresAt).toISOString());
+    return refreshed;
+  } catch (e) {
+    console.warn('[Insta2Figma] refresh error', e);
+    return null;
+  }
+}
+
+async function handleMagicLinkAuth(base: string, email: string): Promise<void> {
+  figma.ui.postMessage({ type: 'login-loading' });
+  const res = await apiFetch(`${base}/v1/auth/magic-link`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = body.data as Record<string, unknown> | undefined;
+  if (!res.ok || !data?.pollingId) {
+    throw new Error(
+      typeof (body.message ?? body.error) === 'string'
+        ? String(body.message ?? body.error)
+        : 'Failed to send magic link.',
+    );
+  }
+  const pollingId = String(data.pollingId);
+  figma.ui.postMessage({ type: 'login-email-sent', email });
+
+  const { jwt, userId, expiresIn } = await pollAuthUntilDone(base, pollingId);
+  await storeAuthSession(base, jwt, userId, expiresIn);
+  const me = await fetchMe(base, jwt);
+  figma.ui.postMessage({ type: 'session-data', ...me });
+  figma.ui.postMessage({ type: 'login-done' });
+}
+
+async function handleGoogleAuth(base: string): Promise<void> {
+  const res = await apiFetch(`${base}/v1/auth/google/start`);
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = body.data as Record<string, unknown> | undefined;
+  if (!res.ok || !data?.url || !data?.pollingId) {
+    throw new Error('Google sign-in not available. Check server configuration.');
+  }
+  figma.openExternal(String(data.url));
+  figma.ui.postMessage({ type: 'login-google-pending' });
+
+  const { jwt, userId, expiresIn } = await pollAuthUntilDone(base, String(data.pollingId));
+  await storeAuthSession(base, jwt, userId, expiresIn);
+  const me = await fetchMe(base, jwt);
+  figma.ui.postMessage({ type: 'session-data', ...me });
+  figma.ui.postMessage({ type: 'login-done' });
+}
+
 async function ensureSession(base: string): Promise<{
   session: StoredSession;
   me: SessionPayload;
@@ -730,16 +862,44 @@ async function bootstrapSession(): Promise<void> {
   figma.ui.postMessage({ type: 'api-base', base });
   try {
     await probeApiHealth(base);
-    const { me } = await ensureSession(base);
-    figma.ui.postMessage({ type: 'session-data', ...me });
+
+    let stored = await loadStoredSession();
+    if (!stored) {
+      figma.ui.postMessage({ type: 'show-login' });
+      return;
+    }
+
+    // Renew proactively if expiring within 2 days
+    const TWO_DAYS = 2 * 24 * 3600_000;
+    if (stored.expiresAt && stored.expiresAt - Date.now() < TWO_DAYS) {
+      const refreshed = await tryRefreshSession(base, stored);
+      if (refreshed) stored = refreshed;
+    }
+
+    try {
+      const me = await fetchMe(base, stored.accessToken);
+      figma.ui.postMessage({ type: 'session-data', ...me });
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (status === 401) {
+        // Token expired — try refresh once more, then show login
+        const refreshed = await tryRefreshSession(base, stored);
+        if (refreshed) {
+          try {
+            const me = await fetchMe(base, refreshed.accessToken);
+            figma.ui.postMessage({ type: 'session-data', ...me });
+            return;
+          } catch { /* fall through */ }
+        }
+        figma.ui.postMessage({ type: 'show-login' });
+      } else {
+        throw err;
+      }
+    }
   } catch (err) {
     const message = formatCaught(err);
     console.error('[Insta2Figma] bootstrapSession', { base }, err);
-    figma.ui.postMessage({
-      type: 'session-error',
-      message,
-      base,
-    });
+    figma.ui.postMessage({ type: 'session-error', message, base });
   }
 }
 
@@ -1157,6 +1317,27 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
   if (msg.type === 'session-request') {
     await bootstrapSession();
+    return;
+  }
+
+  if (msg.type === 'auth-magic-link') {
+    const base = await getApiBase();
+    const email = typeof msg.email === 'string' ? msg.email.trim() : '';
+    try {
+      await handleMagicLinkAuth(base, email);
+    } catch (err) {
+      figma.ui.postMessage({ type: 'login-error', message: formatCaught(err) });
+    }
+    return;
+  }
+
+  if (msg.type === 'auth-google') {
+    const base = await getApiBase();
+    try {
+      await handleGoogleAuth(base);
+    } catch (err) {
+      figma.ui.postMessage({ type: 'login-error', message: formatCaught(err) });
+    }
     return;
   }
 

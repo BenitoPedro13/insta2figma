@@ -40,6 +40,7 @@ function resolveUsernameInput(raw: string): {
   };
 }
 import { parsePlanTier, type PlanTier } from './lib/planTier';
+import { LoginScreen, type LoginState } from './screens/LoginScreen';
 
 type ProfilePreviewPost = {
   index: number;
@@ -141,6 +142,8 @@ export function App() {
   const [maxPostsLimit, setMaxPostsLimit] = useState(50);
   const [maxImagesLimit, setMaxImagesLimit] = useState(100);
   const [sessionError, setSessionError] = useState('');
+  const [loginState, setLoginState] = useState<LoginState>({ step: 'idle' });
+  const [showLogin, setShowLogin] = useState(false);
   const [periodEndIso, setPeriodEndIso] = useState<string | null>(null);
 
   useEffect(() => {
@@ -232,6 +235,38 @@ export function App() {
             ? pm.message
             : 'Session unavailable. Sign in to Figma.',
         );
+        return;
+      }
+
+      if (pm.type === 'show-login') {
+        setShowLogin(true);
+        setLoginState({ step: 'idle' });
+        return;
+      }
+
+      if (pm.type === 'login-loading') {
+        setLoginState({ step: 'loading' });
+        return;
+      }
+
+      if (pm.type === 'login-email-sent') {
+        setLoginState({ step: 'email_sent', email: String(pm.email ?? '') });
+        return;
+      }
+
+      if (pm.type === 'login-google-pending') {
+        setLoginState({ step: 'google_pending' });
+        return;
+      }
+
+      if (pm.type === 'login-error') {
+        setLoginState({ step: 'error', message: String(pm.message ?? 'Something went wrong.') });
+        return;
+      }
+
+      if (pm.type === 'login-done') {
+        setShowLogin(false);
+        setLoginState({ step: 'idle' });
         return;
       }
 
@@ -853,6 +888,20 @@ export function App() {
   );
 
   const listTab = activeTab === 'favorites' ? 'favorites' : 'history';
+
+  if (showLogin) {
+    return (
+      <LoginScreen
+        state={loginState}
+        onMagicLink={(email) =>
+          parent.postMessage({ pluginMessage: { type: 'auth-magic-link', email } }, '*')
+        }
+        onGoogle={() =>
+          parent.postMessage({ pluginMessage: { type: 'auth-google' } }, '*')
+        }
+      />
+    );
+  }
 
   return (
     <div className="plugin-shell relative flex min-h-0 flex-col">

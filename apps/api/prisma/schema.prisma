@@ -10,6 +10,8 @@ datasource db {
 model User {
   id              String   @id @default(uuid()) @db.Uuid
   email           String?  @unique
+  googleId        String?  @unique @map("google_id")
+  emailVerified   Boolean  @default(false) @map("email_verified")
   figmaUserId     String?  @unique @map("figma_user_id")
   polarCustomerId String?  @map("polar_customer_id")
   planTier        String   @default("free") @map("plan_tier")
@@ -20,8 +22,26 @@ model User {
   jobs          Job[]
   subscriptions Subscription[]
   usageCounters UsageCounter[]
+  authTokens    AuthToken[]
 
   @@map("users")
+}
+
+model AuthToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique
+  pollingId String   @unique @map("polling_id")
+  userId    String?  @map("user_id") @db.Uuid
+  type      String   // 'magic_link' | 'google_oauth'
+  jwt       String?  @db.Text
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([pollingId])
+  @@index([expiresAt])
+  @@map("auth_tokens")
 }
 
 model Subscription {
