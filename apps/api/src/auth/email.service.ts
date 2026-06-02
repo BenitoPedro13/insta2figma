@@ -35,8 +35,8 @@ export class EmailService implements OnModuleInit {
 
     const smtpOptions: SMTPTransport.Options = {
       host,
-      port: 587,
-      secure: false,
+      port: 465,
+      secure: true, // SSL directo — Railway bloqueia 587/STARTTLS
       tls: { servername: 'smtp.gmail.com' },
       auth: { user: this.user, pass: this.pass },
     };
