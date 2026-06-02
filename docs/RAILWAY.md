@@ -78,8 +78,8 @@ POLAR_PRODUCT_ID_PRO_YEARLY=
 POLAR_PRODUCT_ID_MAX_MONTHLY=
 POLAR_PRODUCT_ID_MAX_YEARLY=
 POLAR_SYNTHETIC_EMAIL_DOMAIN=mailinator.com
-POLAR_SUCCESS_URL=https://insta2figma.com/billing/success
-POLAR_RETURN_URL=
+POLAR_SUCCESS_URL=https://insta2figma-production.up.railway.app/v1/billing/checkout-success
+POLAR_RETURN_URL=https://mainnet.design/
 
 # Quotas
 QUOTA_FREE_IMAGES_PER_MONTH=100

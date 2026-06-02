@@ -139,9 +139,12 @@ export class BillingService {
         `Plan ${plan} (${cycle}) is not configured yet (POLAR_PRODUCT_ID_${plan.toUpperCase()}_${cycle.toUpperCase()}).`,
       );
     }
-    const successUrl =
+    // Embute o userId no successUrl para que o nosso endpoint possa fazer
+    // syncCustomerState imediatamente sem depender do webhook do Polar.
+    const baseSuccessUrl =
       this.config.get<string>('POLAR_SUCCESS_URL')?.trim() ||
       'https://insta2figma.com/billing/success';
+    const successUrl = `${baseSuccessUrl}${baseSuccessUrl.includes('?') ? '&' : '?'}userId=${encodeURIComponent(userId)}`;
     const returnUrl = this.config.get<string>('POLAR_RETURN_URL')?.trim();
 
     try {
