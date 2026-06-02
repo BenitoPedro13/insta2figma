@@ -27,7 +27,7 @@ export class MeController {
 
   @Get('me/plan-events')
   @UseGuards(AuthGuard('jwt'))
-  async planEvents(
+  async waitForPlanChange(
     @Req() req: AuthedRequest,
     @Query('currentTier') currentTier?: string,
   ) {
