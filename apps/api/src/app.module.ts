@@ -5,6 +5,7 @@ import { StorageModule } from './storage/storage.module';
 import { QueueModule } from './queue/queue.module';
 import { RedisCacheModule } from './cache/redis-cache.module';
 import { AuthModule } from './auth/auth.module';
+import { PlanEventsModule } from './plan/plan-events.module';
 import { JobsModule } from './jobs/jobs.module';
 import { HealthModule } from './health/health.module';
 import { AdminModule } from './admin/admin.module';
@@ -23,6 +24,7 @@ import { UsersModule } from './users/users.module';
     QueueModule,
     RedisCacheModule,
     AuthModule,
+    PlanEventsModule,
     JobsModule,
     HealthModule,
     AdminModule,

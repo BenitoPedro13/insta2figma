@@ -619,21 +619,7 @@ async function authFigmaUser(
   return session;
 }
 
-async function fetchMe(base: string, token: string): Promise<SessionPayload> {
-  const res = await apiFetch(
-    `${base}/v1/me`,
-    { headers: { authorization: `Bearer ${token}` } },
-    'GET /me',
-  );
-  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  const data = payload.data as Record<string, unknown> | undefined;
-  if (!res.ok || !data) {
-    const err = new Error(`GET /me ${res.status}: ${parseApiError(payload)}`) as Error & {
-      status?: number;
-    };
-    err.status = res.status;
-    throw err;
-  }
+function parseMeData(data: Record<string, unknown>): SessionPayload {
   const quotasRaw = data.quotas as Record<string, unknown> | undefined;
   const subRaw = data.subscription as Record<string, unknown> | undefined;
   const planTier =
@@ -688,6 +674,24 @@ async function fetchMe(base: string, token: string): Promise<SessionPayload> {
             : null,
     },
   };
+}
+
+async function fetchMe(base: string, token: string): Promise<SessionPayload> {
+  const res = await apiFetch(
+    `${base}/v1/me`,
+    { headers: { authorization: `Bearer ${token}` } },
+    'GET /me',
+  );
+  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = payload.data as Record<string, unknown> | undefined;
+  if (!res.ok || !data) {
+    const err = new Error(`GET /me ${res.status}: ${parseApiError(payload)}`) as Error & {
+      status?: number;
+    };
+    err.status = res.status;
+    throw err;
+  }
+  return parseMeData(data);
 }
 
 async function pollAuthUntilDone(
@@ -944,24 +948,29 @@ async function openBillingCheckout(
   figma.openExternal(data.url);
 }
 
-async function pollForPlanChange(
+async function longPollForPlanChange(
   base: string,
   token: string,
   knownTier: string,
 ): Promise<void> {
-  const MAX_ATTEMPTS = 60;
-  const INTERVAL_MS = 5_000;
-  for (let i = 0; i < MAX_ATTEMPTS; i++) {
-    await new Promise((r) => setTimeout(r, INTERVAL_MS));
+  const DEADLINE = Date.now() + 5 * 60_000;
+  while (Date.now() < DEADLINE) {
     try {
-      const me = await fetchMe(base, token);
-      if (me.planTier !== knownTier) {
+      const res = await apiFetch(
+        `${base}/v1/me/plan-events?currentTier=${encodeURIComponent(knownTier)}`,
+        { headers: { authorization: `Bearer ${token}` } },
+      );
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = body.data as Record<string, unknown> | undefined;
+      if (res.ok && data?.changed === true) {
+        const me = parseMeData(data);
         figma.ui.postMessage({ type: 'session-data', ...me });
         figma.notify(`✅ Plan updated to ${me.planTier}!`);
         return;
       }
+      // changed:false — servidor já segurou ~25s, reabrir imediatamente
     } catch {
-      // network blip — keep trying
+      await new Promise((r) => setTimeout(r, 3_000));
     }
   }
 }
@@ -1376,7 +1385,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       const me = await fetchMe(base, session.accessToken);
       await openBillingCheckout(base, session.accessToken, plan, cycle);
       figma.notify('Checkout opened in your browser.');
-      void pollForPlanChange(base, session.accessToken, me.planTier);
+      void longPollForPlanChange(base, session.accessToken, me.planTier);
     } catch (err) {
       figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
     }
@@ -1390,7 +1399,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
       const me = await fetchMe(base, session.accessToken);
       await openBillingPortal(base, session.accessToken);
       figma.notify('Customer portal opened in your browser.');
-      void pollForPlanChange(base, session.accessToken, me.planTier);
+      void longPollForPlanChange(base, session.accessToken, me.planTier);
     } catch (err) {
       figma.notify(`Insta2Figma: ${formatCaught(err)}`, { error: true });
     }

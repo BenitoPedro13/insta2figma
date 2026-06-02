@@ -27,6 +27,7 @@ import {
   shouldOmitCheckoutCustomerEmail,
 } from './polar-email.util';
 import { PolarService } from './polar.service';
+import { PlanEventsService } from '../plan/plan-events.service';
 import type {
   BillingCheckoutPlan,
   BillingCycle,
@@ -47,6 +48,7 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly polar: PolarService,
     private readonly config: ConfigService,
+    private readonly planEvents: PlanEventsService,
   ) {}
 
   async ensurePolarCustomer(
@@ -278,6 +280,8 @@ export class BillingService {
         planTier,
       },
     });
+
+    void this.planEvents.publishChange(userId);
 
     if (activeSub) {
       await this.prisma.subscription.upsert({
