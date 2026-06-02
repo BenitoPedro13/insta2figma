@@ -202,7 +202,12 @@ export class AuthService {
 
     // Find or create user
     let user = await this.prisma.user.findUnique({ where: { googleId: googleUser.id } });
-    if (!user) {
+    if (user && !user.emailVerified) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerified: true },
+      });
+    } else if (!user) {
       // Try to find by email and link Google
       user = await this.prisma.user.findFirst({ where: { email: googleUser.email } });
       if (user) {
