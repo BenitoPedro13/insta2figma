@@ -111,6 +111,7 @@ The post preview grid uses **infinite scroll** (not page-based pagination).
 3. `fetchNextPreviewPage` sends `{ requestKind: 'page', previewPage: n+1, after: cursor }`
 4. Response appends posts to `preview.postsPreview` (accumulates, never replaces)
 5. Tier gating: Free ≤ 3 pages, Pro ≤ 12 pages, Max unlimited — enforced client-side by `tierLimitedPreview`; server also enforces via `assertPreviewPageAllowed()`
+6. On page-load error, `hasMorePreview` is set to `false` to stop the infinite retry loop
 
 **`PostPreviewList` scroll mechanism:**
 - Scroll listener registered once (via `useEffect([], [])`) — reads latest `hasMore`/`onLoadMore` via refs to avoid stale closures and re-registration cascade
@@ -118,6 +119,42 @@ The post preview grid uses **infinite scroll** (not page-based pagination).
 - Threshold: 200px from bottom
 
 **`PostPreviewPagination` component was removed** — delete any lingering references.
+
+## Apify — dois actores para preview e paginação
+
+O fallback Apify usa **dois actores distintos** com env vars separadas:
+
+| Env var | Actor | Usado para |
+|---------|-------|-----------|
+| `APIFY_IG_PROFILE_ACTOR` | `apify~instagram-profile-scraper` | Carregamento inicial (página 1) — devolve metadados do perfil + primeiros posts |
+| `APIFY_IG_POST_ACTOR` | `apify~instagram-scraper` | Paginação (página 2+) e imports — suporta 50+ posts via `directUrls` |
+
+Se `APIFY_IG_POST_ACTOR` não estiver definido, o sistema usa `APIFY_IG_PROFILE_ACTOR` para tudo (comportamento legado, limitado a 12 posts).
+
+**Detecção automática do formato:** `isPostScraperActor(actorId)` — se o ID não contiver `profile-scraper`, usa o formato `directUrls + resultsType: "posts"` (saída flat array); caso contrário, usa `usernames + latestPosts` (saída com envelope de perfil).
+
+**`previewTotalPages` sem `mediaCount`:** quando o actor de posts não devolve `mediaCount` (sempre 0), `ApifyPreviewSource` estima a paginação com base em `parsedPosts.length` vs `fetchCount`.
+
+## Criação de contas Instagram (scripts CDP)
+
+Scripts locais para criar contas Google/Gmail e Instagram via Chrome DevTools Protocol:
+
+| Script | O que faz |
+|--------|-----------|
+| `pnpm cdp:launch` | Cria conta Gmail (sem proxy) |
+| `pnpm cdp:launch --proxy=N` | Cria conta Gmail via proxy linha N de `scripts/proxies.txt` |
+| `pnpm cdp:proxy` | Cria conta Gmail via proxy aleatório (guarda em `.proxy-session`) |
+| `pnpm cdp:instagram` | Cria conta Instagram com o último Gmail de `scripts/accounts.json` |
+| `pnpm cdp:instagram:proxy` | Idem, reutilizando o proxy de `.proxy-session` |
+| `pnpm cdp:pool` | Lê `scripts/sessions.json` e imprime `IG_SESSION_POOL` pronto a colar |
+
+Ficheiros locais (todos em `.gitignore`):
+- `scripts/accounts.json` — Gmail criado (email, password, proxy)
+- `scripts/sessions.json` — sessão Instagram (account, cookie, proxy)
+- `scripts/.proxy-session` — proxy activo para a sessão corrente
+- `scripts/proxies.txt` — lista de proxies `host:port:user:pass`
+
+Ver `docs/SESSION-MANAGEMENT.md` para o fluxo completo.
 
 ## Import flow
 

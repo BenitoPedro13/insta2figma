@@ -12,3 +12,5 @@ apps/worker/.env
 # Legado Figma (gerado ao lado do fonte)
 code.js
 scripts/.proxy-session
+scripts/accounts.json
+scripts/sessions.json

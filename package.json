@@ -32,7 +32,10 @@
     "cdp": "node scripts/cdp.mjs",
     "cdp:launch": "node scripts/cdp.mjs --launch",
     "cdp:proxy": "node scripts/cdp.mjs --launch --proxy=random",
-    "cdp:reset": "node scripts/cdp.mjs --proxy=reset"
+    "cdp:reset": "node scripts/cdp.mjs --proxy=reset",
+    "cdp:instagram": "node scripts/cdp-instagram.mjs --launch",
+    "cdp:instagram:proxy": "node scripts/cdp-instagram.mjs --launch --proxy=random",
+    "cdp:pool": "node scripts/gen-pool.mjs"
   },
   "devDependencies": {
     "chrome-remote-interface": "^0.34.0",

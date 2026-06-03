@@ -19,7 +19,7 @@
 
 import CDP from 'chrome-remote-interface';
 import { execSync, spawn } from 'node:child_process';
-import { readFileSync, existsSync, writeFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, unlinkSync, appendFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -37,6 +37,17 @@ if (existsSync(envPath)) {
 }
 
 const FIVESIM_KEY = process.env.SMS5SIM_API_KEY;
+
+const ACCOUNTS_FILE = resolve(dirname(fileURLToPath(import.meta.url)), 'accounts.json');
+
+function saveAccount(entry) {
+  const existing = existsSync(ACCOUNTS_FILE)
+    ? JSON.parse(readFileSync(ACCOUNTS_FILE, 'utf8'))
+    : [];
+  existing.push({ ...entry, createdAt: new Date().toISOString() });
+  writeFileSync(ACCOUNTS_FILE, JSON.stringify(existing, null, 2));
+  console.log(`Account saved → scripts/accounts.json (${existing.length} total)`);
+}
 
 // --- 5sim API helpers ---
 
@@ -104,19 +115,24 @@ async function finishOrder(orderId) {
   await fivesimRequest(`/user/finish/${orderId}`);
 }
 
-// --- Vonage SMS sender ---
+// --- Vonage SMS sender (legacy REST API — accepts short codes and non-E.164 numbers) ---
 async function sendViаVonage(toNumber, messageBody) {
-  const apiKey    = process.env.VONAGE_API_KEY;
+  const apiKey  = process.env.VONAGE_API_KEY;
   const apiSecret = process.env.VONAGE_API_SECRET;
-  const fromNum   = process.env.VONAGE_FROM_NUMBER ?? 'Vonage';
+  const fromNum = process.env.VONAGE_FROM_NUMBER ?? 'Vonage';
 
   if (!apiKey || !apiSecret) throw new Error('VONAGE_API_KEY / VONAGE_API_SECRET not set in .env');
 
-  const vonage = new Vonage({ apiKey, apiSecret });
-  const result = await vonage.messages.send(
-    new SMS(messageBody, toNumber, fromNum)
-  );
-  return result.messageUUID;
+  const res = await fetch('https://rest.nexmo.com/sms/json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ api_key: apiKey, api_secret: apiSecret, from: fromNum, to: toNumber, text: messageBody }),
+  });
+  if (!res.ok) throw new Error(`Vonage HTTP ${res.status}`);
+  const data = await res.json();
+  const msg = data.messages?.[0];
+  if (!msg || msg.status !== '0') throw new Error(`Vonage error ${msg?.status}: ${msg?.['error-text']}`);
+  return msg['message-id'];
 }
 
 async function decodeQRFromBase64(dataUrl) {
@@ -169,6 +185,17 @@ function pickProxy(value) {
     const picked = pool[Math.floor(Math.random() * pool.length)];
     writeFileSync(PROXY_SESSION_FILE, JSON.stringify(picked));
     console.log(`Proxy selected + saved: ${picked.server} (user: ${picked.user})`);
+    return picked;
+  }
+
+  // --proxy=N  →  pick line N (1-based) from proxies.txt and save it as the session
+  if (/^\d+$/.test(value)) {
+    const pool = loadProxies();
+    const idx = parseInt(value, 10) - 1;
+    if (idx < 0 || idx >= pool.length) throw new Error(`Proxy #${value} not found — proxies.txt has ${pool.length} entries`);
+    const picked = pool[idx];
+    writeFileSync(PROXY_SESSION_FILE, JSON.stringify(picked));
+    console.log(`Proxy #${value} selected + saved: ${picked.server} (user: ${picked.user})`);
     return picked;
   }
 
@@ -484,6 +511,7 @@ if (birthdayNextPos) {
 
 // --- email step: poll until radio suggestions OR emailPhone input appears ---
 let emailVariant = null;
+let createdEmail = null;
 for (let w = 0; w < 20; w++) {
   await delay(600, 900);
   const { result } = await Runtime.evaluate({
@@ -538,6 +566,7 @@ if (emailVariantResult.value) {
       await delay(300, 500);
     }
     console.log(`Selected suggested email: ${variant.value}`);
+    createdEmail = variant.value;
   } else {
     console.log('⚠ Email suggestion not available. Google is asking for an existing email/phone.');
   }
@@ -611,13 +640,24 @@ await delay(2000, 3000);
 // poll for QR image OR phone number input
 let verifyQrSrc = null;
 let verifyPhonePos = null;
-for (let w = 0; w < 15; w++) {
+for (let w = 0; w < 20; w++) {
   await delay(600, 900);
   const { result: pageState } = await Runtime.evaluate({
     expression: `
       (() => {
         const qr = document.querySelector('img[alt*="QR"]');
-        if (qr) return JSON.stringify({ type: 'qr', src: qr.src });
+        if (qr) {
+          // Before committing to QR, check if there's a "Try another way" escape hatch on this page.
+          const alt = [...document.querySelectorAll('a, button, [role="button"]')].find(el => {
+            const t = el.textContent?.trim().toLowerCase();
+            return t && (t.includes('try another') || t.includes('another way') || t.includes('different') || t.includes("can't scan") || t.includes('get a code'));
+          });
+          if (alt) {
+            const r = alt.getBoundingClientRect();
+            return JSON.stringify({ type: 'alt_method', x: r.left + r.width/2, y: r.top + r.height/2 });
+          }
+          return JSON.stringify({ type: 'qr', src: qr.src });
+        }
         const ph = document.querySelector('input[name="phoneNumberId"], #phoneNumberId');
         if (ph) {
           const r = ph.getBoundingClientRect();
@@ -629,12 +669,17 @@ for (let w = 0; w < 15; w++) {
   });
   if (pageState.value) {
     const s = JSON.parse(pageState.value);
+    if (s.type === 'alt_method') {
+      console.log('Found alternative verification method — switching to phone OTP flow');
+      await moveAndClick(s.x, s.y);
+      continue; // re-poll — should now see phone input or a different page
+    }
     if (s.type === 'qr')    { verifyQrSrc = s.src; break; }
     if (s.type === 'phone') { verifyPhonePos = { x: s.x, y: s.y }; break; }
   }
 }
 
-// --- Flow A: QR device verification → open tab → click Send SMS → Vonage ---
+// --- Flow A: QR device verification → open tab → look for phone OTP first, fall back to Vonage SMS ---
 if (verifyQrSrc) {
   const qrUrl = await decodeQRFromBase64(verifyQrSrc);
   if (!qrUrl) { console.log('Could not decode QR'); }
@@ -668,62 +713,174 @@ if (verifyQrSrc) {
 
     await phonePage.navigate({ url: qrUrl });
 
-    // poll for Send SMS button
-    let smsBtnPos = null;
-    for (let w = 0; w < 20; w++) {
-      await delay(500, 800);
-      const { result } = await phoneRuntime.evaluate({
-        expression: `(() => {
-          const btn = [...document.querySelectorAll('button')].find(
-            b => b.querySelector('span[jsname="V67aGc"]')?.textContent.trim() === 'Send SMS'
-          );
-          if (!btn) return null;
-          const r = btn.getBoundingClientRect();
-          return JSON.stringify({ x: r.left + r.width/2, y: r.top + r.height/2 });
-        })()`,
-      });
-      if (result.value) { smsBtnPos = JSON.parse(result.value); break; }
+    // After the QR tab loads, check if there's a phone OTP option on this page first.
+    // The device-trust QR flow won't work with Vonage because Google requires the SMS to come
+    // from a number already tied to an existing Google account.
+    // If a "Get a verification code" / phone number input is available, use that + 5sim instead.
+    await delay(2000, 3000);
+    const { result: phoneOtpCheck } = await phoneRuntime.evaluate({
+      expression: `(() => {
+        // Phone number input already visible
+        const ph = document.querySelector('input[name="phoneNumberId"], #phoneNumberId, input[type="tel"]');
+        if (ph) { const r = ph.getBoundingClientRect(); return JSON.stringify({ type: 'phone_input', x: r.left+r.width/2, y: r.top+r.height/2 }); }
+        // Link/button to switch to OTP
+        const alt = [...document.querySelectorAll('button,a,[role="button"]')].find(el => {
+          const t = el.textContent?.trim().toLowerCase();
+          return t && (t.includes('get a') || t.includes('phone number') || t.includes('another way') || t.includes('try another') || t.includes("can't scan"));
+        });
+        if (alt) { const r = alt.getBoundingClientRect(); return JSON.stringify({ type: 'alt_btn', text: alt.textContent.trim(), x: r.left+r.width/2, y: r.top+r.height/2 }); }
+        return null;
+      })()`,
+    });
+
+    let usedFivesimFallback = false;
+
+    if (phoneOtpCheck.value && FIVESIM_KEY) {
+      const opt = JSON.parse(phoneOtpCheck.value);
+      console.log(`QR tab has phone OTP option: ${opt.type} ${opt.text ?? ''} — switching to 5sim`);
+
+      // If it's a button/link, click it first to expose the phone input
+      if (opt.type === 'alt_btn') {
+        await phoneInput.dispatchMouseEvent({ type: 'mousePressed', x: Math.round(opt.x), y: Math.round(opt.y), button: 'left', clickCount: 1 });
+        await delay(60, 120);
+        await phoneInput.dispatchMouseEvent({ type: 'mouseReleased', x: Math.round(opt.x), y: Math.round(opt.y), button: 'left', clickCount: 1 });
+        await delay(1500, 2500);
+        // Re-fetch phone input coords after click
+        const { result: phRecheck } = await phoneRuntime.evaluate({
+          expression: `(() => { const ph = document.querySelector('input[name="phoneNumberId"], #phoneNumberId, input[type="tel"]'); if (!ph) return null; const r = ph.getBoundingClientRect(); return JSON.stringify({ x: r.left+r.width/2, y: r.top+r.height/2 }); })()`,
+        });
+        if (phRecheck.value) Object.assign(opt, { type: 'phone_input', ...JSON.parse(phRecheck.value) });
+      }
+
+      if (opt.type === 'phone_input') {
+        try {
+          const proxyCountry = proxy ? await getProxyCountry(proxy) : 'any';
+          const order = await buyNumber(proxyCountry);
+          console.log(`5sim number: +${order.phone}`);
+
+          await phoneInput.dispatchMouseEvent({ type: 'mousePressed', x: Math.round(opt.x), y: Math.round(opt.y), button: 'left', clickCount: 1 });
+          await delay(60, 120);
+          await phoneInput.dispatchMouseEvent({ type: 'mouseReleased', x: Math.round(opt.x), y: Math.round(opt.y), button: 'left', clickCount: 1 });
+          await delay(300, 500);
+          for (const char of order.phone) {
+            await phoneInput.dispatchKeyEvent({ type: 'keyDown', text: char });
+            await phoneInput.dispatchKeyEvent({ type: 'keyUp', text: char });
+            await delay(60, 150);
+          }
+
+          const { result: nextR } = await phoneRuntime.evaluate({
+            expression: `(() => { const b = document.querySelector('#next button, #sendVerificationCode button'); if (!b) return null; const r = b.getBoundingClientRect(); return JSON.stringify({ x: r.left+r.width/2, y: r.top+r.height/2 }); })()`,
+          });
+          if (nextR.value) {
+            const { x: nx, y: ny } = JSON.parse(nextR.value);
+            await phoneInput.dispatchMouseEvent({ type: 'mousePressed', x: Math.round(nx), y: Math.round(ny), button: 'left', clickCount: 1 });
+            await delay(60, 120);
+            await phoneInput.dispatchMouseEvent({ type: 'mouseReleased', x: Math.round(nx), y: Math.round(ny), button: 'left', clickCount: 1 });
+            console.log('Clicked: Send code');
+          }
+
+          const smsText = await waitForSms(order.id);
+          console.log('OTP SMS:', smsText);
+          const codeMatch = smsText.match(/\b(\d{6})\b/);
+          if (codeMatch) {
+            const otp = codeMatch[1];
+            await delay(1000, 1500);
+            const { result: otpR } = await phoneRuntime.evaluate({
+              expression: `(() => { const i = document.querySelector('input[name="code"], #code'); if (!i) return null; const r = i.getBoundingClientRect(); return JSON.stringify({ x: r.left+r.width/2, y: r.top+r.height/2 }); })()`,
+            });
+            if (otpR.value) {
+              const { x: ox, y: oy } = JSON.parse(otpR.value);
+              await phoneInput.dispatchMouseEvent({ type: 'mousePressed', x: Math.round(ox), y: Math.round(oy), button: 'left', clickCount: 1 });
+              await delay(60, 120);
+              await phoneInput.dispatchMouseEvent({ type: 'mouseReleased', x: Math.round(ox), y: Math.round(oy), button: 'left', clickCount: 1 });
+              for (const char of otp) {
+                await phoneInput.dispatchKeyEvent({ type: 'keyDown', text: char });
+                await phoneInput.dispatchKeyEvent({ type: 'keyUp', text: char });
+                await delay(60, 150);
+              }
+              await delay(800, 1400);
+              const { result: vR } = await phoneRuntime.evaluate({
+                expression: `(() => { const b = document.querySelector('#next button'); if (!b) return null; const r = b.getBoundingClientRect(); return JSON.stringify({ x: r.left+r.width/2, y: r.top+r.height/2 }); })()`,
+              });
+              if (vR.value) {
+                const { x: vx, y: vy } = JSON.parse(vR.value);
+                await phoneInput.dispatchMouseEvent({ type: 'mousePressed', x: Math.round(vx), y: Math.round(vy), button: 'left', clickCount: 1 });
+                await delay(60, 120);
+                await phoneInput.dispatchMouseEvent({ type: 'mouseReleased', x: Math.round(vx), y: Math.round(vy), button: 'left', clickCount: 1 });
+                console.log('Clicked: Verify (5sim on QR tab)');
+              }
+            }
+          }
+          await finishOrder(order.id);
+          usedFivesimFallback = true;
+        } catch (e) {
+          console.log('5sim on QR tab failed:', e.message);
+        }
+      }
     }
 
-    if (smsBtnPos) {
-      const { x, y } = smsBtnPos;
-      const steps = 8 + Math.floor(Math.random() * 6);
-      const sx = x - 80 + Math.random() * 160, sy = y - 60 + Math.random() * 120;
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        await phoneInput.dispatchMouseEvent({ type: 'mouseMoved',
-          x: Math.round(sx + (x-sx)*t + (Math.random()-.5)*4),
-          y: Math.round(sy + (y-sy)*t + (Math.random()-.5)*4) });
-        await delay(20, 60);
+    if (!usedFivesimFallback) {
+      // No phone OTP option found — fall back to Vonage SMS-to-shortcode.
+      // Note: this only works if the FROM number is already associated with a Google account.
+      console.log('No phone OTP option on QR tab — trying Vonage SMS-to-shortcode fallback');
+
+      // poll for Send SMS button
+      let smsBtnPos = null;
+      for (let w = 0; w < 20; w++) {
+        await delay(500, 800);
+        const { result } = await phoneRuntime.evaluate({
+          expression: `(() => {
+            const btn = [...document.querySelectorAll('button')].find(
+              b => b.querySelector('span[jsname="V67aGc"]')?.textContent.trim() === 'Send SMS'
+            );
+            if (!btn) return null;
+            const r = btn.getBoundingClientRect();
+            return JSON.stringify({ x: r.left + r.width/2, y: r.top + r.height/2 });
+          })()`,
+        });
+        if (result.value) { smsBtnPos = JSON.parse(result.value); break; }
       }
-      await delay(200, 500);
-      await phoneInput.dispatchMouseEvent({ type: 'mousePressed', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
-      await delay(60, 140);
-      await phoneInput.dispatchMouseEvent({ type: 'mouseReleased', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
-      console.log('Clicked: Send SMS');
 
-      await delay(1000, 1500);
-      const { result: jsCapture } = await phoneRuntime.evaluate({ expression: `window.__smsUrl ?? null` });
-      const rawSmsUrl = capturedSmsUrl ?? jsCapture.value ?? null;
+      if (smsBtnPos) {
+        const { x, y } = smsBtnPos;
+        const steps = 8 + Math.floor(Math.random() * 6);
+        const sx = x - 80 + Math.random() * 160, sy = y - 60 + Math.random() * 120;
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          await phoneInput.dispatchMouseEvent({ type: 'mouseMoved',
+            x: Math.round(sx + (x-sx)*t + (Math.random()-.5)*4),
+            y: Math.round(sy + (y-sy)*t + (Math.random()-.5)*4) });
+          await delay(20, 60);
+        }
+        await delay(200, 500);
+        await phoneInput.dispatchMouseEvent({ type: 'mousePressed', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
+        await delay(60, 140);
+        await phoneInput.dispatchMouseEvent({ type: 'mouseReleased', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
+        console.log('Clicked: Send SMS');
 
-      if (rawSmsUrl) {
-        const smsUrl   = new URL(rawSmsUrl);
-        const toPhone  = smsUrl.host || smsUrl.pathname.replace(/^\/+/, '').split(/[/?&]/)[0];
-        const bodyMatch = rawSmsUrl.match(/[?&]body=([^&\s]*)/);
-        const msgBody  = bodyMatch ? decodeURIComponent(bodyMatch[1]) : '';
-        console.log(`sms: → to: ${toPhone}, body: ${msgBody}`);
+        await delay(1000, 1500);
+        const { result: jsCapture } = await phoneRuntime.evaluate({ expression: `window.__smsUrl ?? null` });
+        const rawSmsUrl = capturedSmsUrl ?? jsCapture.value ?? null;
 
-        try {
-          const uuid = await sendViаVonage(toPhone, msgBody);
-          console.log(`SMS sent via Vonage ✓ (uuid: ${uuid})`);
-        } catch (e) {
-          console.log('Vonage send failed:', e.message);
+        if (rawSmsUrl) {
+          const smsUrl   = new URL(rawSmsUrl);
+          const toPhone  = smsUrl.host || smsUrl.pathname.replace(/^\/+/, '').split(/[/?&]/)[0];
+          const bodyMatch = rawSmsUrl.match(/[?&]body=([^&\s]*)/);
+          const msgBody  = bodyMatch ? decodeURIComponent(bodyMatch[1]) : '';
+          console.log(`sms: → to: ${toPhone}, body: ${msgBody}`);
+
+          try {
+            const uuid = await sendViаVonage(toPhone, msgBody);
+            console.log(`SMS sent via Vonage ✓ (uuid: ${uuid})`);
+          } catch (e) {
+            console.log('Vonage send failed:', e.message);
+          }
+        } else {
+          console.log('sms: URL not captured');
         }
       } else {
-        console.log('sms: URL not captured');
+        console.log('Send SMS button not found');
       }
-    } else {
-      console.log('Send SMS button not found');
     }
   }
 
@@ -770,4 +927,11 @@ if (verifyQrSrc) {
 
 } else {
   console.log('No phone verification page detected — may have been skipped or already verified');
+}
+
+// --- Save account credentials ---
+if (createdEmail && password) {
+  saveAccount({ email: createdEmail, password });
+} else {
+  console.log('⚠ Could not save account — email or password not captured');
 }

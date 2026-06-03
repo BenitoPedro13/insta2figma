@@ -146,7 +146,7 @@ Guia completo (scopes do token, troubleshooting, `curl`): **[docs/DEV-POLAR-NGRO
 - **Railway:** **[docs/RAILWAY.md](docs/RAILWAY.md)** — Postgres + Redis + API + worker no mesmo projeto.
 - **Auth:** **[docs/AUTH.md](docs/AUTH.md)** — magic link, Google OAuth, Gmail API, refresh token.
 - **Geral:** **[docs/DEPLOY.md](docs/DEPLOY.md)** — Docker Compose VPS, R2, plugin Figma.
-- **Sessões Instagram:** **[docs/SESSION-MANAGEMENT.md](docs/SESSION-MANAGEMENT.md)** — criar contas, extrair cookies, hot-reload sem redeploy, alertas Discord/Slack.
+- **Sessões Instagram:** **[docs/SESSION-MANAGEMENT.md](docs/SESSION-MANAGEMENT.md)** — criar contas via CDP scripts (`pnpm cdp:launch`, `pnpm cdp:instagram`, `pnpm cdp:pool`), hot-reload sem redeploy, alertas Discord/Slack.
 
 Remotes Git:
 
@@ -170,8 +170,8 @@ pnpm prod:up                     # API + worker + Postgres + Redis + MinIO
 - `ERR_CONNECTION_REFUSED` no plugin: API não está de pé (`pnpm dev` ou `pnpm dev:api`) ou `PORT` diferente.
 - Job fica em `queued`: worker não está de pé (`pnpm dev` ou `pnpm dev:worker`) ou Redis indisponível.
 - Preview sem avatar: endpoint de preview responde sem `profilePicDataUrl` (bloqueio upstream); o fallback de UI usa placeholder.
-- `checkpoint_required` no worker: a sessão Instagram foi criada num IP diferente dos proxies. Cria a conta com o browser a correr pelo proxy — ver [docs/SESSION-MANAGEMENT.md §1](docs/SESSION-MANAGEMENT.md).
-- Sessão Instagram expirou (401/403): configura `ALERT_WEBHOOK_URL` para receber alerta automático; renova com `node scripts/ig-cookie-helper.mjs` + `POST /admin/sessions` (sem redeploy) — ver [docs/SESSION-MANAGEMENT.md](docs/SESSION-MANAGEMENT.md).
+- `checkpoint_required` no worker: a sessão Instagram foi criada num IP diferente dos proxies. Usa `pnpm cdp:proxy` + `pnpm cdp:instagram:proxy` para criar a conta e a sessão com o mesmo proxy — ver [docs/SESSION-MANAGEMENT.md §1](docs/SESSION-MANAGEMENT.md).
+- Sessão Instagram expirou (401/403): configura `ALERT_WEBHOOK_URL` para receber alerta automático; cria nova sessão com `pnpm cdp:instagram` + `pnpm cdp:pool` e actualiza `IG_SESSION_POOL` no Railway (sem redeploy via `POST /admin/sessions`) — ver [docs/SESSION-MANAGEMENT.md](docs/SESSION-MANAGEMENT.md).
 - `503 Polar billing is not configured`: `POLAR_ACCESS_TOKEN` em falta.
 - `Plan pro (yearly) is not configured yet`: `POLAR_PRODUCT_ID_PRO_YEARLY` em falta.
 - Checkout Polar / plano Pro: ver [docs/DEV-POLAR-NGROK.md](docs/DEV-POLAR-NGROK.md).

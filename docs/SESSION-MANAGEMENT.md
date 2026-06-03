@@ -18,43 +18,70 @@ Tanto a API como o Worker verificam o Redis a cada 60 segundos e recarregam auto
 
 ---
 
-## 1. Criar uma conta de serviço
+## 1. Criar uma conta de serviço (CDP automatizado)
 
-Para evitar `checkpoint_required`, a conta deve ser criada com o browser a correr pelo mesmo proxy que vai usar depois:
+Os scripts CDP automatizam a criação de contas Google/Gmail e Instagram via Chrome DevTools Protocol. As credenciais e sessões são guardadas localmente em `scripts/accounts.json` e `scripts/sessions.json` (ambos em `.gitignore`).
+
+### Pré-requisitos
+
+- Google Chrome instalado
+- `SMS5SIM_API_KEY` no `.env` raiz (para verificação por OTP via [5sim.net](https://5sim.net))
+- `VONAGE_API_KEY` + `VONAGE_API_SECRET` + `VONAGE_FROM_NUMBER` no `.env` raiz (para verificação de dispositivo via SMS)
+- `scripts/proxies.txt` com proxies no formato `host:port:user:pass` (um por linha)
+
+### Fluxo sem proxy (conta ligada ao IP do servidor)
 
 ```bash
-# Abre Chrome com o proxy
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --proxy-server="http://user:pass@p.webshare.io:80"
+# 1. Criar conta Gmail
+pnpm cdp:launch
+
+# 2. Criar conta Instagram com o Gmail criado
+pnpm cdp:instagram
+# → pausa e pede o código de confirmação do Gmail (abrir manualmente)
+
+# 3. Gerar o valor de IG_SESSION_POOL
+pnpm cdp:pool
 ```
 
-Cria a conta em instagram.com com o Chrome aberto assim. Faz login e verifica o email se pedido.
+### Fluxo com proxy (recomendado — cada conta num IP dedicado)
+
+```bash
+# 1. Criar conta Gmail através do proxy N (ex: linha 9 de proxies.txt)
+pnpm cdp:launch --proxy=9
+# ou proxy aleatório: pnpm cdp:proxy
+
+# 2. Criar conta Instagram — reutiliza automaticamente o mesmo proxy (.proxy-session)
+pnpm cdp:instagram:proxy
+# → pausa e pede o código de confirmação do Gmail
+
+# 3. Gerar IG_SESSION_POOL (inclui proxy na entrada)
+pnpm cdp:pool
+```
+
+O `pnpm cdp:pool` lê `scripts/sessions.json` e imprime apenas os campos necessários para `IG_SESSION_POOL` (`account`, `cookie`, `proxy` se existir).
+
+### Opções do script cdp.mjs
+
+| Comando | Comportamento |
+|---------|--------------|
+| `pnpm cdp:launch` | Lança Chrome sem proxy |
+| `pnpm cdp:launch --proxy=9` | Usa proxy da linha 9 de `proxies.txt`, guarda em `.proxy-session` |
+| `pnpm cdp:proxy` | Proxy aleatório de `proxies.txt` (ou reutiliza `.proxy-session`) |
+| `pnpm cdp:reset` | Limpa `.proxy-session` |
+| `pnpm cdp:instagram` | Cria conta Instagram sem proxy |
+| `pnpm cdp:instagram:proxy` | Cria conta Instagram com proxy de `.proxy-session` |
 
 ---
 
-## 2. Extrair o cookie
+## 2. Extrair o cookie manualmente (alternativa)
 
-### Método recomendado — Cookie-Editor
-
-O cookie de sessão inclui valores `httpOnly` (invisíveis no `document.cookie`), por isso é precisa uma extensão:
-
-1. Instala [Cookie-Editor](https://cookie-editor.com) (Chrome ou Firefox)
-2. Vai a `instagram.com` com a sessão activa
-3. Abre Cookie-Editor → **Export** → **Export as JSON**
-4. Guarda o ficheiro (ex: `cookies.json`)
-5. Corre o script de conversão:
-
-```bash
-node scripts/ig-cookie-helper.mjs cookies.json bot1 http://user:pass@proxy:porta
-```
-
-O script imprime o JSON para `IG_SESSION_POOL` e o comando `curl` para actualizar via API.
-
-### Método manual — DevTools
+Se preferires criar a conta manualmente, extrai o cookie via DevTools:
 
 1. DevTools → **Network** → qualquer pedido a `i.instagram.com`
 2. **Request Headers** → campo `Cookie:`
-3. Copia o valor completo (começa com `sessionid=...`)
+3. Copia o valor `sessionid=...`
+
+Adiciona a entrada directamente a `scripts/sessions.json` e corre `pnpm cdp:pool`.
 
 ---
 
