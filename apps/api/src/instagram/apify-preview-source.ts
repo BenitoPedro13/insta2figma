@@ -16,11 +16,12 @@ export class ApifyPreviewSource implements PreviewDataSource {
     timelineOrder: 'newest_first' | 'oldest_first',
   ): Promise<CachedPreviewPayload> {
     const apify = await fetchPreviewViaApify(this.config, username, fetchCount);
-    return this.buildCachedPreview(apify, timelineOrder);
+    return this.buildCachedPreview(apify, fetchCount, timelineOrder);
   }
 
   private async buildCachedPreview(
     apify: ApifyPreviewProfile,
+    fetchCount: number,
     timelineOrder: 'newest_first' | 'oldest_first',
   ): Promise<CachedPreviewPayload> {
     const pageOnePosts = apify.parsedPosts.slice(0, PREVIEW_PAGE_SIZE);
@@ -31,9 +32,21 @@ export class ApifyPreviewSource implements PreviewDataSource {
       profilePicDataUrl = await fetchInstagramImageAsDataUrl(apify.profilePicUrlHd, MAX_AVATAR_BYTES);
     }
 
-    const previewTotalPages = Math.max(1, Math.ceil(apify.mediaCount / PREVIEW_PAGE_SIZE));
+    // When mediaCount is 0 (post-scraper actor doesn't return profile metadata), derive
+    // pagination from the number of posts actually fetched.
+    const gotAllAvailable = apify.parsedPosts.length < fetchCount;
+    const estimatedTotal =
+      apify.mediaCount > 0
+        ? apify.mediaCount
+        : gotAllAvailable
+          ? apify.parsedPosts.length
+          : apify.parsedPosts.length + PREVIEW_PAGE_SIZE; // at least one more page worth
+
+    const previewTotalPages = Math.max(1, Math.ceil(estimatedTotal / PREVIEW_PAGE_SIZE));
     const hasNextPreviewPage =
-      apify.parsedPosts.length > PREVIEW_PAGE_SIZE || apify.mediaCount > PREVIEW_PAGE_SIZE;
+      apify.parsedPosts.length > PREVIEW_PAGE_SIZE ||
+      (apify.mediaCount > 0 && apify.mediaCount > PREVIEW_PAGE_SIZE) ||
+      (apify.mediaCount === 0 && !gotAllAvailable);
 
     return {
       username: apify.username,

@@ -116,13 +116,52 @@ function mapApifyProfile(
   };
 }
 
+// apify~instagram-scraper uses directUrls+resultsType; apify~instagram-profile-scraper uses usernames.
+function isPostScraperActor(actorId: string): boolean {
+  return !actorId.toLowerCase().includes('profile-scraper');
+}
+
+function buildActorInput(username: string, safeCount: number, actorId: string): unknown {
+  if (isPostScraperActor(actorId)) {
+    return {
+      directUrls: [`https://www.instagram.com/${username}/`],
+      resultsType: 'posts',
+      resultsLimit: safeCount,
+    };
+  }
+  return {
+    usernames: [username],
+    resultsLimit: safeCount,
+  };
+}
+
+function mapProfileFromPostItem(
+  firstPost: Record<string, unknown>,
+  username: string,
+): InstagramProfileSummary {
+  const id = str(firstPost.ownerId);
+  const resolvedUsername = str(firstPost.ownerUsername) ?? str(firstPost.queryUsername) ?? username;
+  if (!id) {
+    throw new InstagramUpstreamError('IG_PARSE', 'Apify post response missing ownerId.', false);
+  }
+  return {
+    id,
+    username: resolvedUsername,
+    fullName: str(firstPost.ownerFullName),
+    biography: null,
+    followerCount: 0,
+    followingCount: 0,
+    mediaCount: 0,
+    isPrivate: false,
+    isVerified: false,
+    profilePicUrlHd: str(firstPost.profilePicUrl),
+  };
+}
+
 /**
- * Fonte de fallback baseada no ator `apify/instagram-profile-scraper`.
- * Usa o endpoint síncrono `run-sync-get-dataset-items` (o worker já é assíncrono,
- * então pode bloquear até o ator terminar — tipicamente 20–60s).
- *
- * Custo por chamada = 1 "profile" do ator (cobrança por perfil, não por post),
- * o que mantém o custo por imagem muito abaixo da receita por imagem.
+ * Fonte de fallback baseada num ator Apify de Instagram.
+ * Suporta `apify~instagram-profile-scraper` (input: usernames) e
+ * `apify~instagram-scraper` (input: directUrls, output: flat post array).
  */
 export class ApifyInstagramDataSource implements InstagramDataSource {
   constructor(
@@ -133,16 +172,18 @@ export class ApifyInstagramDataSource implements InstagramDataSource {
     },
   ) {}
 
+  private get actorId(): string {
+    return this.options.actorId?.trim() || 'apify~instagram-profile-scraper';
+  }
+
   private buildSyncUrl(): string {
-    const actorId =
-      this.options.actorId?.trim() || 'apify~instagram-profile-scraper';
     const timeoutMs = this.options.timeoutMs ?? 120_000;
     const actorTimeoutSecs = Math.ceil(timeoutMs / 1000);
     const params = new URLSearchParams({
       token: this.options.token,
       timeout: String(actorTimeoutSecs),
     });
-    return `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?${params.toString()}`;
+    return `https://api.apify.com/v2/acts/${this.actorId}/run-sync-get-dataset-items?${params.toString()}`;
   }
 
   async fetchProfilePostsSample(
@@ -152,11 +193,8 @@ export class ApifyInstagramDataSource implements InstagramDataSource {
   ): Promise<ScrapeJobResultSummaryV5> {
     const selection = resolveScrapeSelection(selectionInput, defaults);
     const timeoutMs = this.options.timeoutMs ?? 120_000;
-
-    const input = {
-      usernames: [usernameNormalized],
-      resultsLimit: Math.min(50, Math.max(1, selection.fetchCount)),
-    };
+    const safeCount = Math.min(200, Math.max(1, selection.fetchCount));
+    const input = buildActorInput(usernameNormalized, safeCount, this.actorId);
 
     let res: Response;
     try {
@@ -217,34 +255,36 @@ export class ApifyInstagramDataSource implements InstagramDataSource {
       );
     }
 
-    const profileRec = asRecord(body[0]);
-    if (!profileRec) {
-      throw new InstagramUpstreamError(
-        'IG_PARSE',
-        'Apify response had an unexpected profile shape.',
-        false,
-      );
+    let profile: InstagramProfileSummary;
+    let postsRaw: unknown[];
+
+    if (isPostScraperActor(this.actorId)) {
+      // Flat array of post objects — extract profile info from first item
+      const firstPost = asRecord(body[0]);
+      if (!firstPost) {
+        throw new InstagramUpstreamError('IG_PARSE', 'Apify post response had unexpected shape.', false);
+      }
+      profile = mapProfileFromPostItem(firstPost, usernameNormalized);
+      postsRaw = body;
+    } else {
+      // Profile scraper — body[0] = profile object with latestPosts
+      const profileRec = asRecord(body[0]);
+      if (!profileRec) {
+        throw new InstagramUpstreamError('IG_PARSE', 'Apify response had an unexpected profile shape.', false);
+      }
+      if (str(profileRec.error)) {
+        throw new InstagramUpstreamError('IG_BLOCKED', `Apify reported: ${str(profileRec.error)}`, false);
+      }
+      profile = mapApifyProfile(profileRec);
+      postsRaw = Array.isArray(profileRec.latestPosts)
+        ? profileRec.latestPosts
+        : Array.isArray(profileRec.posts)
+          ? profileRec.posts
+          : [];
     }
-
-    // Alguns runs sinalizam erro/privado no próprio item.
-    if (str(profileRec.error)) {
-      throw new InstagramUpstreamError(
-        'IG_BLOCKED',
-        `Apify reported: ${str(profileRec.error)}`,
-        false,
-      );
-    }
-
-    const profile = mapApifyProfile(profileRec);
-
-    const latestPostsRaw = Array.isArray(profileRec.latestPosts)
-      ? profileRec.latestPosts
-      : Array.isArray(profileRec.posts)
-        ? profileRec.posts
-        : [];
 
     const fetched: InstagramPostSummaryItem[] = [];
-    for (const raw of latestPostsRaw) {
+    for (const raw of postsRaw) {
       const item = mapApifyPostToSummaryItem(raw);
       if (item) fetched.push(item);
       if (fetched.length >= selection.fetchCount) break;

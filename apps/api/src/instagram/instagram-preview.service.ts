@@ -22,7 +22,7 @@ import {
 import { globalSessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, PREVIEW_RETRY, parseFeedItems, IG_HEADERS, buildIgHeaders } from '@insta2figma/shared-instagram';
 import { REDIS_CACHE_CLIENT } from '../cache/redis-cache.module';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
-import { fetchPreviewViaApify, readApifyPreviewConfig } from './apify-preview.client';
+import { fetchPreviewViaApify, readApifyPreviewConfig, readApifyPostConfig } from './apify-preview.client';
 import { fetchInstagramImageAsDataUrl } from './instagram-image.utils';
 import type { CachedPreviewPayload, TelemetryCtx, PreviewDataSource } from './preview-source.types';
 import { ApifyPreviewSource } from './apify-preview-source';
@@ -425,10 +425,10 @@ export class InstagramPreviewService {
     hasNextPage: boolean;
     nextMaxId: string | null;
   } | null> {
-    const config = readApifyPreviewConfig();
+    const config = readApifyPostConfig();
     if (!config) return null;
 
-    const neededPosts = Math.min(50, pageNumber * PREVIEW_PAGE_SIZE);
+    const neededPosts = Math.min(200, pageNumber * PREVIEW_PAGE_SIZE);
     try {
       const apify = await fetchPreviewViaApify(config, username, neededPosts);
       const start = (pageNumber - 1) * PREVIEW_PAGE_SIZE;
@@ -437,7 +437,8 @@ export class InstagramPreviewService {
 
       const hasNextPage =
         apify.parsedPosts.length > start + posts.length ||
-        apify.mediaCount > start + posts.length;
+        (apify.mediaCount > 0 && apify.mediaCount > start + posts.length) ||
+        (apify.mediaCount === 0 && apify.parsedPosts.length >= neededPosts);
 
       return { posts, hasNextPage, nextMaxId: null };
     } catch (err) {

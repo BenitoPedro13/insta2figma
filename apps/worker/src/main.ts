@@ -60,6 +60,7 @@ async function main(): Promise<void> {
     const apifySource = new ApifyInstagramDataSource({
       token: apifyToken,
       actorId:
+        process.env.APIFY_IG_POST_ACTOR?.trim() ||
         process.env.APIFY_IG_PROFILE_ACTOR?.trim() ||
         'apify~instagram-profile-scraper',
       timeoutMs: apifyTimeoutMs,

@@ -435,6 +435,7 @@ export function App({ host }: { host: PluginHost }) {
         if (requestKind === 'page') {
           setPreviewLoadingMore(false);
           setPreviewThumbsLoading(false);
+          setHasMorePreview(false);
           setPreviewError(
             typeof pm.message === 'string' ? pm.message : 'Could not load more posts.',
           );

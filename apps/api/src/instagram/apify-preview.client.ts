@@ -84,8 +84,13 @@ function mapApifyPost(raw: unknown): TimelinePostItem | null {
     isVideo,
   };
 
-  // Carrosséis: Sidecar tem imagens filhas em `images` e/ou `childPosts`
-  if (type === 'Sidecar' || type === 'GraphSidecar') {
+  // Carrosséis: Sidecar/GraphSidecar tem imagens filhas em `images` e/ou `childPosts`
+  // Detectar também por childPosts.length para compatibilidade com apify~instagram-scraper
+  const isCarousel =
+    type === 'Sidecar' ||
+    type === 'GraphSidecar' ||
+    (Array.isArray(post.childPosts) && (post.childPosts as unknown[]).length > 1);
+  if (isCarousel) {
     const carousel = parseApifyCarouselUrls(post);
     if (carousel.length > 0) item.carouselImageUrls = carousel;
   }
@@ -93,19 +98,53 @@ function mapApifyPost(raw: unknown): TimelinePostItem | null {
   return item;
 }
 
-export function readApifyPreviewConfig(): ApifyPreviewConfig | null {
-  const token = process.env.APIFY_TOKEN?.trim();
-  if (!token) return null;
-
+function buildApifyConfig(actorId: string): ApifyPreviewConfig {
   return {
-    token,
-    actorId:
-      process.env.APIFY_IG_PROFILE_ACTOR?.trim() ||
-      'apify~instagram-profile-scraper',
+    token: process.env.APIFY_TOKEN!.trim(),
+    actorId,
     timeoutMs: Math.max(
       30_000,
       Number.parseInt(process.env.APIFY_TIMEOUT_MS ?? '120000', 10) || 120_000,
     ),
+  };
+}
+
+// Used for the initial profile preview (profile metadata + first ~12 posts).
+export function readApifyPreviewConfig(): ApifyPreviewConfig | null {
+  const token = process.env.APIFY_TOKEN?.trim();
+  if (!token) return null;
+  return buildApifyConfig(
+    process.env.APIFY_IG_PROFILE_ACTOR?.trim() || 'apify~instagram-profile-scraper',
+  );
+}
+
+// Used for pagination (page 2+). Falls back to the profile actor if no post actor is configured.
+export function readApifyPostConfig(): ApifyPreviewConfig | null {
+  const token = process.env.APIFY_TOKEN?.trim();
+  if (!token) return null;
+  return buildApifyConfig(
+    process.env.APIFY_IG_POST_ACTOR?.trim() ||
+    process.env.APIFY_IG_PROFILE_ACTOR?.trim() ||
+    'apify~instagram-profile-scraper',
+  );
+}
+
+// apify~instagram-scraper uses directUrls+resultsType; apify~instagram-profile-scraper uses usernames.
+function isPostScraperActor(actorId: string): boolean {
+  return !actorId.toLowerCase().includes('profile-scraper');
+}
+
+function buildActorInput(username: string, safeCount: number, actorId: string): unknown {
+  if (isPostScraperActor(actorId)) {
+    return {
+      directUrls: [`https://www.instagram.com/${username}/`],
+      resultsType: 'posts',
+      resultsLimit: safeCount,
+    };
+  }
+  return {
+    usernames: [username],
+    resultsLimit: safeCount,
   };
 }
 
@@ -118,16 +157,88 @@ function buildSyncUrl(config: ApifyPreviewConfig): string {
   return `https://api.apify.com/v2/acts/${config.actorId}/run-sync-get-dataset-items?${params.toString()}`;
 }
 
+// apify~instagram-profile-scraper: body[0] = profile object with .latestPosts
+function parseProfileScraperOutput(
+  body: unknown[],
+  safeCount: number,
+  username: string,
+): ApifyPreviewProfile {
+  const profileRec = asRecord(body[0]);
+  if (!profileRec) throw new Error('Apify response had an unexpected profile shape.');
+
+  if (str(profileRec.error)) throw new Error(`Apify reported: ${str(profileRec.error)}`);
+
+  const instagramUserId = str(profileRec.id) ?? str(profileRec.userId);
+  const resolvedUsername = str(profileRec.username) ?? username;
+  if (!instagramUserId) throw new Error('Apify response missing a valid user id.');
+
+  const latestPostsRaw = Array.isArray(profileRec.latestPosts)
+    ? profileRec.latestPosts
+    : Array.isArray(profileRec.posts)
+      ? profileRec.posts
+      : [];
+
+  const parsedPosts: TimelinePostItem[] = [];
+  for (const raw of latestPostsRaw) {
+    const item = mapApifyPost(raw);
+    if (item) parsedPosts.push(item);
+    if (parsedPosts.length >= safeCount) break;
+  }
+
+  return {
+    username: resolvedUsername,
+    instagramUserId,
+    profilePicUrlHd:
+      str(profileRec.profilePicUrlHD) ??
+      str(profileRec.profilePicUrlHd) ??
+      str(profileRec.profilePicUrl),
+    mediaCount: num(profileRec.postsCount),
+    isPrivate: profileRec.private === true || profileRec.isPrivate === true,
+    parsedPosts,
+  };
+}
+
+// apify~instagram-scraper: body = flat array of post objects
+function parsePostScraperOutput(
+  body: unknown[],
+  safeCount: number,
+  username: string,
+): ApifyPreviewProfile {
+  if (body.length === 0) throw new Error('Apify returned no posts for this profile.');
+
+  const firstPost = asRecord(body[0]);
+  if (!firstPost) throw new Error('Apify post response had an unexpected shape.');
+
+  const ownerUsername =
+    str(firstPost.ownerUsername) ?? str(firstPost.queryUsername) ?? username;
+  const ownerId = str(firstPost.ownerId);
+  if (!ownerId) throw new Error('Apify post response missing ownerId.');
+
+  const parsedPosts: TimelinePostItem[] = [];
+  for (const raw of body) {
+    const item = mapApifyPost(raw);
+    if (item) parsedPosts.push(item);
+    if (parsedPosts.length >= safeCount) break;
+  }
+
+  // mediaCount not available from the post scraper; caller computes pagination from parsedPosts.length
+  return {
+    username: ownerUsername,
+    instagramUserId: ownerId,
+    profilePicUrlHd: str(firstPost.profilePicUrl) ?? null,
+    mediaCount: 0,
+    isPrivate: false,
+    parsedPosts,
+  };
+}
+
 export async function fetchPreviewViaApify(
   config: ApifyPreviewConfig,
   username: string,
   fetchCount: number,
 ): Promise<ApifyPreviewProfile> {
-  const safeCount = Math.min(50, Math.max(1, Math.floor(fetchCount)));
-  const input = {
-    usernames: [username],
-    resultsLimit: safeCount,
-  };
+  const safeCount = Math.min(200, Math.max(1, Math.floor(fetchCount)));
+  const input = buildActorInput(username, safeCount, config.actorId);
 
   const tokenPreview = config.token.length > 8
     ? `${config.token.slice(0, 4)}...${config.token.slice(-4)}`
@@ -169,37 +280,14 @@ export async function fetchPreviewViaApify(
     throw new Error('Apify returned no profile data for this username.');
   }
 
-  const profileRec = asRecord(body[0]);
-  if (!profileRec) {
-    throw new Error('Apify response had an unexpected profile shape.');
-  }
+  const usePostScraper = isPostScraperActor(config.actorId);
+  const profile = usePostScraper
+    ? parsePostScraperOutput(body, safeCount, username)
+    : parseProfileScraperOutput(body, safeCount, username);
 
-  if (str(profileRec.error)) {
-    throw new Error(`Apify reported: ${str(profileRec.error)}`);
-  }
-
-  const instagramUserId = str(profileRec.id) ?? str(profileRec.userId);
-  const resolvedUsername = str(profileRec.username) ?? username;
-  if (!instagramUserId) {
-    throw new Error('Apify response missing a valid user id.');
-  }
-
-  const latestPostsRaw = Array.isArray(profileRec.latestPosts)
-    ? profileRec.latestPosts
-    : Array.isArray(profileRec.posts)
-      ? profileRec.posts
-      : [];
-
-
-  const parsedPosts: TimelinePostItem[] = [];
-  for (const raw of latestPostsRaw) {
-    const item = mapApifyPost(raw);
-    if (item) parsedPosts.push(item);
-    if (parsedPosts.length >= safeCount) break;
-  }
   console.info(
-    `[apify] ${parsedPosts.length}/${latestPostsRaw.length} posts parsed`,
-    parsedPosts.slice(0, 5).map(p => ({
+    `[apify] ${profile.parsedPosts.length}/${usePostScraper ? body.length : 'profile'} posts parsed`,
+    profile.parsedPosts.slice(0, 5).map(p => ({
       shortcode: p.shortcode,
       thumb: p.thumbnailUrl ? '✓' : '✗',
       carousel: p.carouselImageUrls?.length ?? 0,
@@ -207,15 +295,5 @@ export async function fetchPreviewViaApify(
     })),
   );
 
-  return {
-    username: resolvedUsername,
-    instagramUserId,
-    profilePicUrlHd:
-      str(profileRec.profilePicUrlHD) ??
-      str(profileRec.profilePicUrlHd) ??
-      str(profileRec.profilePicUrl),
-    mediaCount: num(profileRec.postsCount),
-    isPrivate: profileRec.private === true || profileRec.isPrivate === true,
-    parsedPosts,
-  };
+  return profile;
 }
