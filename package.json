@@ -13,7 +13,6 @@
     "infra:logs": "docker compose logs -f",
     "infra:logs:postgres": "docker compose logs -f postgres",
     "infra:logs:redis": "docker compose logs -f redis",
-
     "docker:build:api": "docker build -f Dockerfile.api -t insta2figma-api .",
     "docker:build:worker": "docker build -f Dockerfile.worker -t insta2figma-worker .",
     "prod:up": "docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build",
@@ -29,13 +28,24 @@
     "dev:worker": "pnpm --filter @insta2figma/worker run start:dev",
     "ig:smoke": "pnpm --filter @insta2figma/worker run ig:smoke",
     "ig:smoke:fallback": "pnpm --filter @insta2figma/worker run ig:smoke:fallback",
-    "test:ig": "pnpm --filter @insta2figma/worker run test:integration"
+    "test:ig": "pnpm --filter @insta2figma/worker run test:integration",
+    "cdp": "node scripts/cdp.mjs",
+    "cdp:launch": "node scripts/cdp.mjs --launch",
+    "cdp:proxy": "node scripts/cdp.mjs --launch --proxy=random",
+    "cdp:reset": "node scripts/cdp.mjs --proxy=reset"
   },
   "devDependencies": {
+    "chrome-remote-interface": "^0.34.0",
     "concurrently": "^9.1.2",
+    "jimp": "^1.6.1",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
+    "sharp": "^0.34.5",
     "turbo": "^2.3.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@tailwindcss/oxide"]
+    "onlyBuiltDependencies": [
+      "@tailwindcss/oxide"
+    ]
   }
 }

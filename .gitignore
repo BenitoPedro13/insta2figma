@@ -11,3 +11,4 @@ apps/worker/.env
 .pnpm-store
 # Legado Figma (gerado ao lado do fonte)
 code.js
+scripts/.proxy-session
