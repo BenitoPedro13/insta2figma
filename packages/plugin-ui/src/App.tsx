@@ -21,7 +21,7 @@ import { computePreviewEstimates } from './lib/previewEstimates';
 import { ImportScreen, type PostSelectionMode, type PostTimelineOrder } from './screens/ImportScreen';
 import {
   buildContiguousIndices,
-  maxAccessiblePreviewPage,
+  FREE_MAX_PREVIEW_PAGE,
   parseInstagramUsername,
   parseInstagramUsernameDetailed,
   PREVIEW_PAGE_SIZE,
@@ -121,24 +121,19 @@ export function App({ host }: { host: PluginHost }) {
   const [importing, setImporting] = useState(false);
   const lastImportUsername = useRef('');
   const previewReqId = useRef(0);
-  const previewPageReqId = useRef(0);
+  const previewLoadMoreReqId = useRef(0);
   const previewFetchedForUsername = useRef('');
-  const previewPageRef = useRef(1);
-  const lastLoadedPreviewPageRef = useRef(1);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewThumbsLoading, setPreviewThumbsLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [previewErrorKind, setPreviewErrorKind] = useState<'not-found' | 'service-error'>('not-found');
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
-  const [previewPage, setPreviewPage] = useState(1);
+  const [hasMorePreview, setHasMorePreview] = useState(false);
+  const [nextPreviewCursor, setNextPreviewCursor] = useState<string | null>(null);
   const [previewTotalPages, setPreviewTotalPages] = useState(1);
-  const [previewPageLoading, setPreviewPageLoading] = useState(false);
+  const [previewLoadingMore, setPreviewLoadingMore] = useState(false);
+  const [previewPageCount, setPreviewPageCount] = useState(0);
   const [instagramUserId, setInstagramUserId] = useState<string | null>(null);
-  const [pageCursors, setPageCursors] = useState<Record<number, string>>({});
-  const [pagePostsCache, setPagePostsCache] = useState<
-    Record<number, ProfilePreviewPost[]>
-  >({});
-  const pagePostsCacheRef = useRef<Record<number, ProfilePreviewPost[]>>({});
   const [showProOverlay, setShowProOverlay] = useState(false);
   const [planTier, setPlanTier] = useState<PlanTier>('free');
   const [imagesRemaining, setImagesRemaining] = useState<number | null>(null);
@@ -150,15 +145,18 @@ export function App({ host }: { host: PluginHost }) {
   const [showLogin, setShowLogin] = useState(false);
   const [periodEndIso, setPeriodEndIso] = useState<string | null>(null);
 
-  useEffect(() => {
-    previewPageRef.current = previewPage;
-  }, [previewPage]);
-
-  useEffect(() => {
-    pagePostsCacheRef.current = pagePostsCache;
-  }, [pagePostsCache]);
-
   const quotaExceeded = imagesRemaining != null && imagesRemaining <= 0;
+
+  const tierLimitedPreview = (() => {
+    if (!hasMorePreview) return false;
+    const cap =
+      planTier === 'max'
+        ? Number.MAX_SAFE_INTEGER
+        : planTier === 'pro'
+          ? PRO_MAX_PREVIEW_PAGE
+          : FREE_MAX_PREVIEW_PAGE;
+    return previewPageCount >= cap;
+  })();
 
   const onCancel = useCallback(() => {
     host.send({ type: 'cancel' });
@@ -298,16 +296,12 @@ export function App({ host }: { host: PluginHost }) {
         const requestKind =
           pm.requestKind === 'page' ? ('page' as const) : ('initial' as const);
         const expectedReqId =
-          requestKind === 'page' ? previewPageReqId.current : previewReqId.current;
+          requestKind === 'page' ? previewLoadMoreReqId.current : previewReqId.current;
         if (typeof reqId !== 'number' || reqId !== expectedReqId) return;
         const loadedUser = String(pm.username ?? '')
           .trim()
           .replace(/^@+/, '')
           .toLowerCase();
-        const page =
-          typeof pm.previewPage === 'number' && Number.isFinite(pm.previewPage)
-            ? Math.max(1, Math.floor(pm.previewPage))
-            : 1;
         const postsPreview = Array.isArray(pm.postsPreview)
           ? (pm.postsPreview as ProfilePreviewPost[])
           : undefined;
@@ -315,29 +309,25 @@ export function App({ host }: { host: PluginHost }) {
           typeof pm.thumbsPending === 'number' && Number.isFinite(pm.thumbsPending)
             ? pm.thumbsPending
             : 0;
-        const nextPreviewCursor =
+        const incomingCursor =
           typeof pm.nextPreviewCursor === 'string' && pm.nextPreviewCursor.length > 0
             ? pm.nextPreviewCursor
             : null;
 
-        if (requestKind === 'initial' && page === 1) {
-          if (previewPageRef.current > 1) return;
+        if (requestKind === 'initial') {
           if (loadedUser) previewFetchedForUsername.current = loadedUser;
-          setPreviewLoading(false);
-          setPreviewPageLoading(false);
-          setPreviewError('');
-          setPreviewPage(1);
-          setPreviewThumbsLoading(thumbsPending > 0);
-          setPreviewTotalPages(
-            typeof pm.previewTotalPages === 'number' &&
-              Number.isFinite(pm.previewTotalPages)
+          const totalPages =
+            typeof pm.previewTotalPages === 'number' && Number.isFinite(pm.previewTotalPages)
               ? Math.max(1, pm.previewTotalPages)
-              : 1,
-          );
+              : 1;
+          setPreviewLoading(false);
+          setPreviewError('');
+          setPreviewThumbsLoading(thumbsPending > 0);
           setInstagramUserId(parseInstagramUserId(pm.instagramUserId));
-          setPagePostsCache(postsPreview ? { 1: postsPreview } : {});
-          setPageCursors(nextPreviewCursor ? { 2: nextPreviewCursor } : {});
-          lastLoadedPreviewPageRef.current = 1;
+          setNextPreviewCursor(incomingCursor);
+          setPreviewTotalPages(totalPages);
+          setHasMorePreview(totalPages > 1);
+          setPreviewPageCount(1);
           setPreview({
             username: String(pm.username ?? ''),
             mediaCount:
@@ -377,29 +367,29 @@ export function App({ host }: { host: PluginHost }) {
           return;
         }
 
-        setPreviewPageLoading(false);
+        // load-more response: append posts
+        setPreviewLoadingMore(false);
         setPreviewThumbsLoading(thumbsPending > 0);
         setPreviewError('');
-        setPreviewPage(page);
         const resolvedInstagramUserId = parseInstagramUserId(pm.instagramUserId);
-        if (resolvedInstagramUserId) {
-          setInstagramUserId(resolvedInstagramUserId);
-        }
-        if (
-          typeof pm.previewTotalPages === 'number' &&
-          Number.isFinite(pm.previewTotalPages)
-        ) {
-          setPreviewTotalPages(Math.max(1, pm.previewTotalPages));
-        }
+        if (resolvedInstagramUserId) setInstagramUserId(resolvedInstagramUserId);
+        setNextPreviewCursor(incomingCursor);
+        setPreviewPageCount((prev) => {
+          const newCount = prev + 1;
+          const totalPages =
+            typeof pm.previewTotalPages === 'number' && Number.isFinite(pm.previewTotalPages)
+              ? Math.max(1, pm.previewTotalPages)
+              : previewTotalPages;
+          setPreviewTotalPages(totalPages);
+          setHasMorePreview(newCount < totalPages);
+          return newCount;
+        });
         if (postsPreview) {
-          setPagePostsCache((prev) => ({ ...prev, [page]: postsPreview }));
-          setPageCursors((prev) =>
-            nextPreviewCursor ? { ...prev, [page + 1]: nextPreviewCursor } : prev,
-          );
           setPreview((prev) =>
-            prev ? { ...prev, postsPreview } : prev,
+            prev
+              ? { ...prev, postsPreview: [...(prev.postsPreview ?? []), ...postsPreview] }
+              : prev,
           );
-          lastLoadedPreviewPageRef.current = page;
         }
         return;
       }
@@ -408,7 +398,7 @@ export function App({ host }: { host: PluginHost }) {
         const requestKind =
           pm.requestKind === 'page' ? ('page' as const) : ('initial' as const);
         const expectedReqId =
-          requestKind === 'page' ? previewPageReqId.current : previewReqId.current;
+          requestKind === 'page' ? previewLoadMoreReqId.current : previewReqId.current;
         if (typeof reqId !== 'number' || reqId !== expectedReqId) return;
         const shortcode = typeof pm.shortcode === 'string' ? pm.shortcode : '';
         const thumbnailUrl =
@@ -416,23 +406,11 @@ export function App({ host }: { host: PluginHost }) {
         if (!shortcode || !thumbnailUrl) return;
         setPreview((prev) => {
           if (!prev?.postsPreview) return prev;
-          const updatedPosts = prev.postsPreview.map((p) =>
-            p.shortcode === shortcode ? { ...p, thumbnailUrl } : p,
-          );
-          const activePage = previewPageRef.current;
-          setPagePostsCache((cache) => {
-            const pagePosts = cache[activePage];
-            if (!pagePosts) return cache;
-            return {
-              ...cache,
-              [activePage]: pagePosts.map((p) =>
-                p.shortcode === shortcode ? { ...p, thumbnailUrl } : p,
-              ),
-            };
-          });
           return {
             ...prev,
-            postsPreview: updatedPosts,
+            postsPreview: prev.postsPreview.map((p) =>
+              p.shortcode === shortcode ? { ...p, thumbnailUrl } : p,
+            ),
           };
         });
         return;
@@ -442,7 +420,7 @@ export function App({ host }: { host: PluginHost }) {
         const requestKind =
           pm.requestKind === 'page' ? ('page' as const) : ('initial' as const);
         const expectedReqId =
-          requestKind === 'page' ? previewPageReqId.current : previewReqId.current;
+          requestKind === 'page' ? previewLoadMoreReqId.current : previewReqId.current;
         if (typeof reqId !== 'number' || reqId !== expectedReqId) return;
         setPreviewThumbsLoading(false);
         return;
@@ -452,32 +430,24 @@ export function App({ host }: { host: PluginHost }) {
         const requestKind =
           pm.requestKind === 'page' ? ('page' as const) : ('initial' as const);
         const expectedReqId =
-          requestKind === 'page' ? previewPageReqId.current : previewReqId.current;
+          requestKind === 'page' ? previewLoadMoreReqId.current : previewReqId.current;
         if (typeof reqId !== 'number' || reqId !== expectedReqId) return;
         if (requestKind === 'page') {
-          setPreviewPageLoading(false);
+          setPreviewLoadingMore(false);
           setPreviewThumbsLoading(false);
-          const fallbackPage = lastLoadedPreviewPageRef.current;
-          setPreviewPage(fallbackPage);
-          const cached = pagePostsCacheRef.current[fallbackPage];
-          if (cached) {
-            setPreview((prev) => (prev ? { ...prev, postsPreview: cached } : prev));
-          }
           setPreviewError(
-            typeof pm.message === 'string' ? pm.message : 'Could not load profile preview.',
+            typeof pm.message === 'string' ? pm.message : 'Could not load more posts.',
           );
           return;
         }
         previewFetchedForUsername.current = '';
         setPreviewLoading(false);
-        setPreviewPageLoading(false);
         setPreviewThumbsLoading(false);
         setPreview(null);
-        setPreviewPage(1);
-        setPreviewTotalPages(1);
+        setHasMorePreview(false);
+        setNextPreviewCursor(null);
+        setPreviewPageCount(0);
         setInstagramUserId(null);
-        setPageCursors({});
-        setPagePostsCache({});
         const errMsg =
           typeof pm.message === 'string' ? pm.message : 'Could not load profile preview.';
         const errBase = typeof pm.base === 'string' ? pm.base : '';
@@ -523,14 +493,13 @@ export function App({ host }: { host: PluginHost }) {
   }, [host, persistEntries]);
 
   const resetPreviewPagination = useCallback(() => {
-    previewPageReqId.current += 1;
-    setPreviewPage(1);
+    previewLoadMoreReqId.current += 1;
+    setHasMorePreview(false);
+    setNextPreviewCursor(null);
     setPreviewTotalPages(1);
-    setPreviewPageLoading(false);
+    setPreviewLoadingMore(false);
+    setPreviewPageCount(0);
     setInstagramUserId(null);
-    setPageCursors({});
-    setPagePostsCache({});
-    lastLoadedPreviewPageRef.current = 1;
   }, []);
 
   const resetPostSelection = useCallback(() => {
@@ -636,64 +605,55 @@ export function App({ host }: { host: PluginHost }) {
     return () => window.clearTimeout(timer);
   }, [importing, username, maxPostsLimit, resetPreviewPagination, resetPostSelection]);
 
-  const fetchPreviewPage = useCallback(
-    (page: number) => {
-      const tierPageCap =
-        planTier === 'max'
-          ? Number.MAX_SAFE_INTEGER
-          : planTier === 'pro'
-            ? PRO_MAX_PREVIEW_PAGE
-            : 3;
-      if (page > tierPageCap) {
-        setShowProOverlay(true);
-        return;
-      }
+  const fetchNextPreviewPage = useCallback(() => {
+    if (previewLoadingMore || !hasMorePreview) return;
+    const user = parseInstagramUsername(String(username ?? ''));
+    if (!user || !preview?.username) return;
 
-      const user = parseInstagramUsername(String(username ?? ''));
-      if (!user || !preview?.username) return;
+    const tierPageCap =
+      planTier === 'max'
+        ? Number.MAX_SAFE_INTEGER
+        : planTier === 'pro'
+          ? PRO_MAX_PREVIEW_PAGE
+          : FREE_MAX_PREVIEW_PAGE;
+    if (previewPageCount >= tierPageCap) {
+      setShowProOverlay(true);
+      return;
+    }
 
-      const cached = pagePostsCache[page];
-      if (cached) {
-        setPreviewPage(page);
-        setPreview((prev) => (prev ? { ...prev, postsPreview: cached } : prev));
-        lastLoadedPreviewPageRef.current = page;
-        return;
-      }
-
-      setPreviewPage(page);
-      const reqId = previewPageReqId.current + 1;
-      previewPageReqId.current = reqId;
-      setPreviewPageLoading(true);
-      setPreviewThumbsLoading(false);
-      setPreviewError('');
-      host.send({
-        type: 'profile-preview',
-        requestKind: 'page',
-        requestId: reqId,
-        username: user,
-        maxPosts: Math.max(1, maxPostsLimit),
-        expandCarouselImages: false,
-        selectionMode: 'recent',
-        startIndex: 1,
-        postCount: maxPostsLimit,
-        timelineOrder: 'newest_first',
-        previewListSize: PREVIEW_PAGE_SIZE,
-        previewPage: page,
-        ...(pageCursors[page] ? { after: pageCursors[page] } : {}),
-        ...(instagramUserId ? { userId: instagramUserId } : {}),
-      });
-    },
-    [
-      host,
-      planTier,
-      username,
-      preview?.username,
-      pagePostsCache,
-      pageCursors,
-      instagramUserId,
-      maxPostsLimit,
-    ],
-  );
+    const reqId = previewLoadMoreReqId.current + 1;
+    previewLoadMoreReqId.current = reqId;
+    setPreviewLoadingMore(true);
+    setPreviewThumbsLoading(false);
+    setPreviewError('');
+    host.send({
+      type: 'profile-preview',
+      requestKind: 'page',
+      requestId: reqId,
+      username: user,
+      maxPosts: Math.max(1, maxPostsLimit),
+      expandCarouselImages: false,
+      selectionMode: 'recent',
+      startIndex: 1,
+      postCount: maxPostsLimit,
+      timelineOrder: 'newest_first',
+      previewListSize: PREVIEW_PAGE_SIZE,
+      previewPage: previewPageCount + 1,
+      ...(nextPreviewCursor ? { after: nextPreviewCursor } : {}),
+      ...(instagramUserId ? { userId: instagramUserId } : {}),
+    });
+  }, [
+    host,
+    planTier,
+    username,
+    preview?.username,
+    hasMorePreview,
+    nextPreviewCursor,
+    previewLoadingMore,
+    previewPageCount,
+    instagramUserId,
+    maxPostsLimit,
+  ]);
 
   /** Slider / selection — local estimate only; no Instagram refetch. */
   useEffect(() => {
@@ -918,14 +878,13 @@ export function App({ host }: { host: PluginHost }) {
                 importing={importing}
                 preview={preview}
                 previewLoading={previewLoading}
-                previewPageLoading={previewPageLoading}
                 previewThumbsLoading={previewThumbsLoading}
                 previewError={previewError}
                 previewErrorKind={previewErrorKind}
-                previewPage={previewPage}
-                previewTotalPages={previewTotalPages}
-                onPreviewPageChange={fetchPreviewPage}
-                onPreviewBlockedAdvance={() => setShowProOverlay(true)}
+                hasMorePreview={hasMorePreview && !tierLimitedPreview}
+                tierLimitedPreview={tierLimitedPreview}
+                previewLoadingMore={previewLoadingMore}
+                onLoadMorePreview={fetchNextPreviewPage}
                 showProOverlay={showProOverlay}
                 onCloseProOverlay={() => setShowProOverlay(false)}
                 onUsernameChange={setUsername}

@@ -2,6 +2,7 @@ import type {
   ScrapeJobResultSummaryV5,
   ScrapeSelectionInput,
 } from '@insta2figma/shared-contracts';
+import { resolveScrapeSelection } from '@insta2figma/shared-contracts';
 import { globalSessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, parseFeedItems, buildIgHeaders } from '@insta2figma/shared-instagram';
 import { InstagramUpstreamError } from './instagram-upstream-error';
 import { buildScrapeSummaryV5FromUserNode } from './parse-web-profile';
@@ -131,50 +132,62 @@ export class HttpInstagramDataSource implements InstagramDataSource {
     const userNode = data.user as Record<string, unknown> | undefined;
     if (!userNode) throw new InstagramUpstreamError('IG_NOT_FOUND', 'User not found.', false);
 
-    // Se o web_profile_info não devolveu posts, busca do feed endpoint
     const userId = typeof userNode.id === 'string' ? userNode.id : String(userNode.id ?? '');
     const edge = userNode.edge_owner_to_timeline_media as Record<string, unknown> | undefined;
-    const edges = Array.isArray(edge?.edges) ? edge.edges : [];
+    const allEdges: unknown[] = Array.isArray(edge?.edges) ? [...edge.edges] : [];
 
-    if (edges.length === 0 && userId) {
-      try {
-        const { res: feedRes } = await fetchWithRetry(
-          feedUrl(userId),
-          {
-            method: 'GET',
-            headers: buildIgHeaders(session?.cookie),
-            signal: AbortSignal.timeout(this.options.timeoutMs),
-            redirect: 'follow',
-            ...(agent ? { dispatcher: agent } : {}),
-          },
-          'worker:feed',
-        );
-        if (feedRes.ok) {
+    const selection = resolveScrapeSelection(selectionInput, defaults);
+    const fetchCount = selection.fetchCount;
+
+    // Pagina o feed endpoint para completar edges quando o web profile não tem posts suficientes
+    if (userId && allEdges.length < fetchCount) {
+      const pageInfo = edge?.page_info as { has_next_page?: boolean; end_cursor?: string } | undefined;
+      let hasNext = allEdges.length === 0 ? true : pageInfo?.has_next_page === true;
+      let maxId = allEdges.length === 0 ? undefined : (typeof pageInfo?.end_cursor === 'string' ? pageInfo.end_cursor : undefined);
+
+      while (allEdges.length < fetchCount && hasNext) {
+        try {
+          const { res: feedRes } = await fetchWithRetry(
+            feedUrl(userId, maxId),
+            {
+              method: 'GET',
+              headers: buildIgHeaders(session?.cookie),
+              signal: AbortSignal.timeout(this.options.timeoutMs),
+              redirect: 'follow',
+              ...(agent ? { dispatcher: agent } : {}),
+            },
+            'worker:feed-page',
+          );
+          if (!feedRes.ok) break;
           const feedBody = (await feedRes.json()) as Record<string, unknown>;
           const parsed = parseFeedItems(feedBody.items);
-          console.info(`[worker:feed] userId=${userId} → ${parsed.length} posts, ${parsed.filter(p => !!p.thumbnailUrl).length} com thumbnail`);
-          if (parsed.length > 0) {
-            // Converte TimelinePostItem[] para o formato edge_owner_to_timeline_media
-            // que parseTimelineSampleFromUserNode espera
-            const mappedEdges = parsed.map((p) => ({
-              node: {
-                shortcode: p.shortcode,
-                display_url: p.thumbnailUrl,
-                __typename: p.isVideo ? 'GraphVideo' : 'GraphImage',
-                ...(p.carouselImageUrls && p.carouselImageUrls.length > 0
-                  ? { edge_sidecar_to_children: { edges: p.carouselImageUrls.map((u) => ({ node: { display_url: u } })) } }
-                  : {}),
-              },
-            }));
-            (userNode as Record<string, unknown>).edge_owner_to_timeline_media = {
-              ...(edge ?? {}),
-              edges: mappedEdges,
-            };
-          }
+          console.info(`[worker:feed-page] userId=${userId} maxId=${maxId ?? 'none'} → ${parsed.length} posts`);
+          if (parsed.length === 0) break;
+          const mappedEdges = parsed.map((p) => ({
+            node: {
+              shortcode: p.shortcode,
+              display_url: p.thumbnailUrl,
+              __typename: p.isVideo ? 'GraphVideo' : 'GraphImage',
+              ...(p.carouselImageUrls && p.carouselImageUrls.length > 0
+                ? { edge_sidecar_to_children: { edges: p.carouselImageUrls.map((u) => ({ node: { display_url: u } })) } }
+                : {}),
+            },
+          }));
+          allEdges.push(...mappedEdges);
+          hasNext = feedBody.more_available === true;
+          maxId = typeof feedBody.next_max_id === 'string' ? feedBody.next_max_id : undefined;
+          if (!maxId) break;
+        } catch {
+          break;
         }
-      } catch {
-        // Ignora — tentativa extra de obter posts; o parse prossegue sem eles
       }
+    }
+
+    if (allEdges.length !== (Array.isArray(edge?.edges) ? edge.edges.length : 0)) {
+      (userNode as Record<string, unknown>).edge_owner_to_timeline_media = {
+        ...(edge ?? {}),
+        edges: allEdges,
+      };
     }
 
     try {

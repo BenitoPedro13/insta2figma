@@ -24,10 +24,9 @@ import * as Input from "../components/ui/input";
 import * as Button from "../components/ui/button";
 import { CheckboxLabel } from "../components/ui/checkbox-label";
 import { ImportStatusLine } from "../components/ImportStatusLine";
-import { PostPreviewPagination } from "../components/PostPreviewPagination";
 import { ProUpgradeOverlay } from "../components/ProUpgradeOverlay";
 import { cn } from "../utils/cn";
-import { PREVIEW_PAGE_SIZE, maxAccessiblePreviewPage, type PostSelectionMode, type PostTimelineOrder } from "@insta2figma/shared-contracts";
+import { PREVIEW_PAGE_SIZE, type PostSelectionMode, type PostTimelineOrder } from "@insta2figma/shared-contracts";
 import { planTierLabel, type PlanTier } from "../lib/planTier";
 
 export type { PostSelectionMode, PostTimelineOrder };
@@ -74,14 +73,13 @@ type ImportScreenProps = {
     selectionWarning?: string;
   } | null;
   previewLoading: boolean;
-  previewPageLoading: boolean;
   previewThumbsLoading: boolean;
   previewError: string;
   previewErrorKind?: 'not-found' | 'service-error';
-  previewPage: number;
-  previewTotalPages: number;
-  onPreviewPageChange: (page: number) => void;
-  onPreviewBlockedAdvance: () => void;
+  hasMorePreview: boolean;
+  tierLimitedPreview: boolean;
+  previewLoadingMore: boolean;
+  onLoadMorePreview: () => void;
   showProOverlay: boolean;
   onCloseProOverlay: () => void;
   onUsernameChange: (v: string) => void;
@@ -133,14 +131,13 @@ export function ImportScreen({
   importing,
   preview,
   previewLoading,
-  previewPageLoading,
   previewThumbsLoading,
   previewError,
   previewErrorKind = 'not-found',
-  previewPage,
-  previewTotalPages,
-  onPreviewPageChange,
-  onPreviewBlockedAdvance,
+  hasMorePreview,
+  tierLimitedPreview,
+  previewLoadingMore,
+  onLoadMorePreview,
   showProOverlay,
   onCloseProOverlay,
   onUsernameChange,
@@ -240,12 +237,7 @@ export function ImportScreen({
     showProfileHeaderSkeleton ||
     Boolean(preview?.username && !preview.profilePicUrlHd);
   const showPreviewSkeletonGrid =
-    (previewLoading && !(preview?.postsPreview && preview.postsPreview.length > 0)) ||
-    previewPageLoading;
-  const maxAccessiblePreviewPageValue = maxAccessiblePreviewPage(
-    planTier,
-    previewTotalPages,
-  );
+    previewLoading && !(preview?.postsPreview && preview.postsPreview.length > 0);
 
   const formatProfileStat = (value: number | undefined) =>
     typeof value === "number" && Number.isFinite(value)
@@ -549,21 +541,16 @@ export function ImportScreen({
                   selectedIndices={selectedIndices}
                   onToggleIndex={onTogglePostIndex}
                   thumbsLoading={previewThumbsLoading}
+                  hasMore={hasMorePreview}
+                  loadingMore={previewLoadingMore}
+                  tierLimited={tierLimitedPreview}
+                  onLoadMore={onLoadMorePreview}
+                  onShowUpgradeOverlay={onShowUpgradeOverlay}
                 />
               ) : (
                 <div className="new-import-preview-empty flex h-full w-full" aria-hidden />
               )}
             </div>
-
-            {previewTotalPages > 1 ? (
-              <PostPreviewPagination
-                currentPage={previewPage}
-                totalPages={previewTotalPages}
-                maxAccessiblePage={maxAccessiblePreviewPageValue}
-                onPageChange={onPreviewPageChange}
-                onBlockedAdvance={onPreviewBlockedAdvance}
-              />
-            ) : null}
           </div>
         </div>
       </div>

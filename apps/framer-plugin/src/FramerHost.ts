@@ -357,7 +357,6 @@ export class FramerHost implements PluginHost {
         postsPreview,
         postsAvailable: data.postsAvailable,
         selectionWarning: data.selectionWarning,
-        previewPage: data.previewPage ?? msg.previewPage ?? 1,
         previewTotalPages: data.previewTotalPages,
         nextPreviewCursor: data.nextPreviewCursor,
         instagramUserId: data.instagramUserId,

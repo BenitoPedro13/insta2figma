@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -21,6 +22,11 @@ type PostPreviewListProps = {
   selectedIndices: number[];
   onToggleIndex: (index: number) => void;
   thumbsLoading?: boolean;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  tierLimited?: boolean;
+  onLoadMore?: () => void;
+  onShowUpgradeOverlay?: () => void;
 };
 
 type SelectionBounds = {
@@ -194,8 +200,14 @@ export function PostPreviewList({
   selectedIndices,
   onToggleIndex,
   thumbsLoading = false,
+  hasMore = false,
+  loadingMore = false,
+  tierLimited = false,
+  onLoadMore,
+  onShowUpgradeOverlay,
 }: PostPreviewListProps) {
   const gridRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const selectedSet = new Set(selectedIndices);
   const selectionBounds = useSelectionBounds(
@@ -213,11 +225,45 @@ export function PostPreviewList({
     }
   }, []);
 
+  const hasMoreRef = useRef(hasMore);
+  const onLoadMoreRef = useRef(onLoadMore);
+  useLayoutEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
+  useLayoutEffect(() => { onLoadMoreRef.current = onLoadMore; }, [onLoadMore]);
+
+  // Scroll listener — set up once, reads latest values via refs.
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    const handleScroll = () => {
+      if (!hasMoreRef.current || !onLoadMoreRef.current) return;
+      const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+      if (scrollHeight - scrollTop - clientHeight < 200) {
+        onLoadMoreRef.current();
+      }
+    };
+    scrollEl.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollEl.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // One-time check when hasMore first becomes true (content may be too short to scroll).
+  const didInitialCheckRef = useRef(false);
+  useEffect(() => {
+    if (!hasMore) { didInitialCheckRef.current = false; return; }
+    if (didInitialCheckRef.current) return;
+    didInitialCheckRef.current = true;
+    const scrollEl = scrollRef.current;
+    if (!scrollEl || !onLoadMoreRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+    if (scrollHeight - scrollTop - clientHeight < 200) {
+      onLoadMoreRef.current();
+    }
+  }, [hasMore]);
+
   if (items.length === 0) return null;
 
   return (
     <div className="post-preview-panel flex h-full min-h-0 flex-col">
-      <div className="post-preview-scroll min-h-0 flex-1 overflow-y-auto p-3">
+      <div ref={scrollRef} className="post-preview-scroll min-h-0 flex-1 overflow-y-auto p-3">
         <div ref={gridRef} className="post-preview-grid relative">
           {items.map((item) => (
             <PostPreviewTile
@@ -233,6 +279,23 @@ export function PostPreviewList({
             <PostPreviewSelectionOverlay bounds={selectionBounds} />
           ) : null}
         </div>
+        {loadingMore ? (
+          <div className="flex items-center justify-center py-4">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent opacity-40" />
+          </div>
+        ) : null}
+        {tierLimited ? (
+          <div className="flex flex-col items-center gap-2 py-4 text-center">
+            <p className="text-paragraph-xs text-text-sub-600">Upgrade to preview more posts</p>
+            <button
+              type="button"
+              className="text-paragraph-xs font-medium text-[#0D99FE] hover:underline"
+              onClick={onShowUpgradeOverlay}
+            >
+              See upgrade options
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

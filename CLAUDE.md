@@ -93,6 +93,32 @@ every 3s → receive JWT. Google OAuth: `GET /v1/auth/google/start` → open URL
 **Figma:** JWT stored in `figma.clientStorage` via the main thread (`code.ts`).
 **Framer:** JWT stored in `localStorage` (key: `insta2figma:token:v1`).
 
+## Preview — infinite scroll
+
+The post preview grid uses **infinite scroll** (not page-based pagination).
+
+**State in `App.tsx`:**
+- `hasMorePreview` — `previewTotalPages > 1` (or `previewPageCount < previewTotalPages` after load-more)
+- `nextPreviewCursor` — cursor for the next page request (`after` param)
+- `previewPageCount` — how many pages have been fetched (1-based, starts at 1 after initial load)
+- `previewLoadingMore` — spinner guard; prevents double-fetch
+- `tierLimitedPreview` — derived: `previewPageCount >= tierPageCap && nextPreviewCursor != null`
+- `previewLoadMoreReqId` ref — cancels stale load-more responses on username change
+
+**Flow:**
+1. Initial load → `requestKind` omitted → response sets `previewPageCount = 1`, `hasMorePreview = previewTotalPages > 1`
+2. User scrolls to bottom → `PostPreviewList` scroll listener fires `fetchNextPreviewPage()`
+3. `fetchNextPreviewPage` sends `{ requestKind: 'page', previewPage: n+1, after: cursor }`
+4. Response appends posts to `preview.postsPreview` (accumulates, never replaces)
+5. Tier gating: Free ≤ 3 pages, Pro ≤ 12 pages, Max unlimited — enforced client-side by `tierLimitedPreview`; server also enforces via `assertPreviewPageAllowed()`
+
+**`PostPreviewList` scroll mechanism:**
+- Scroll listener registered once (via `useEffect([], [])`) — reads latest `hasMore`/`onLoadMore` via refs to avoid stale closures and re-registration cascade
+- One-time initial check (`didInitialCheckRef`) fires when `hasMore` first becomes `true` — handles content too short to scroll
+- Threshold: 200px from bottom
+
+**`PostPreviewPagination` component was removed** — delete any lingering references.
+
 ## Import flow
 
 1. UI sends `import-profile` message with username + selection params.
@@ -102,6 +128,11 @@ every 3s → receive JWT. Google OAuth: `GET /v1/auth/google/start` → open URL
    `framer.uploadImage` → `framer.createFrameNode` in a nested stack layout
    (outer = vertical stack, rows = horizontal stack, leaves = image frames).
 4. Both use `storageKey` to group carousel images per post row when `expandCarouselImages=true`.
+
+**Worker scrape pagination:** `HttpInstagramDataSource.fetchProfilePostsSample` fetches the
+Instagram web profile (returns ≤12 posts), then paginates via `feedUrl(userId, maxId)` until
+`allEdges.length >= fetchCount` or `more_available: false`. This fixed a bug where imports
+were always capped at 12 posts regardless of `maxPosts`.
 
 ## Monorepo pitfalls
 
