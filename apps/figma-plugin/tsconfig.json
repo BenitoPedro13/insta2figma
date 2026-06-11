@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
-    "target": "es2017",
-    "lib": ["es2017"],
+    "target": "es2019",
+    "lib": ["es2019"],
     "strict": true,
     "skipLibCheck": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "module": "esnext",
     "noEmit": true,
     "typeRoots": ["./node_modules/@types", "./node_modules/@figma"]

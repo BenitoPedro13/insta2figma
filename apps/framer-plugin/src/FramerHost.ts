@@ -114,7 +114,20 @@ export class FramerHost implements PluginHost {
 
   private async handleSessionRequest(): Promise<void> {
     if (!this.token) {
-      this.emit({ type: "show-login" })
+      // No token — emit a guest free-tier session so the UI works without login.
+      this.emit({
+        type: "session-data",
+        planTier: "free",
+        userId: null,
+        quotas: {
+          imagesRemaining: null,
+          imagesLimit: null,
+          maxPosts: 12,
+          maxImagesPerJob: 24,
+          expandCarouselImages: false,
+          periodEnd: null,
+        },
+      })
       return
     }
     try {
@@ -305,8 +318,10 @@ export class FramerHost implements PluginHost {
 
     try {
       const qs = this.buildPreviewQS(username, msg)
+      const previewHeaders: Record<string, string> = {}
+      if (this.token) previewHeaders.authorization = `Bearer ${this.token}`
       const res = await fetch(`${API}/v1/instagram/profile-preview?${qs}`, {
-        headers: this.auth(),
+        headers: previewHeaders,
       })
       const payload = await res.json()
       const data = payload.data as Record<string, unknown> | undefined
@@ -426,6 +441,10 @@ export class FramerHost implements PluginHost {
       .replace(/^@+/, "")
     if (!username) {
       this.emit({ type: "import-error", message: "Enter a username." })
+      return
+    }
+    if (!this.token) {
+      this.emit({ type: "show-login", dismissable: true })
       return
     }
 
@@ -568,7 +587,7 @@ export class FramerHost implements PluginHost {
         layout: "stack",
         stackDirection: "vertical",
         gap: `${ROW_GAP}px`,
-        width: COLS * COL_WIDTH + (COLS - 1) * GAP,
+        width: `${COLS * COL_WIDTH + (COLS - 1) * GAP}px`,
       })
       if (!parent) throw new Error("Could not create frame on canvas.")
 
@@ -589,8 +608,8 @@ export class FramerHost implements PluginHost {
               {
                 name: `@${username} - #${++globalIdx}`,
                 backgroundImage: uploadedAsset,
-                width: COL_WIDTH,
-                height: h,
+                width: `${COL_WIDTH}px`,
+                height: `${h}px`,
               },
               rowFrame.id,
             )

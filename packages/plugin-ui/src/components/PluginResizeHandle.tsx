@@ -121,7 +121,6 @@ function ResizeHandleInner() {
           <div
             className="plugin-resize-handle"
             role="separator"
-            aria-orientation="both"
             aria-label="Drag to redimension"
             onMouseDown={onMouseDown}
           >

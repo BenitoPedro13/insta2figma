@@ -5,7 +5,7 @@ import {
   importStatusPlacing,
   importStatusPostsFound,
   importStatusQueue,
-  importStatusSigning,
+  // importStatusSigning,
   importStatusWaiting,
 } from './importStatusCopy';
 import { resolveApiBase } from './api-base';
@@ -497,47 +497,55 @@ async function placeSignedImages(
 }
 
 type PluginMessage =
-  | { type: 'cancel' }
-  | { type: 'ui-resize'; width: number; height: number; persist?: boolean }
-  | { type: 'history-request' }
+  | { type: "cancel" }
+  | { type: "ui-resize"; width: number; height: number; persist?: boolean }
+  | { type: "history-request" }
   /** Guardado em `figma.clientStorage` (persiste entre sessões; o `localStorage` do iframe não). */
-  | { type: 'history-save'; entries: unknown }
+  | { type: "history-save"; entries: unknown }
   | {
-      type: 'profile-preview';
-      requestKind?: 'initial' | 'page';
+      type: "profile-preview";
+      requestKind?: "initial" | "page";
       requestId: number;
       username: string;
       maxPosts?: number;
       expandCarouselImages?: boolean;
-      selectionMode?: 'recent' | 'single' | 'range' | 'multi';
+      selectionMode?: "recent" | "single" | "range" | "multi";
       startIndex?: number;
       postCount?: number;
-      timelineOrder?: 'newest_first' | 'oldest_first';
+      timelineOrder?: "newest_first" | "oldest_first";
       previewListSize?: number;
       selectedIndices?: number[];
       previewPage?: number;
       after?: string;
       userId?: string;
     }
-  | { type: 'create-shapes'; count: number }
-  | { type: 'place-images'; urls: string[] }
+  | { type: "create-shapes"; count: number }
+  | { type: "place-images"; urls: string[] }
   | {
-      type: 'import-profile';
+      type: "import-profile";
       username: string;
       maxPosts?: number;
       expandCarouselImages?: boolean;
-      selectionMode?: 'recent' | 'single' | 'range' | 'multi';
+      selectionMode?: "recent" | "single" | "range" | "multi";
       startIndex?: number;
       postCount?: number;
-      timelineOrder?: 'newest_first' | 'oldest_first';
+      timelineOrder?: "newest_first" | "oldest_first";
       selectedIndices?: number[];
       estimatedImportImages?: number;
     }
-  | { type: 'session-request' }
-  | { type: 'billing-checkout'; plan?: 'pro' | 'max'; cycle?: 'monthly' | 'yearly' }
-  | { type: 'billing-portal' }
-  | { type: 'open-external'; url: string }
-  | { type: 'error'; message: unknown };
+  | { type: "session-request" }
+  | { type: "auth-logout" }
+  | { type: "auth-magic-link"; email: string }
+  | { type: "auth-google"; email: string }
+  | { type: "session-request" }
+  | {
+      type: "billing-checkout";
+      plan?: "pro" | "max";
+      cycle?: "monthly" | "yearly";
+    }
+  | { type: "billing-portal" }
+  | { type: "open-external"; url: string }
+  | { type: "error"; message: unknown };
 
 function parseApiError(payload: Record<string, unknown>): string {
   const err = payload.error as { code?: string; message?: string } | undefined;
@@ -547,25 +555,6 @@ function parseApiError(payload: Record<string, unknown>): string {
 
 const PREVIEW_RATE_LIMIT_MESSAGE =
   'Ops...our machines are almost exploding. Wait about a minute and try again.';
-
-function formatPreviewApiError(
-  status: number,
-  payload: Record<string, unknown>,
-): string {
-  const err = payload.error as { code?: string; message?: string } | undefined;
-  if (
-    status === 503 ||
-    err?.code === 'HTTP_503' ||
-    (typeof err?.message === 'string' && err.message.includes('rate-limited'))
-  ) {
-    return PREVIEW_RATE_LIMIT_MESSAGE;
-  }
-  const message = parseApiError(payload);
-  if (message && !message.startsWith('{')) {
-    return message;
-  }
-  return 'Could not load profile preview.';
-}
 
 async function loadStoredSession(): Promise<StoredSession | null> {
   try {
@@ -885,8 +874,12 @@ async function bootstrapSession(): Promise<void> {
 
     let stored = await loadStoredSession();
     if (!stored) {
-      figma.ui.postMessage({ type: 'show-login' });
-      return;
+      const figmaUser = figma.currentUser;
+      if (!figmaUser?.id) {
+        figma.ui.postMessage({ type: 'show-login' });
+        return;
+      }
+      stored = await authFigmaUser(base, figmaUser.id, figmaUser.name ?? undefined);
     }
 
     // Renew proactively if expiring within 2 days
@@ -913,7 +906,19 @@ async function bootstrapSession(): Promise<void> {
             console.warn('[Insta2Figma] fetchMe after refresh failed', e);
           }
         }
-        console.warn('[Insta2Figma] session expired and refresh failed — showing login');
+        // Try silent re-auth via Figma user ID before falling back to the login screen.
+        console.warn('[Insta2Figma] session expired and refresh failed — trying figma re-auth');
+        try {
+          const figmaUser = figma.currentUser;
+          if (figmaUser?.id) {
+            const reauthed = await authFigmaUser(base, figmaUser.id, figmaUser.name ?? undefined);
+            const me = await fetchMe(base, reauthed.accessToken);
+            figma.ui.postMessage({ type: 'session-data', ...me });
+            return;
+          }
+        } catch (reauthErr) {
+          console.warn('[Insta2Figma] figma re-auth failed', reauthErr);
+        }
         figma.ui.postMessage({ type: 'show-login' });
       } else {
         throw err;

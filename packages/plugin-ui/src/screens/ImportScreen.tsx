@@ -247,7 +247,7 @@ export function ImportScreen({
   return (
     <div className="new-import-screen flex min-h-0 flex-1 flex-col">
       <div className="new-import-layout flex min-h-0 flex-1 flex-row">
-        <div className="new-import-left flex w-[466px] shrink-0 flex-col border-r border-stroke-soft-200 bg-bg-white-0">
+        <div className="new-import-left flex w-116.5 shrink-0 flex-col border-r border-stroke-soft-200 bg-bg-white-0">
           <PanelHeader
             planTier={planTier}
             sessionError={sessionError}
@@ -324,7 +324,7 @@ export function ImportScreen({
                             size={16}
                             aria-hidden
                           />
-                          <span className="min-w-0 break-words">
+                          <span className="min-w-0 wrap-break-word">
                             {previewError.trim()
                               ? previewError.trim().split("\n")[0]
                               : "Username not found"}
@@ -338,7 +338,7 @@ export function ImportScreen({
                             size={16}
                             aria-hidden
                           />
-                          <span className="min-w-0 break-words">
+                          <span className="min-w-0 wrap-break-word">
                             {previewError.trim().split("\n")[0]}
                           </span>
                         </>

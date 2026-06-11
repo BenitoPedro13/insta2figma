@@ -12,9 +12,10 @@ type LoginScreenProps = {
   onMagicLink: (email: string) => void;
   onGoogle: () => void;
   state: LoginState;
+  onDismiss?: () => void;
 };
 
-export function LoginScreen({ onMagicLink, onGoogle, state }: LoginScreenProps) {
+export function LoginScreen({ onMagicLink, onGoogle, state, onDismiss }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const busy = state.step === 'loading' || state.step === 'google_pending';
 
@@ -26,7 +27,19 @@ export function LoginScreen({ onMagicLink, onGoogle, state }: LoginScreenProps) 
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
-      <div className="flex w-[320px] flex-col items-center rounded-2xl bg-white px-6 py-7 shadow-xl">
+      <div className="relative flex w-[320px] flex-col items-center rounded-2xl bg-white px-6 py-7 shadow-xl">
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Fechar"
+            className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+              <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        )}
 
         <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-xl bg-black">
           <svg width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden>

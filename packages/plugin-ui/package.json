@@ -20,5 +20,9 @@
     "tailwind-variants": "^3.2.2",
     "tailwindcss": "^4.3.0"
   },
+  "devDependencies": {
+    "@types/react": "^18",
+    "@types/react-dom": "^18"
+  },
   "description": "Shared React UI for Figma and Framer plugins (PluginHost pattern)"
 }

@@ -99,7 +99,7 @@ export function PluginFooter({
       : defaultQuotaLabel(planTier);
 
   return (
-    <footer className="plugin-footer flex h-[var(--plugin-footer-height)] shrink-0 items-center justify-center border-t border-stroke-soft-200 bg-bg-white-0 px-4">
+    <footer className="plugin-footer flex h-[--plugin-footer-height] shrink-0 items-center justify-center border-t border-stroke-soft-200 bg-bg-white-0 px-4">
       <div className="flex flex-wrap items-center justify-center gap-1">
         <div className="flex items-center gap-1.5">
           {used != null && imagesLimit != null && imagesLimit > 0 ? (

@@ -52,7 +52,7 @@ export function PanelHeader({
   }, [closeMenu, menuOpen]);
 
   return (
-    <header className="panel-header flex h-[100px] shrink-0 flex-col justify-center border-b border-stroke-soft-200 bg-bg-white-0 px-4">
+    <header className="panel-header flex h-25 shrink-0 flex-col justify-center border-b border-stroke-soft-200 bg-bg-white-0 px-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <img
@@ -60,7 +60,7 @@ export function PanelHeader({
             alt=""
             width={31}
             height={31}
-            className="size-[31px] shrink-0 rounded-md object-cover"
+            className="size-7.75 shrink-0 rounded-md object-cover"
           />
           <span className="text-title-h3 tracking-[-1.5px] text-text-strong-950">
             Insta2Figma
@@ -70,7 +70,7 @@ export function PanelHeader({
         <div ref={menuRef} className="relative shrink-0">
           <button
             type="button"
-            className="flex size-[24px] cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-text-sub-600 transition hover:bg-bg-weak-50 hover:text-text-strong-950"
+            className="flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-text-sub-600 transition hover:bg-bg-weak-50 hover:text-text-strong-950"
             aria-label="Menu"
             aria-expanded={menuOpen}
             aria-haspopup="menu"

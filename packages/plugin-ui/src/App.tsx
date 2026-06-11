@@ -104,45 +104,48 @@ function parseInstagramUserId(raw: unknown): string | null {
 
 export function App({ host }: { host: PluginHost }) {
   const [activeTab, setActiveTab] = useState<ShellTab>('new-import');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState<string>('');
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
-  const [listStatus, setListStatus] = useState('');
+  const [listStatus, setListStatus] = useState<string>('');
 
-  const [username, setUsername] = useState('');
-  const [maxPosts, setMaxPosts] = useState(0);
+  const [username, setUsername] = useState<string>("");
+  const [maxPosts, setMaxPosts] = useState<number>(0);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [selectionMode, setSelectionMode] = useState<PostSelectionMode>('recent');
-  const [startIndex, setStartIndex] = useState(1);
-  const [postCount, setPostCount] = useState(1);
+  const [startIndex, setStartIndex] = useState<number>(1);
+  const [postCount, setPostCount] = useState<number>(1);
   const [timelineOrder, setTimelineOrder] = useState<PostTimelineOrder>('newest_first');
-  const [expandCarouselImages, setExpandCarouselImages] = useState(false);
-  const [status, setStatus] = useState('');
-  const [importing, setImporting] = useState(false);
-  const lastImportUsername = useRef('');
-  const previewReqId = useRef(0);
-  const previewLoadMoreReqId = useRef(0);
-  const previewFetchedForUsername = useRef('');
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewThumbsLoading, setPreviewThumbsLoading] = useState(false);
-  const [previewError, setPreviewError] = useState('');
+  const [expandCarouselImages, setExpandCarouselImages] =
+    useState<boolean>(false);
+  const [status, setStatus] = useState<string>("");
+  const [importing, setImporting] = useState<boolean>(false);
+  const lastImportUsername = useRef<string>("");
+  const previewReqId = useRef<number>(0);
+  const previewLoadMoreReqId = useRef<number>(0);
+  const previewFetchedForUsername = useRef<string>("");
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [previewThumbsLoading, setPreviewThumbsLoading] =
+    useState<boolean>(false);
+  const [previewError, setPreviewError] = useState<string>("");
   const [previewErrorKind, setPreviewErrorKind] = useState<'not-found' | 'service-error'>('not-found');
   const [preview, setPreview] = useState<ProfilePreview | null>(null);
-  const [hasMorePreview, setHasMorePreview] = useState(false);
+  const [hasMorePreview, setHasMorePreview] = useState<boolean>(false);
   const [nextPreviewCursor, setNextPreviewCursor] = useState<string | null>(null);
-  const [previewTotalPages, setPreviewTotalPages] = useState(1);
-  const [previewLoadingMore, setPreviewLoadingMore] = useState(false);
-  const [previewPageCount, setPreviewPageCount] = useState(0);
+  const [previewTotalPages, setPreviewTotalPages] = useState<number>(1);
+  const [previewLoadingMore, setPreviewLoadingMore] = useState<boolean>(false);
+  const [previewPageCount, setPreviewPageCount] = useState<number>(0);
   const [instagramUserId, setInstagramUserId] = useState<string | null>(null);
-  const [showProOverlay, setShowProOverlay] = useState(false);
+  const [showProOverlay, setShowProOverlay] = useState<boolean>(false);
   const [planTier, setPlanTier] = useState<PlanTier>('free');
   const [imagesRemaining, setImagesRemaining] = useState<number | null>(null);
   const [imagesLimit, setImagesLimit] = useState<number | null>(null);
-  const [maxPostsLimit, setMaxPostsLimit] = useState(50);
-  const [maxImagesLimit, setMaxImagesLimit] = useState(100);
-  const [sessionError, setSessionError] = useState('');
+  const [maxPostsLimit, setMaxPostsLimit] = useState<number>(50);
+  const [maxImagesLimit, setMaxImagesLimit] = useState<number>(100);
+  const [sessionError, setSessionError] = useState<string>("");
   const [loginState, setLoginState] = useState<LoginState>({ step: 'idle' });
-  const [showLogin, setShowLogin] = useState(false);
+  const [showLogin, setShowLogin] = useState<boolean>(false);
+  const [loginDismissable, setLoginDismissable] = useState<boolean>(false);
   const [periodEndIso, setPeriodEndIso] = useState<string | null>(null);
 
   const quotaExceeded = imagesRemaining != null && imagesRemaining <= 0;
@@ -164,9 +167,9 @@ export function App({ host }: { host: PluginHost }) {
 
   const persistEntries = useCallback(
     (updater: HistoryEntry[] | ((prev: HistoryEntry[]) => HistoryEntry[])) => {
-      setHistoryEntries((prev) => {
-        const next = typeof updater === 'function' ? updater(prev) : updater;
-        host.send({ type: 'history-save', entries: next });
+      setHistoryEntries((prev: HistoryEntry[]) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        host.send({ type: "history-save", entries: next });
         return next;
       });
     },
@@ -241,6 +244,7 @@ export function App({ host }: { host: PluginHost }) {
 
       if (pm.type === 'show-login') {
         setShowLogin(true);
+        setLoginDismissable(pm.dismissable === true);
         setLoginState({ step: 'idle' });
         return;
       }
@@ -842,6 +846,7 @@ export function App({ host }: { host: PluginHost }) {
           state={loginState}
           onMagicLink={(email) => host.send({ type: 'auth-magic-link', email })}
           onGoogle={() => host.send({ type: 'auth-google' })}
+          onDismiss={loginDismissable ? () => setShowLogin(false) : undefined}
         />
       )}
       <div className="plugin-frame flex min-h-0 flex-1">

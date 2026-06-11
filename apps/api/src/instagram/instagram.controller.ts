@@ -1,7 +1,7 @@
 import { BadRequestException, Controller, Get, Query, Req, Res, ServiceUnavailableException, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import type { Request, Response } from 'express';
 import type { RequestUser } from '../auth/jwt.strategy';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { PlanService } from '../plan/plan.service';
 import { InstagramPreviewService } from './instagram-preview.service';
 import { IG_IMAGE_HEADERS } from '@insta2figma/shared-instagram';
@@ -18,7 +18,7 @@ function isInstagramCdnUrl(raw: string): boolean {
 }
 import type { PostSelectionMode, PostTimelineOrder } from '@insta2figma/shared-contracts';
 
-type AuthedRequest = Request & { user: RequestUser };
+type MaybeAuthedRequest = Request & { user?: RequestUser | null };
 
 function parseIntClamped(raw: string | undefined, fallback: number, max = 50): number {
   const parsed = Number.parseInt(String(raw ?? ''), 10);
@@ -85,9 +85,9 @@ export class InstagramController {
   }
 
   @Get('profile-preview')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(OptionalJwtAuthGuard)
   async getProfilePreview(
-    @Req() req: AuthedRequest,
+    @Req() req: MaybeAuthedRequest,
     @Query('username') username?: string,
     @Query('maxPosts') maxPostsRaw?: string,
     @Query('expandCarouselImages') expandCarouselRaw?: string,
@@ -117,7 +117,10 @@ export class InstagramController {
       : undefined;
     const selectedIndices = parseSelectedIndices(selectedIndicesRaw);
     const previewPage = parseIntClamped(previewPageRaw, 1, 999);
-    const planTier = await this.plan.getPlanTierForUser(req.user.userId);
+    const callerUserId = req.user?.userId ?? null;
+    const planTier = callerUserId
+      ? await this.plan.getPlanTierForUser(callerUserId)
+      : 'free';
 
     return this.preview.getProfilePreview(String(username ?? ''), {
       maxPosts,
@@ -132,7 +135,7 @@ export class InstagramController {
       after,
       userId,
       planTier,
-      callerUserId: req.user.userId,
+      callerUserId: callerUserId ?? undefined,
     });
   }
 }

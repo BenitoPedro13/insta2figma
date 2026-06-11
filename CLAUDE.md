@@ -1,5 +1,15 @@
 # Insta2Figma — Codebase Guide for Claude
 
+## Workflow obrigatório antes de qualquer mudança
+
+Antes de editar ou criar qualquer ficheiro de código, criar sempre um documento de task em `docs/tasks/TASK-<slug>.md` com:
+1. **Cenário actual** — como funciona hoje, o que está bloqueado/errado
+2. **Mudanças planeadas** — o que muda, ficheiro a ficheiro
+3. **Porquê** — justificação com contexto de negócio/técnico
+4. **Ficheiros afectados** — tabela com tipo de mudança (novo/edição/remoção)
+
+O documento é escrito em silêncio (não mostrado ao utilizador no chat). Só depois de criado avançar com o código.
+
 ## What this project does
 
 Insta2Figma imports Instagram posts (images, carousels) directly onto a design canvas. It ships as two plugins — **Figma** and **Framer** — backed by a shared NestJS API and a BullMQ worker.
