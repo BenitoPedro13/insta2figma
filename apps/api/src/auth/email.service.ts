@@ -74,4 +74,56 @@ export class EmailService implements OnModuleInit {
 
     console.info(`[email] magic link enviado para ${to}`);
   }
+
+  async sendFeedback(input: {
+    name: string;
+    email: string;
+    message: string;
+    platform?: string | null;
+  }): Promise<void> {
+    if (!this.gmail) {
+      console.warn('[email] feedback não enviado por email (Gmail API não configurada)');
+      return;
+    }
+
+    const to =
+      this.config.get<string>('FEEDBACK_EMAIL_TO')?.trim() || this.from;
+    if (!to) {
+      console.warn('[email] feedback não enviado — FEEDBACK_EMAIL_TO/GMAIL_FROM em falta');
+      return;
+    }
+
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const subject = `[Insta2Figma] Feedback de ${input.name} (${input.platform ?? 'unknown'})`;
+    const html = `
+      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111">
+        <h2 style="margin:0 0 16px">Novo feedback</h2>
+        <p style="margin:0 0 4px"><strong>Nome:</strong> ${esc(input.name)}</p>
+        <p style="margin:0 0 4px"><strong>Email:</strong> ${esc(input.email)}</p>
+        <p style="margin:0 0 16px"><strong>Plataforma:</strong> ${esc(input.platform ?? 'unknown')}</p>
+        <p style="white-space:pre-wrap;background:#f5f5f5;border-radius:8px;padding:16px;margin:0">${esc(input.message)}</p>
+      </div>
+    `;
+
+    const mime = [
+      `From: Insta2Figma <${this.from || to}>`,
+      `To: ${to}`,
+      `Reply-To: ${input.email}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=utf-8',
+      '',
+      html,
+    ].join('\r\n');
+
+    const encoded = Buffer.from(mime).toString('base64url');
+
+    await this.gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw: encoded },
+    });
+
+    console.info(`[email] feedback de ${input.email} enviado para ${to}`);
+  }
 }

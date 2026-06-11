@@ -4,6 +4,7 @@ export * as Checkbox from './checkbox';
 export * as FancyButton from './fancy-button';
 export * as Slider from './slider';
 export * as Switch from './switch';
+export * as Textarea from './textarea';
 export * as Tooltip from './tooltip';
 export * as Pagination from './pagination';
 export * as SegmentedControl from './segmented-control';

@@ -45,6 +45,7 @@ function resolveUsernameInput(raw: string): {
 }
 import { parsePlanTier, type PlanTier } from './lib/planTier';
 import { LoginScreen, type LoginState } from './screens/LoginScreen';
+import { FeedbackScreen, type FeedbackState } from './screens/FeedbackScreen';
 
 type ProfilePreviewPost = {
   index: number;
@@ -147,6 +148,8 @@ export function App({ host }: { host: PluginHost }) {
   const [showLogin, setShowLogin] = useState<boolean>(false);
   const [loginDismissable, setLoginDismissable] = useState<boolean>(false);
   const [periodEndIso, setPeriodEndIso] = useState<string | null>(null);
+  const [showFeedback, setShowFeedback] = useState<boolean>(false);
+  const [feedbackState, setFeedbackState] = useState<FeedbackState>({ step: 'idle' });
 
   const quotaExceeded = imagesRemaining != null && imagesRemaining <= 0;
 
@@ -276,6 +279,19 @@ export function App({ host }: { host: PluginHost }) {
       if (pm.type === 'login-done') {
         setShowLogin(false);
         setLoginState({ step: 'idle' });
+        return;
+      }
+
+      if (pm.type === 'feedback-done') {
+        setFeedbackState({ step: 'done' });
+        return;
+      }
+
+      if (pm.type === 'feedback-error') {
+        setFeedbackState({
+          step: 'error',
+          message: String(pm.message ?? 'Could not send feedback. Try again.'),
+        });
         return;
       }
 
@@ -540,6 +556,19 @@ export function App({ host }: { host: PluginHost }) {
   const onManage = useCallback(() => {
     host.send({ type: 'billing-portal' });
   }, [host]);
+
+  const onFeedback = useCallback(() => {
+    setFeedbackState({ step: 'idle' });
+    setShowFeedback(true);
+  }, []);
+
+  const onFeedbackSubmit = useCallback(
+    (data: { name: string; email: string; message: string }) => {
+      setFeedbackState({ step: 'sending' });
+      host.send({ type: 'feedback-submit', ...data });
+    },
+    [host],
+  );
 
   const onSignOut = useCallback(() => {
     host.send({ type: 'auth-logout' });
@@ -853,6 +882,13 @@ export function App({ host }: { host: PluginHost }) {
           onDismiss={loginDismissable ? () => setShowLogin(false) : undefined}
         />
       )}
+      {showFeedback && (
+        <FeedbackScreen
+          state={feedbackState}
+          onSubmit={onFeedbackSubmit}
+          onClose={() => setShowFeedback(false)}
+        />
+      )}
       <div className="plugin-frame flex min-h-0 flex-1">
         <PluginSidebar />
         <div className="plugin-main flex min-h-0 min-w-0 flex-1 flex-col bg-bg-white-0">
@@ -914,6 +950,7 @@ export function App({ host }: { host: PluginHost }) {
                 onManage={onManage}
                 onSignOut={onSignOut}
                 onOpenExternal={onOpenExternal}
+                onFeedback={onFeedback}
               />
             </div>
           </div>

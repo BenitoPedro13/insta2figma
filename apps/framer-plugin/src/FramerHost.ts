@@ -136,6 +136,9 @@ export class FramerHost implements PluginHost {
       case "auth-logout":
         this.handleLogout()
         break
+      case "feedback-submit":
+        await this.handleFeedbackSubmit(msg)
+        break
       case "auth-magic-link":
         await this.handleMagicLink(msg)
         break
@@ -283,6 +286,33 @@ export class FramerHost implements PluginHost {
       this.emit({ type: "login-done" })
     } catch (e) {
       this.emit({ type: "login-error", message: String(e) })
+    }
+  }
+
+  private async handleFeedbackSubmit(msg: HostMessage): Promise<void> {
+    try {
+      // Token é opcional — feedback anónimo também é aceite pela API
+      await this.ensureFramerSession()
+      const headers: Record<string, string> = { "content-type": "application/json" }
+      if (this.token) headers.authorization = `Bearer ${this.token}`
+      const res = await fetch(`${API}/v1/feedback`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: String(msg.name ?? ""),
+          email: String(msg.email ?? ""),
+          message: String(msg.message ?? ""),
+          platform: "framer",
+        }),
+      })
+      if (!res.ok) throw new Error(`Feedback ${res.status}`)
+      this.emit({ type: "feedback-done" })
+    } catch (e) {
+      console.error("[Insta2Figma] feedback-submit", e)
+      this.emit({
+        type: "feedback-error",
+        message: "Could not send feedback. Try again in a moment.",
+      })
     }
   }
 

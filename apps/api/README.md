@@ -86,6 +86,7 @@ Se vires **`ERR_CONNECTION_REFUSED`**, o processo Nest não está a ouvir na por
 | POST | `/v1/jobs` | Bearer JWT; header opcional `idempotency-key`; body aceita `platform: "figma" \| "framer"` (analytics) |
 | GET | `/v1/jobs/:id` | Bearer JWT; query opcional `include=signedAssets` (URLs GET assinadas para `assets` do job, só se `succeeded`) |
 | GET | `/v1/instagram/profile-preview?username=...&maxPosts=12&expandCarouselImages=true` | Bearer JWT; preview leve (avatar, mediaCount, privado + estimativa de imagens) para UX no formulário |
+| POST | `/v1/feedback` | Bearer opcional — body `{ name, email, message (≤200), platform? }`; grava na tabela `feedback` + email para `FEEDBACK_EMAIL_TO` |
 | GET | `/admin/scrape-health` | Header `x-admin-key`; métricas da última hora (error rate, p50/p95, por sessão e endpoint) |
 | GET | `/admin/sessions` | Header `x-admin-key`; estado actual das sessões (sem expor cookies) |
 | POST | `/admin/sessions` | Header `x-admin-key`; body `{ sessions: [{account, cookie, proxy?}] }`; hot-reload sem redeploy |

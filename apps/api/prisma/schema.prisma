@@ -24,6 +24,7 @@ model User {
   subscriptions Subscription[]
   usageCounters UsageCounter[]
   authTokens    AuthToken[]
+  feedbacks     Feedback[]
 
   @@map("users")
 }
@@ -119,6 +120,22 @@ model Job {
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
   @@map("jobs")
+}
+
+model Feedback {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  email     String
+  message   String   @db.Text
+  /// Plataforma de origem: "figma" | "framer" (injectada pelo host, invisível ao utilizador)
+  platform  String?
+  userId    String?  @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@map("feedback")
 }
 
 model ScrapeTelemetry {

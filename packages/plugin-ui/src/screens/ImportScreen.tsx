@@ -99,6 +99,7 @@ type ImportScreenProps = {
   onManage: () => void;
   onSignOut: () => void;
   onOpenExternal: (url: string) => void;
+  onFeedback: () => void;
 };
 
 export function ImportScreen({
@@ -157,6 +158,7 @@ export function ImportScreen({
   onManage,
   onSignOut,
   onOpenExternal,
+  onFeedback,
 }: ImportScreenProps) {
   const onSubmit = useCallback(
     (e: FormEvent) => {
@@ -255,6 +257,7 @@ export function ImportScreen({
             onManage={onManage}
             onSignOut={onSignOut}
             onOpenExternal={onOpenExternal}
+            onFeedback={onFeedback}
           />
           <PluginTabs active={activeTab} onChange={onTabChange} />
           {isImportTab ? (

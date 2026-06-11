@@ -12,6 +12,7 @@ type PanelHeaderProps = {
   onManage: () => void;
   onSignOut: () => void;
   onOpenExternal: (url: string) => void;
+  onFeedback: () => void;
 };
 
 /** Left panel header — Figma node 84:2761 (466×100). */
@@ -22,6 +23,7 @@ export function PanelHeader({
   onManage,
   onSignOut,
   onOpenExternal,
+  onFeedback,
 }: PanelHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -86,6 +88,7 @@ export function PanelHeader({
                 onManage={onManage}
                 onSignOut={onSignOut}
                 onOpenExternal={onOpenExternal}
+                onFeedback={onFeedback}
                 onClose={closeMenu}
               />
             </div>

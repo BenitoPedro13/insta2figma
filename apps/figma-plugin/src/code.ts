@@ -545,6 +545,7 @@ type PluginMessage =
     }
   | { type: "billing-portal" }
   | { type: "open-external"; url: string }
+  | { type: "feedback-submit"; name?: string; email?: string; message?: string }
   | { type: "error"; message: unknown };
 
 function parseApiError(payload: Record<string, unknown>): string {
@@ -1365,6 +1366,44 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     await figma.clientStorage.deleteAsync(SESSION_STORAGE_KEY);
     figma.notify('Signed out.');
     figma.ui.postMessage({ type: 'show-login', dismissable: true });
+    return;
+  }
+
+  if (msg.type === 'feedback-submit') {
+    const base = await getApiBase();
+    try {
+      // Token é opcional — feedback anónimo também é aceite pela API
+      let token: string | null = null;
+      try {
+        const { session } = await ensureSession(base);
+        token = session.accessToken;
+      } catch {
+        // sem sessão — segue anónimo
+      }
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (token) headers.authorization = `Bearer ${token}`;
+      const res = await apiFetch(`${base}/v1/feedback`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: String(msg.name ?? ''),
+          email: String(msg.email ?? ''),
+          message: String(msg.message ?? ''),
+          platform: 'figma',
+        }),
+      });
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        throw new Error(parseApiError(payload));
+      }
+      figma.ui.postMessage({ type: 'feedback-done' });
+    } catch (err) {
+      console.error('[Insta2Figma] feedback-submit', err);
+      figma.ui.postMessage({
+        type: 'feedback-error',
+        message: 'Could not send feedback. Try again in a moment.',
+      });
+    }
     return;
   }
 

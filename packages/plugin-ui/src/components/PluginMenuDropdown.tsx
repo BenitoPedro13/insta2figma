@@ -9,7 +9,6 @@ import {
 import * as FancyButton from './ui/fancy-button';
 import { ThemeSegmentedControl } from './ThemeSegmentedControl';
 import {
-  FEEDBACK_EMAIL,
   MAINNET_URL,
   PLUGIN_VERSION,
   SUPPORT_EMAIL,
@@ -24,6 +23,7 @@ type PluginMenuDropdownProps = {
   onManage: () => void;
   onSignOut: () => void;
   onOpenExternal: (url: string) => void;
+  onFeedback: () => void;
   onClose: () => void;
   className?: string;
 };
@@ -61,6 +61,7 @@ export function PluginMenuDropdown({
   onManage,
   onSignOut,
   onOpenExternal,
+  onFeedback,
   onClose,
   className,
 }: PluginMenuDropdownProps) {
@@ -112,7 +113,7 @@ export function PluginMenuDropdown({
       <MenuItem
         icon={RiFeedbackLine}
         label="Send feedback"
-        onClick={() => openLink(FEEDBACK_EMAIL)}
+        onClick={() => { onFeedback(); onClose(); }}
       />
 
       <MenuDivider />
