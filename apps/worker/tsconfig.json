@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2021",
-    "module": "commonjs",
-    "moduleResolution": "bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,

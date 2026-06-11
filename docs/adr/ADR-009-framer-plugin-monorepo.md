@@ -26,7 +26,7 @@ Esta é a decisão que molda tudo o resto.
 | Comunicação | `postMessage` entre `code.ts` ↔ iframe | Chamadas diretas ao objeto `framer` (async) |
 | Rede (`fetch`) | Só no `code.ts`, e é **buffered** (proxy via `postMessageAndWait`, sem streaming) | `fetch` real do browser no iframe (com CORS) |
 | Storage | `figma.clientStorage` (só main thread) | `localStorage` real do browser |
-| Identidade do editor | `figma.currentUser.id` (usado no auth legado / `link-figma`) | Sem equivalente directo; irrelevante com o auth novo (magic link + Google) |
+| Identidade do editor | `figma.currentUser.id` (usado no auth legado / `link-figma`) | Sem equivalente directo; irrelevante com o auth novo (magic link + Google) — **update 2026-06-11:** afinal existe `framer.getCurrentUser().id` (estável, 64 chars hex); é usado no auto-auth `POST /v1/auth/framer` e em `link-framer` (ver `docs/AUTH.md`) |
 | Inserir imagem | `figma.createImage(bytes)` + geometria manual de retângulos | `framer.addImage({ image: url })` — **aceita URLs directamente** |
 | Abrir URL externo | `figma.openExternal(url)` | `window.open(url)` / API do Framer |
 | Janela | `figma.ui` (tamanho no manifest) | `framer.showUI({ width, height, position, resizable })` |

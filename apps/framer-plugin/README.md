@@ -19,6 +19,16 @@ the Framer plugin iframe can make authenticated `fetch` calls directly (CORS all
 it calls the API itself, stores the JWT in `localStorage`, and places images on the
 canvas via `framer.uploadImage` + `framer.createFrameNode`.
 
+## Auth
+
+No login is required for the free tier: `ensureFramerSession()` silently authenticates
+with the Framer identity (`framer.getCurrentUser().id`) via `POST /v1/auth/framer` — the
+backend creates a `User` with a synthetic email (Framer does not expose the user's email
+to plugins). Magic link / Google login is the upgrade path; after login the plugin calls
+`POST /v1/auth/link-framer` so the Framer identity is linked to the account. Jobs are
+created with `platform: "framer"` for per-platform usage analytics. Full flow:
+[docs/AUTH.md](../../docs/AUTH.md).
+
 ## Dev server
 
 ```bash

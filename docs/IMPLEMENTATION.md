@@ -134,6 +134,8 @@ flowchart LR
 - Módulo `billing/`: `@polar-sh/sdk` (checkout/portal sessions) + `@polar-sh/express` (webhooks com raw body em `main.ts`).
 - Prisma: `polar_customer_id`, `figma_user_id`, `subscriptions`, `usage_counters`, `webhook_events`.
 - `POST /v1/auth/figma` — utilizador único por `figma.currentUser.id`.
+  > **Update 2026-06-11:** existe também `framer_user_id` + `POST /v1/auth/framer` (espelho
+  > para o plugin Framer) e `jobs.platform` para analytics por plataforma — ver [AUTH.md](./AUTH.md).
 - `GET /v1/me` — plano e quotas para o plugin.
 - `POST /v1/billing/checkout-session` e `portal-session` — URLs para `figma.openExternal`.
 - Webhook `POST /v1/billing/webhooks/polar` — `customer.state_changed` / subscrições → `plan_tier`.

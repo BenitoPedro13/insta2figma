@@ -1,6 +1,6 @@
-# Auth — Magic Link + Google OAuth
+# Auth — Magic Link + Google OAuth + Auto-auth por plataforma
 
-Sistema de autenticação do plugin Figma. Os utilizadores autenticam-se com **magic link** (email) ou **Google OAuth**. As contas são portáteis — o mesmo utilizador pode usar o plugin em qualquer workspace Figma.
+Sistema de autenticação dos plugins Figma e Framer. Os utilizadores autenticam-se com **magic link** (email) ou **Google OAuth**, ou usam o free tier **sem login** via auto-auth com a identidade da plataforma. As contas são portáteis — o mesmo utilizador pode usar o plugin em qualquer workspace Figma/projecto Framer.
 
 ## Arquitectura
 
@@ -37,7 +37,31 @@ Google OAuth
 | `GET`  | `/v1/auth/poll?pollingId=` | Plugin faz polling até `status: done` |
 | `POST` | `/v1/auth/refresh` | Renova JWT (requer auth) |
 | `POST` | `/v1/auth/link-figma` | Liga `figmaUserId` à conta (requer auth) |
-| `POST` | `/v1/auth/figma` | Auth legado por figmaUserId (backwards compat) |
+| `POST` | `/v1/auth/link-framer` | Liga `framerUserId` à conta (requer auth) |
+| `POST` | `/v1/auth/figma` | Auto-auth por `figmaUserId` — free tier sem login |
+| `POST` | `/v1/auth/framer` | Auto-auth por `framerUserId` — free tier sem login |
+
+## Auto-auth sem login (free tier)
+
+Nenhuma das plataformas expõe o email do utilizador ao plugin (`figma.currentUser` dá
+`id`/`name`/`photoUrl`; `framer.getCurrentUser()` dá `id`/`name`/`avatarUrl`/`initials`).
+Por isso, quando não há sessão, os plugins autenticam silenciosamente com a identidade
+da plataforma:
+
+- **Figma:** `ensureSession` (`code.ts`) → `POST /v1/auth/figma` com `figma.currentUser.id`
+- **Framer:** `ensureFramerSession` (`FramerHost.ts`) → `POST /v1/auth/framer` com `framer.getCurrentUser().id`
+
+O backend cria (ou reutiliza) um `User` com email sintético:
+`figma+<id>@mailinator.com` / `framer+<id>@mailinator.com`. O utilizador fica no plano
+free com quota tracking normal. O login real (magic link/Google) é o caminho de upgrade.
+
+## Identidade de plataforma e analytics
+
+- `User.figmaUserId` e `User.framerUserId` (ambos unique, nullable) registam de onde o
+  utilizador usa o app — mesmo quando a conta é a mesma (login com o mesmo email nos
+  dois plugins), porque `link-figma`/`link-framer` associam as identidades após o login.
+- Cada job grava `Job.platform` (`"figma" | "framer"`), enviado pelos plugins no body de
+  `POST /v1/jobs` — é a base para analytics de usage por plataforma.
 
 ## Env vars necessárias (Railway → API service)
 
@@ -128,8 +152,10 @@ A sessão é guardada em `figma.clientStorage` com:
 **Ciclo de vida:**
 - JWT dura `JWT_EXPIRES_IN` (padrão: 30 dias)
 - Plugin renova automaticamente quando faltam < 2 dias para expirar (`POST /auth/refresh`)
-- Se o JWT expirar de vez sem conseguir renovar → overlay de login aparece
-- Sign out: menu ≡ → Sign out → apaga sessão local + overlay de login
+- Se o JWT expirar de vez sem conseguir renovar → tenta auto-auth silencioso via
+  identidade da plataforma; só se isso falhar aparece o overlay de login
+- Sign out: menu ≡ → Sign out → apaga sessão local + overlay de login (dismissable —
+  o free tier continua a funcionar via auto-auth)
 
 ## Portabilidade entre workspaces Figma
 

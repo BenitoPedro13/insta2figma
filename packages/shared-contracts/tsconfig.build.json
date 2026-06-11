@@ -1,8 +1,6 @@
 {
   "extends": "../shared-config/typescript/base.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "bundler",
     "outDir": "dist",
     "rootDir": "src"
   },

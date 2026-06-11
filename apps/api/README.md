@@ -13,7 +13,7 @@ Variáveis de sessão e admin:
 
 Guia completo de sessões: **[docs/SESSION-MANAGEMENT.md](../../docs/SESSION-MANAGEMENT.md)**.
 
-> **Auth:** magic link (`POST /v1/auth/magic-link`) + Google OAuth (`GET /v1/auth/google/start`) + polling (`GET /v1/auth/poll`). Refresh automático via `POST /v1/auth/refresh`. Setup completo: **[docs/AUTH.md](../../docs/AUTH.md)**. O endpoint legado `POST /v1/auth/figma` continua disponível para backwards compat.
+> **Auth:** magic link (`POST /v1/auth/magic-link`) + Google OAuth (`GET /v1/auth/google/start`) + polling (`GET /v1/auth/poll`). Refresh automático via `POST /v1/auth/refresh`. Auto-auth sem login (free tier) via identidade da plataforma: `POST /v1/auth/figma` e `POST /v1/auth/framer`. Setup completo: **[docs/AUTH.md](../../docs/AUTH.md)**.
 
 ### Billing Polar.sh (sandbox)
 
@@ -76,11 +76,14 @@ Se vires **`ERR_CONNECTION_REFUSED`**, o processo Nest não está a ouvir na por
 | GET | `/v1/health` | — |
 | POST | `/v1/auth/register` | — body `{ "email": "..." }` |
 | POST | `/v1/auth/login` | — body `{ "email": "..." }` |
-| POST | `/v1/auth/figma` | — body `{ "figmaUserId": "...", "name?": "..." }` |
+| POST | `/v1/auth/figma` | — body `{ "figmaUserId": "...", "name?": "..." }`; auto-auth free tier sem login |
+| POST | `/v1/auth/framer` | — body `{ "framerUserId": "...", "name?": "..." }`; auto-auth free tier sem login |
+| POST | `/v1/auth/link-figma` | Bearer — liga `figmaUserId` à conta autenticada |
+| POST | `/v1/auth/link-framer` | Bearer — liga `framerUserId` à conta autenticada |
 | GET | `/v1/me` | Bearer — `planTier`, quotas, subscrição |
 | POST | `/v1/billing/checkout-session` | Bearer — URL checkout Polar |
 | POST | `/v1/billing/portal-session` | Bearer — URL portal Polar |
-| POST | `/v1/jobs` | Bearer JWT; header opcional `idempotency-key` |
+| POST | `/v1/jobs` | Bearer JWT; header opcional `idempotency-key`; body aceita `platform: "figma" \| "framer"` (analytics) |
 | GET | `/v1/jobs/:id` | Bearer JWT; query opcional `include=signedAssets` (URLs GET assinadas para `assets` do job, só se `succeeded`) |
 | GET | `/v1/instagram/profile-preview?username=...&maxPosts=12&expandCarouselImages=true` | Bearer JWT; preview leve (avatar, mediaCount, privado + estimativa de imagens) para UX no formulário |
 | GET | `/admin/scrape-health` | Header `x-admin-key`; métricas da última hora (error rate, p50/p95, por sessão e endpoint) |

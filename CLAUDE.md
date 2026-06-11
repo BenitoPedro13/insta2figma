@@ -10,6 +10,15 @@ Antes de editar ou criar qualquer ficheiro de código, criar sempre um documento
 
 O documento é escrito em silêncio (não mostrado ao utilizador no chat). Só depois de criado avançar com o código.
 
+## Workflow obrigatório depois de qualquer mudança
+
+Antes de dar a task por terminada, actualizar **toda a documentação afectada** pela mudança:
+- `CLAUDE.md` — se a mudança altera arquitectura, fluxos ou comandos descritos aqui
+- `docs/*.md` (AUTH, IMPLEMENTATION, RAILWAY, etc.) — secções que descrevem o comportamento alterado
+- `README.md` (raiz e `apps/*/README.md`) — tabelas de endpoints, fluxos, instruções
+- `apps/api/.env.example` + docs de deploy — sempre que houver env vars novas/alteradas
+- ADRs — não reescrever (são registo histórico), mas acrescentar nota de update datada se uma premissa ficou desactualizada
+
 ## What this project does
 
 Insta2Figma imports Instagram posts (images, carousels) directly onto a design canvas. It ships as two plugins — **Figma** and **Framer** — backed by a shared NestJS API and a BullMQ worker.
@@ -102,6 +111,19 @@ every 3s → receive JWT. Google OAuth: `GET /v1/auth/google/start` → open URL
 
 **Figma:** JWT stored in `figma.clientStorage` via the main thread (`code.ts`).
 **Framer:** JWT stored in `localStorage` (key: `insta2figma:token:v1`).
+
+**Auto-auth sem login (free tier):** nenhuma plataforma expõe o email do utilizador ao
+plugin, por isso ambos os plugins fazem auth silencioso com a identidade da plataforma:
+- Figma: `ensureSession` (code.ts) → `POST /v1/auth/figma` com `figma.currentUser.id`
+- Framer: `ensureFramerSession` (FramerHost) → `POST /v1/auth/framer` com `framer.getCurrentUser().id`
+
+O backend cria um `User` com email sintético (`figma+<id>@mailinator.com` /
+`framer+<id>@mailinator.com`). Após login real (magic link/Google), `POST /v1/auth/link-figma`
+/ `link-framer` associa a identidade da plataforma à conta.
+
+**Analytics por plataforma:** `User.figmaUserId` + `User.framerUserId` (unique) identificam
+de onde o utilizador usa o app mesmo com o mesmo email; cada job grava `Job.platform`
+(`"figma" | "framer"`), enviado pelos plugins no body de `POST /v1/jobs`.
 
 ## Preview — infinite scroll
 
