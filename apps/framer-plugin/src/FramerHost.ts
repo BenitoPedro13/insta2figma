@@ -169,7 +169,20 @@ export class FramerHost implements PluginHost {
 
   private handleLogout(): void {
     this.setToken("")
-    this.emit({ type: "show-login" })
+    this.emit({
+      type: "session-data",
+      planTier: "free",
+      userId: null,
+      quotas: {
+        imagesRemaining: null,
+        imagesLimit: null,
+        maxPosts: 12,
+        maxImagesPerJob: 24,
+        expandCarouselImages: false,
+        periodEnd: null,
+      },
+    })
+    this.emit({ type: "show-login", dismissable: true })
   }
 
   private async handleMagicLink(msg: HostMessage): Promise<void> {

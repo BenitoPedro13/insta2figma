@@ -1248,12 +1248,14 @@ async function previewProfileViaApi(
   nextPreviewCursor?: string | null;
   instagramUserId?: string | null;
 }> {
-  const { session } = await ensureSession(base);
-  const token = session.accessToken;
+  const stored = await loadStoredSession();
+  const token = stored?.accessToken ?? null;
   const qs = buildPreviewQueryString(username, opts);
+  const headers: Record<string, string> = {};
+  if (token) headers.authorization = `Bearer ${token}`;
   const res = await apiFetch(
     `${base}/v1/instagram/profile-preview?${qs}`,
-    { headers: { authorization: `Bearer ${token}` } },
+    { headers },
     'profile-preview',
   );
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
@@ -1355,8 +1357,8 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
 
   if (msg.type === 'auth-logout') {
     await figma.clientStorage.deleteAsync(SESSION_STORAGE_KEY);
-    figma.ui.postMessage({ type: 'show-login' });
     figma.notify('Signed out.');
+    figma.ui.postMessage({ type: 'show-login', dismissable: true });
     return;
   }
 

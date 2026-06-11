@@ -246,6 +246,10 @@ export function App({ host }: { host: PluginHost }) {
         setShowLogin(true);
         setLoginDismissable(pm.dismissable === true);
         setLoginState({ step: 'idle' });
+        // Reset to free tier guest so UI is usable if overlay is dismissed
+        setPlanTier('free');
+        setImagesRemaining(null);
+        setImagesLimit(null);
         return;
       }
 
