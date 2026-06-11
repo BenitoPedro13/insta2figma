@@ -10,10 +10,11 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
+    "allowJs": true,
     "paths": {
       "@/*": ["./src/*"]
     }
   },
   "include": ["src"],
-  "exclude": ["src/lib/clarity.ts"]
+  "exclude": ["src/lib/clarity.js"]
 }

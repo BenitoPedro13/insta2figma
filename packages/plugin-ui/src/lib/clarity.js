@@ -1,32 +1,26 @@
-declare global {
-  interface Window {
-    clarity?: (...args: unknown[]) => void;
-  }
-}
-
 const PROJECT_ID = import.meta.env.VITE_CLARITY_PROJECT_ID?.trim();
 
-function bootClarity(projectId: string): void {
+function bootClarity(projectId) {
   if (window.clarity) return;
 
-  (function clarityStub(c, l, a, r, i, t, y) {
+  (function (c, l, a, r, i, t, y) {
     c[a] =
       c[a] ||
-      function clarityQueue(...args: unknown[]) {
-        (c[a].q = c[a].q || []).push(args);
+      function () {
+        (c[a].q = c[a].q || []).push(arguments);
       };
-    t = l.createElement(r) as HTMLScriptElement;
+    t = l.createElement(r);
     t.async = true;
-    t.src = `https://www.clarity.ms/tag/${i}`;
+    t.src = 'https://www.clarity.ms/tag/' + i;
     y = l.getElementsByTagName(r)[0];
-    y.parentNode?.insertBefore(t, y);
+    y.parentNode.insertBefore(t, y);
   })(window, document, 'clarity', 'script', projectId);
 
-  window.clarity?.('set', 'custom', 'app', 'insta2figma-figma-plugin');
+  window.clarity('set', 'custom', 'app', 'insta2figma-figma-plugin');
 }
 
 /** Loads Microsoft Clarity once per plugin UI session (async, after first paint). */
-export function initClarity(): void {
+export function initClarity() {
   if (!PROJECT_ID) {
     if (import.meta.env.DEV) {
       console.info(
@@ -45,6 +39,6 @@ export function initClarity(): void {
   }
 }
 
-export function getClarityProjectId(): string | undefined {
+export function getClarityProjectId() {
   return PROJECT_ID || undefined;
 }
