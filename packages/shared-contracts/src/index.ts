@@ -101,14 +101,21 @@ export const scrapeProfileInputSchema = z.object({
 
 export type ScrapeProfileInput = z.infer<typeof scrapeProfileInputSchema>;
 
+/** Plataforma de origem do job — usado para analytics de usage por plugin. */
+export const jobPlatformSchema = z.enum(['figma', 'framer']);
+
+export type JobPlatform = z.infer<typeof jobPlatformSchema>;
+
 export const createJobBodySchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('SCRAPE_PROFILE'),
     input: scrapeProfileInputSchema,
+    platform: jobPlatformSchema.optional(),
   }),
   z.object({
     type: z.literal('SCRAPE_POSTS'),
     input: scrapeProfileInputSchema,
+    platform: jobPlatformSchema.optional(),
   }),
 ]);
 

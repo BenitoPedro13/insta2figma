@@ -1027,6 +1027,7 @@ async function importProfileViaApi(
     },
     body: JSON.stringify({
       type: 'SCRAPE_PROFILE',
+      platform: 'figma',
       input: {
         username,
         maxPosts: options.maxPosts,

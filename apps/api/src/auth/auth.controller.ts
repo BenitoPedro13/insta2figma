@@ -14,10 +14,12 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { FigmaAuthDto } from './dto/figma-auth.dto';
+import { FramerAuthDto } from './dto/framer-auth.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { MagicLinkDto } from './dto/magic-link.dto';
 import { LinkFigmaDto } from './dto/link-figma.dto';
+import { LinkFramerDto } from './dto/link-framer.dto';
 import type { RequestUser } from './jwt.strategy';
 
 type AuthedRequest = Request & { user: RequestUser };
@@ -99,6 +101,12 @@ export class AuthController {
     return this.auth.authFigma(dto).then((t) => ({ ...t, tokenType: 'Bearer' as const }));
   }
 
+  @Post('framer')
+  @HttpCode(HttpStatus.OK)
+  authFramer(@Body() dto: FramerAuthDto) {
+    return this.auth.authFramer(dto).then((t) => ({ ...t, tokenType: 'Bearer' as const }));
+  }
+
   // ─── magic link ───────────────────────────────────────────────────────────
 
   @Post('magic-link')
@@ -172,6 +180,16 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async linkFigma(@Req() req: AuthedRequest, @Body() dto: LinkFigmaDto) {
     await this.auth.linkFigma(req.user.userId, dto.figmaUserId);
+    return { ok: true };
+  }
+
+  // ─── link framer user (authenticated) ────────────────────────────────────
+
+  @Post('link-framer')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(HttpStatus.OK)
+  async linkFramer(@Req() req: AuthedRequest, @Body() dto: LinkFramerDto) {
+    await this.auth.linkFramer(req.user.userId, dto.framerUserId);
     return { ok: true };
   }
 }

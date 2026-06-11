@@ -11,11 +11,17 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from './email.service';
 import type { FigmaAuthDto } from './dto/figma-auth.dto';
+import type { FramerAuthDto } from './dto/framer-auth.dto';
 import type { JwtPayload } from './auth-token.payload';
 
 function figmaSyntheticEmail(figmaUserId: string): string {
   const safe = figmaUserId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 48);
   return `figma+${safe}@mailinator.com`;
+}
+
+function framerSyntheticEmail(framerUserId: string): string {
+  const safe = framerUserId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 48);
+  return `framer+${safe}@mailinator.com`;
 }
 
 const LEGACY_EMAIL_SUFFIXES = ['@users.insta2figma.app', '@example.com'];
@@ -55,6 +61,22 @@ export class AuthService {
       user = await this.prisma.user.update({
         where: { id: user.id },
         data: { email: figmaSyntheticEmail(figmaUserId) },
+      });
+    }
+    const tokens = this.signForUser(user.id);
+    return { ...tokens, userId: user.id };
+  }
+
+  // ─── framer auth (espelho do figma auth) ──────────────────────────────────
+
+  async authFramer(
+    dto: FramerAuthDto,
+  ): Promise<{ accessToken: string; expiresIn: string; userId: string }> {
+    const framerUserId = dto.framerUserId.trim();
+    let user = await this.prisma.user.findUnique({ where: { framerUserId } });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: { framerUserId, email: framerSyntheticEmail(framerUserId) },
       });
     }
     const tokens = this.signForUser(user.id);
@@ -270,6 +292,23 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: userId },
       data: { figmaUserId },
+    });
+  }
+
+  // ─── link framer user ────────────────────────────────────────────────────
+
+  async linkFramer(userId: string, framerUserId: string): Promise<void> {
+    const existing = await this.prisma.user.findUnique({ where: { framerUserId } });
+    if (existing && existing.id !== userId) {
+      // Re-link: a conta framer-only fica órfã (mesma estratégia do linkFigma)
+      await this.prisma.user.update({
+        where: { id: existing.id },
+        data: { framerUserId: null },
+      });
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { framerUserId },
     });
   }
 

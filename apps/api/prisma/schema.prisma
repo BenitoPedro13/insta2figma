@@ -13,6 +13,7 @@ model User {
   googleId        String?  @unique @map("google_id")
   emailVerified   Boolean  @default(false) @map("email_verified")
   figmaUserId     String?  @unique @map("figma_user_id")
+  framerUserId    String?  @unique @map("framer_user_id")
   polarCustomerId String?  @map("polar_customer_id")
   planTier        String   @default("free") @map("plan_tier")
   quotaAnchorAt   DateTime? @map("quota_anchor_at") @db.Timestamptz(6)
@@ -98,6 +99,8 @@ model Job {
   id                  String    @id @default(uuid()) @db.Uuid
   userId              String    @map("user_id") @db.Uuid
   type                String
+  /// Plataforma de origem: "figma" | "framer" (null em jobs antigos)
+  platform            String?
   input               Json
   status              JobStatus @default(queued)
   resultSummary       Json?     @map("result_summary")

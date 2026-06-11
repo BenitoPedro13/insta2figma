@@ -110,6 +110,7 @@ export class JobsService {
           data: {
             userId,
             type: data.type,
+            platform: data.platform ?? null,
             input: data.input as unknown as Prisma.InputJsonValue,
             idempotencyKey: key ?? undefined,
             status: 'queued',

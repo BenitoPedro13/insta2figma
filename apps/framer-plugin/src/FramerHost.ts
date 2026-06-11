@@ -69,6 +69,50 @@ export class FramerHost implements PluginHost {
     else localStorage.removeItem(TOKEN_KEY)
   }
 
+  /**
+   * Auto-auth via identidade do Framer (sem login explícito).
+   * Espelha o ensureSession do plugin Figma: cria/reutiliza um User
+   * free-tier no backend a partir de framer.getCurrentUser().id.
+   */
+  private async ensureFramerSession(): Promise<boolean> {
+    if (this.token) return true
+    try {
+      const user = await framer.getCurrentUser()
+      if (!user?.id) return false
+      const res = await fetch(`${API}/v1/auth/framer`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ framerUserId: user.id, name: user.name }),
+      })
+      const body = await res.json()
+      const jwt = body.data?.accessToken
+      if (!res.ok || typeof jwt !== "string") return false
+      this.setToken(jwt)
+      return true
+    } catch (e) {
+      console.warn("[Insta2Figma] framer auto-auth failed", e)
+      return false
+    }
+  }
+
+  /** Associa o framerUserId à conta autenticada (analytics por plataforma). */
+  private async linkFramerIdentity(jwt: string): Promise<void> {
+    try {
+      const user = await framer.getCurrentUser()
+      if (!user?.id) return
+      await fetch(`${API}/v1/auth/link-framer`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${jwt}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ framerUserId: user.id }),
+      })
+    } catch (e) {
+      console.warn("[Insta2Figma] link-framer failed (non-fatal)", e)
+    }
+  }
+
   private async dispatch(msg: HostMessage): Promise<void> {
     switch (msg.type) {
       case "session-request":
@@ -114,28 +158,28 @@ export class FramerHost implements PluginHost {
 
   private async handleSessionRequest(): Promise<void> {
     if (!this.token) {
-      // No token — emit a guest free-tier session so the UI works without login.
-      this.emit({
-        type: "session-data",
-        planTier: "free",
-        userId: null,
-        quotas: {
-          imagesRemaining: null,
-          imagesLimit: null,
-          maxPosts: 12,
-          maxImagesPerJob: 24,
-          expandCarouselImages: false,
-          periodEnd: null,
-        },
-      })
+      await this.ensureFramerSession()
+    }
+    if (!this.token) {
+      // Auto-auth indisponível — emit a guest free-tier session so the UI works without login.
+      this.emitGuestSession()
       return
     }
     try {
       const res = await fetch(`${API}/v1/me`, { headers: this.auth() })
       const body = await res.json()
       if (res.status === 401) {
+        // Token expirado — re-auth silencioso via identidade Framer antes de pedir login
         this.setToken("")
-        this.emit({ type: "show-login" })
+        if (await this.ensureFramerSession()) {
+          const retry = await fetch(`${API}/v1/me`, { headers: this.auth() })
+          const retryBody = await retry.json()
+          if (retry.ok) {
+            this.emit({ type: "session-data", ...retryBody.data })
+            return
+          }
+        }
+        this.emit({ type: "show-login", dismissable: true })
         return
       }
       if (!res.ok) throw new Error(`GET /me ${res.status}`)
@@ -143,6 +187,22 @@ export class FramerHost implements PluginHost {
     } catch (e) {
       this.emit({ type: "session-error", message: String(e) })
     }
+  }
+
+  private emitGuestSession(): void {
+    this.emit({
+      type: "session-data",
+      planTier: "free",
+      userId: null,
+      quotas: {
+        imagesRemaining: null,
+        imagesLimit: null,
+        maxPosts: 12,
+        maxImagesPerJob: 24,
+        expandCarouselImages: false,
+        periodEnd: null,
+      },
+    })
   }
 
   // ─── History ──────────────────────────────────────────────────────────────
@@ -169,19 +229,7 @@ export class FramerHost implements PluginHost {
 
   private handleLogout(): void {
     this.setToken("")
-    this.emit({
-      type: "session-data",
-      planTier: "free",
-      userId: null,
-      quotas: {
-        imagesRemaining: null,
-        imagesLimit: null,
-        maxPosts: 12,
-        maxImagesPerJob: 24,
-        expandCarouselImages: false,
-        periodEnd: null,
-      },
-    })
+    this.emitGuestSession()
     this.emit({ type: "show-login", dismissable: true })
   }
 
@@ -203,6 +251,7 @@ export class FramerHost implements PluginHost {
       this.emit({ type: "login-email-sent", email })
       const { jwt } = await this.pollAuthUntilDone(String(body.data.pollingId))
       this.setToken(jwt)
+      await this.linkFramerIdentity(jwt)
       const meRes = await fetch(`${API}/v1/me`, {
         headers: { authorization: `Bearer ${jwt}` },
       })
@@ -225,6 +274,7 @@ export class FramerHost implements PluginHost {
       this.emit({ type: "login-google-pending" })
       const { jwt } = await this.pollAuthUntilDone(String(body.data.pollingId))
       this.setToken(jwt)
+      await this.linkFramerIdentity(jwt)
       const meRes = await fetch(`${API}/v1/me`, {
         headers: { authorization: `Bearer ${jwt}` },
       })
@@ -456,7 +506,7 @@ export class FramerHost implements PluginHost {
       this.emit({ type: "import-error", message: "Enter a username." })
       return
     }
-    if (!this.token) {
+    if (!(await this.ensureFramerSession())) {
       this.emit({ type: "show-login", dismissable: true })
       return
     }
@@ -465,37 +515,50 @@ export class FramerHost implements PluginHost {
       this.emit({ type: "import-status", text: "Adding to queue…" })
 
       const idem = `framer-${Date.now()}-${Math.random().toString(36).slice(2)}`
-      const jr = await fetch(`${API}/v1/jobs`, {
-        method: "POST",
-        headers: {
-          ...this.auth(),
-          "content-type": "application/json",
-          "idempotency-key": idem,
-        },
-        body: JSON.stringify({
-          type: "SCRAPE_PROFILE",
-          input: {
-            username,
-            maxPosts: Number(msg.maxPosts ?? 8),
-            expandCarouselImages: msg.expandCarouselImages === true,
-            ...(msg.selectionMode ? { selectionMode: msg.selectionMode } : {}),
-            ...(msg.startIndex != null ? { startIndex: msg.startIndex } : {}),
-            ...(msg.postCount != null ? { postCount: msg.postCount } : {}),
-            ...(msg.timelineOrder ? { timelineOrder: msg.timelineOrder } : {}),
-            ...(Array.isArray(msg.selectedIndices) &&
-            msg.selectedIndices.length
-              ? { selectedIndices: msg.selectedIndices }
-              : {}),
-            ...(msg.estimatedImportImages != null
-              ? {
-                  estimatedImportImages: Math.floor(
-                    Number(msg.estimatedImportImages),
-                  ),
-                }
-              : {}),
+      const postJob = () =>
+        fetch(`${API}/v1/jobs`, {
+          method: "POST",
+          headers: {
+            ...this.auth(),
+            "content-type": "application/json",
+            "idempotency-key": idem,
           },
-        }),
-      })
+          body: JSON.stringify({
+            type: "SCRAPE_PROFILE",
+            platform: "framer",
+            input: {
+              username,
+              maxPosts: Number(msg.maxPosts ?? 8),
+              expandCarouselImages: msg.expandCarouselImages === true,
+              ...(msg.selectionMode ? { selectionMode: msg.selectionMode } : {}),
+              ...(msg.startIndex != null ? { startIndex: msg.startIndex } : {}),
+              ...(msg.postCount != null ? { postCount: msg.postCount } : {}),
+              ...(msg.timelineOrder ? { timelineOrder: msg.timelineOrder } : {}),
+              ...(Array.isArray(msg.selectedIndices) &&
+              msg.selectedIndices.length
+                ? { selectedIndices: msg.selectedIndices }
+                : {}),
+              ...(msg.estimatedImportImages != null
+                ? {
+                    estimatedImportImages: Math.floor(
+                      Number(msg.estimatedImportImages),
+                    ),
+                  }
+                : {}),
+            },
+          }),
+        })
+
+      let jr = await postJob()
+      if (jr.status === 401) {
+        // Token expirado — re-auth silencioso via identidade Framer e retry único
+        this.setToken("")
+        if (!(await this.ensureFramerSession())) {
+          this.emit({ type: "show-login", dismissable: true })
+          return
+        }
+        jr = await postJob()
+      }
 
       const jobBody = await jr.json()
       if (!jr.ok) {
