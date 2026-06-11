@@ -1248,8 +1248,13 @@ async function previewProfileViaApi(
   nextPreviewCursor?: string | null;
   instagramUserId?: string | null;
 }> {
-  const stored = await loadStoredSession();
-  const token = stored?.accessToken ?? null;
+  let token: string | null = null;
+  try {
+    const { session } = await ensureSession(base);
+    token = session.accessToken;
+  } catch {
+    // No session or refresh failed — proceed as anonymous (free tier)
+  }
   const qs = buildPreviewQueryString(username, opts);
   const headers: Record<string, string> = {};
   if (token) headers.authorization = `Bearer ${token}`;
