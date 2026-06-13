@@ -1,6 +1,6 @@
 # API Insta2Figma
 
-**Prisma** + **Postgres** + **Redis** + **NestJS** (`POST /v1/jobs` persiste e **enfileira** BullMQ `scrape-instagram-v1`; o scrape real corre em [`apps/worker`](../../apps/worker), Fase 5). Persistência: §5.2; fila: §5.3 da [arquitetura](../../docs/ARQUITETURA-INSTA2FIGMA.md).
+**Prisma** + **Postgres** + **Redis** + **NestJS** (`POST /v1/jobs` persiste e **enfileira** BullMQ `scrape-instagram-v1`; o scrape real corre em [`apps/worker`](../../apps/worker), Fase 5). Persistência: §5.2; fila: §5.3 da [arquitetura](../../docs/ARQUITETURA-INSTA2FIGMA.md)
 
 ## Ambiente
 
