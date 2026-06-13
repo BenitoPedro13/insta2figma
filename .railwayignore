@@ -1,0 +1,13 @@
+# Não enviar para builds Railway (railway up) — não fazem parte das imagens api/worker.
+# crawler/ tem um venv Python com symlinks partidos que quebram o upload.
+crawler/
+
+# Backups locais da migração Railway
+bucket-backup/
+*.dump
+
+# Dependências e artefactos (o Dockerfile reinstala a partir do source)
+node_modules/
+**/node_modules/
+**/dist/
+.git/

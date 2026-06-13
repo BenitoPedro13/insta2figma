@@ -198,6 +198,30 @@ Se vires `S3 NÃO configurado`, confirma que as variáveis do `wrapped-mug` est�
 
 Se jobs ficarem `queued`, confirma que o worker está **Running** e que `REDIS_URL` é idêntico nos dois serviços.
 
+## 10. CI/CD via GitHub Actions (deploy sem GitHub-App do Railway)
+
+Alternativa à integração nativa GitHub do Railway: o workflow
+`.github/workflows/deploy.yml` faz deploy por `railway up` autenticado com um
+**Project Token**, sem o Railway precisar de acesso ao repo.
+
+**Setup:**
+1. Railway → Project → **Settings → Tokens** → criar **Project Token** scoped ao
+   environment `production`. Copiar o valor (só aparece uma vez).
+2. GitHub → repo canónico → **Settings → Secrets and variables → Actions** →
+   adicionar secret **`RAILWAY_TOKEN`** com esse valor.
+3. **Desligar a integração nativa** GitHub nos serviços `api` e `worker`
+   (Settings → Source → Disconnect).
+
+**Regra do deploy único:** ter a integração nativa **e** o workflow activos no
+mesmo push = **2 deploys**. Para garantir um só:
+- desligar a integração nativa (passo 3), e
+- definir o secret `RAILWAY_TOKEN` **apenas no repo canónico** — secrets não passam
+  para forks, por isso sincronizar para outro remote não dispara deploy.
+
+O workflow usa `dorny/paths-filter` para replicar os `watchPatterns`: só faz deploy
+do `api`/`worker` quando os ficheiros relevantes mudam (mudanças só em `docs/` não
+disparam deploy).
+
 ## Troubleshooting Railway
 
 | Problema | Solução |
@@ -216,5 +240,8 @@ Se jobs ficarem `queued`, confirma que o worker está **Running** e que `REDIS_U
 | Build usa Dockerfile errado | `RAILWAY_DOCKERFILE_PATH=Dockerfile.api` no serviço certo |
 | Health check falha | Path `/v1/health`; API precisa de `PORT` do Railway |
 | Prisma migrate falha | `DATABASE_URL=${{Postgres.DATABASE_URL}}`; acrescenta `?sslmode=require` se necessário |
+| "Your trial is over" / deploys pausados | O trial é um **crédito único de $5** (não tempo). Esgotado com BD+Redis+bucket+2 serviços → upgrade para **Hobby ($5/mês)**. Dados não se perdem (pausado ≠ apagado) |
+| Push não faz deploy | Mudança fora dos `watchPatterns` (ex.: só `docs/`); ou a fonte GitHub aponta para outro repo/branch |
+| Deploy acontece 2× por push | Integração nativa GitHub **e** workflow ambos activos — desligar a nativa (ver secção 10) |
 
 Guia geral: [DEPLOY.md](./DEPLOY.md).

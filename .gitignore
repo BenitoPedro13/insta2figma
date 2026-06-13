@@ -14,3 +14,6 @@ code.js
 scripts/.proxy-session
 scripts/accounts.json
 scripts/sessions.json
+
+# Backup local do bucket Tigris (migração Railway) — não commitar imagens
+bucket-backup/
