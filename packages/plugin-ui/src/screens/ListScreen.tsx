@@ -51,12 +51,22 @@ export function ListScreen({
         </span>
         <input
           className="list-search-input"
-          type="search"
+          type="text"
           placeholder="Search"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           aria-label="Search accounts"
         />
+        {search.trim() ? (
+          <button
+            type="button"
+            className="list-search-clear"
+            onClick={() => onSearchChange('')}
+            aria-label="Clear search"
+          >
+            <RiCloseLine size={18} aria-hidden />
+          </button>
+        ) : null}
       </div>
       <div className="list-rule" />
       <div className="list-scroll">

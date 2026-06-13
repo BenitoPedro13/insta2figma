@@ -7,6 +7,7 @@ import {
   RiLayoutGridLine,
   RiLoader4Line,
 } from "@remixicon/react";
+import { ImportSubmitButton } from "../components/ImportSubmitButton";
 import { PanelHeader } from "../components/PanelHeader";
 import { PluginTabs, type ShellTab } from "../components/PluginTabs";
 import {
@@ -18,8 +19,8 @@ import { ListScreen, type ListTab } from "./ListScreen";
 import { PostCountSlider } from "../components/PostCountSlider";
 import { PostPreviewSkeletonGrid } from "../components/PostPreviewSkeletonGrid";
 import { ProfilePreviewMorseSkeleton } from "../components/ProfilePreviewMorseSkeleton";
+import { ProgressBar } from "../components/ProgressBar";
 import { Skeleton } from "../components/Skeleton";
-import * as FancyButton from "../components/ui/fancy-button";
 import * as Input from "../components/ui/input";
 import * as Button from "../components/ui/button";
 import { CheckboxLabel } from "../components/ui/checkbox-label";
@@ -59,6 +60,7 @@ type ImportScreenProps = {
   sessionError?: string;
   status: string;
   importing: boolean;
+  importProgress: number;
   preview: {
     username: string;
     mediaCount: number;
@@ -130,6 +132,7 @@ export function ImportScreen({
   sessionError,
   status,
   importing,
+  importProgress,
   preview,
   previewLoading,
   previewThumbsLoading,
@@ -240,6 +243,11 @@ export function ImportScreen({
     Boolean(preview?.username && !preview.profilePicUrlHd);
   const showPreviewSkeletonGrid =
     previewLoading && !(preview?.postsPreview && preview.postsPreview.length > 0);
+
+  const showInfiniteScrollProgress =
+    previewLoadingMore &&
+    !previewLoading &&
+    Boolean(preview?.postsPreview && preview.postsPreview.length > 0);
 
   const formatProfileStat = (value: number | undefined) =>
     typeof value === "number" && Number.isFinite(value)
@@ -417,20 +425,18 @@ export function ImportScreen({
               ) : null}
 
               <div className="new-import-actions">
-                <FancyButton.Root
-                  type="submit"
-                  variant="neutral"
-                  size="medium"
-                  className="w-full"
+                <ImportSubmitButton
+                  importing={importing}
+                  progress={importProgress}
                   disabled={importing || !canImport}
+                  icon={RiInstagramFill}
                 >
-                  <FancyButton.Icon as={RiInstagramFill} />
                   {quotaExceeded || exceedsImageQuota || exceedsPerImportLimit
                     ? "Quota used up"
                     : !canImport
                       ? "Select images to import"
                       : ctaLabel}
-                </FancyButton.Root>
+                </ImportSubmitButton>
                 {quotaExceeded && planTier === "free" ? (
                   <Button.Root
                     type="button"
@@ -468,6 +474,9 @@ export function ImportScreen({
         </div>
 
         <div className="new-import-right flex min-h-0 min-w-0 flex-1 flex-col" aria-live="polite">
+          {showInfiniteScrollProgress ? (
+            <ProgressBar className="shrink-0" />
+          ) : null}
           <div className="profile-preview profile-preview--header">
             <div className="profile-preview-identity flex min-w-0 flex-1 items-center gap-3">
               <span className="profile-preview-avatar" aria-hidden>

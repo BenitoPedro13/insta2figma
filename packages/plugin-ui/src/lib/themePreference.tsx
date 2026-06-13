@@ -2,7 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useState,
   type ReactNode,
 } from 'react';
@@ -31,13 +31,21 @@ function readStoredPreference(): ThemePreference {
 }
 
 function applyTheme(preference: ThemePreference) {
+  const root = document.documentElement;
+  root.dataset.theme = preference;
+
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  const isDark = preference === 'dark' || (preference === 'system' && mq.matches);
-  document.documentElement.classList.toggle('dark', isDark);
+  const isDark =
+    preference === 'dark' || (preference === 'system' && mq.matches);
+  root.classList.toggle('dark', isDark);
 }
 
 export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>(readStoredPreference);
+  const [preference, setPreferenceState] = useState<ThemePreference>(() => {
+    const stored = readStoredPreference();
+    applyTheme(stored);
+    return stored;
+  });
 
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next);
@@ -49,13 +57,13 @@ export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const sync = () => applyTheme(preference);
+  useLayoutEffect(() => {
+    applyTheme(preference);
 
-    sync();
     if (preference !== 'system') return;
 
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const sync = () => applyTheme('system');
     mq.addEventListener('change', sync);
     return () => mq.removeEventListener('change', sync);
   }, [preference]);

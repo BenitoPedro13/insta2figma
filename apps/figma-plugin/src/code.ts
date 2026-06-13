@@ -394,6 +394,7 @@ async function placeSignedImages(
     profilePicUrl?: string;
     username?: string;
     expandCarouselImages?: boolean;
+    onProgress?: (placed: number, total: number) => void;
   },
 ): Promise<void> {
   const nodes: SceneNode[] = [];
@@ -418,6 +419,9 @@ async function placeSignedImages(
   const bytesMap = new Map<SignedImageAsset, Uint8Array | null>(
     flatAssets.map((a, i) => [a, prefetched[i]]),
   );
+  const reportProgress = () => {
+    opts?.onProgress?.(ok, flatAssets.length);
+  };
 
   if (usePostRows) {
     let y = 0;
@@ -430,6 +434,7 @@ async function placeSignedImages(
         if (item) {
           loaded.push(item);
           ok += 1;
+          reportProgress();
         }
       }
       if (loaded.length === 0) continue;
@@ -452,6 +457,7 @@ async function placeSignedImages(
       if (item) {
         loaded.push(item);
         ok += 1;
+        reportProgress();
       }
     }
 
@@ -1008,16 +1014,16 @@ async function importProfileViaApi(
     selectedIndices?: number[];
   },
 ): Promise<void> {
-  const notifyStatus = (text: string) => {
-    figma.ui.postMessage({ type: 'import-status', text });
+  const notifyStatus = (text: string, progress: number) => {
+    figma.ui.postMessage({ type: 'import-status', text, progress });
   };
 
-  notifyStatus(importStatusAuth());
+  notifyStatus(importStatusAuth(), 6);
   const { session, me } = await ensureSession(base);
   const token = session.accessToken;
   figma.ui.postMessage({ type: 'session-data', ...me });
 
-  notifyStatus(importStatusQueue());
+  notifyStatus(importStatusQueue(), 14);
   const idem = `figma-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const jr = await apiFetch(`${base}/v1/jobs`, {
     method: 'POST',
@@ -1065,11 +1071,12 @@ async function importProfileViaApi(
     throw new Error('Could not start the import. Try again in a moment.');
   }
 
-  notifyStatus(importStatusWaiting(1));
+  notifyStatus(importStatusWaiting(0), 18);
   let lastResultSummary: unknown = undefined;
   let lastSignedAssets: { url?: string; storageKey?: string }[] = [];
   let status = '';
-  for (let i = 0; i < 120; i++) {
+  const pollMax = 120;
+  for (let i = 0; i < pollMax; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     const gr = await apiFetch(`${base}/v1/jobs/${encodeURIComponent(jobId)}`, {
       headers: { authorization: `Bearer ${token}` },
@@ -1080,7 +1087,8 @@ async function importProfileViaApi(
       throw new Error('Could not check import progress. Try again in a moment.');
     }
     status = String(gData?.status ?? gj.status ?? '');
-    notifyStatus(importStatusWaiting(i + 1));
+    const waitingProgress = 18 + Math.round(((i + 1) / pollMax) * 52);
+    notifyStatus(importStatusWaiting(i + 1), waitingProgress);
     if (status === 'succeeded') {
       lastResultSummary = gData?.resultSummary;
       const sa = gData?.signedAssets;
@@ -1092,7 +1100,7 @@ async function importProfileViaApi(
           const smb = sm as Record<string, unknown>;
           const sample = smb.postsInSample;
           if (typeof sample === 'number' && Number.isFinite(sample) && sample > 0) {
-            notifyStatus(importStatusPostsFound(Math.floor(sample)));
+            notifyStatus(importStatusPostsFound(Math.floor(sample)), 72);
           }
         }
       }
@@ -1137,13 +1145,13 @@ async function importProfileViaApi(
     throw new Error('No images came back from the import. Try again in a moment.');
   }
 
-  notifyStatus(importStatusPlacing(imageAssets.length));
+  notifyStatus(importStatusPlacing(imageAssets.length), 74);
   const rawProfilePic = pickProfilePicUrlFromJobResultSummary(lastResultSummary);
   let profilePicForHistory: string | undefined;
   if (profileUrlFromSignedAssets) {
     profilePicForHistory = profileUrlFromSignedAssets;
   } else if (rawProfilePic) {
-    notifyStatus(importStatusAvatar());
+    notifyStatus(importStatusAvatar(), 96);
     profilePicForHistory =
       (await fetchInstagramAvatarAsDataUrl(rawProfilePic)) ??
       `${base}/v1/instagram/image?url=${encodeURIComponent(rawProfilePic)}`;
@@ -1152,6 +1160,11 @@ async function importProfileViaApi(
     username,
     expandCarouselImages: options.expandCarouselImages,
     ...(profilePicForHistory ? { profilePicUrl: profilePicForHistory } : {}),
+    onProgress: (placed, total) => {
+      const safeTotal = Math.max(1, total);
+      const placingProgress = 74 + Math.round((placed / safeTotal) * 22);
+      notifyStatus(importStatusPlacing(total), placingProgress);
+    },
   });
 }
 

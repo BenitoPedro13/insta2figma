@@ -52,10 +52,9 @@ export function importStatusQueue(index = 0): string {
   return pick(QUEUE, index);
 }
 
-/** Rotating “thinking” line; optional 1-based attempt number only. */
+/** Rotating “thinking” line while the scrape job runs. */
 export function importStatusWaiting(attempt: number): string {
-  const line = pick(WAITING, attempt);
-  return attempt > 0 ? `${line} ${attempt}` : line;
+  return pick(WAITING, attempt);
 }
 
 export function importStatusPostsFound(count: number): string {
