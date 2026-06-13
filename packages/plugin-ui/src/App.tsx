@@ -120,6 +120,7 @@ export function App({ host }: { host: PluginHost }) {
   const [expandCarouselImages, setExpandCarouselImages] =
     useState<boolean>(false);
   const [status, setStatus] = useState<string>("");
+  const [importProgress, setImportProgress] = useState<number>(0);
   const [importing, setImporting] = useState<boolean>(false);
   const lastImportUsername = useRef<string>("");
   const previewReqId = useRef<number>(0);
@@ -313,6 +314,9 @@ export function App({ host }: { host: PluginHost }) {
 
       if (pm.type === 'import-status' && typeof pm.text === 'string') {
         setStatus(pm.text);
+        if (typeof pm.progress === 'number' && Number.isFinite(pm.progress)) {
+          setImportProgress(Math.min(100, Math.max(0, pm.progress)));
+        }
         return;
       }
       if (pm.type === 'profile-preview-data') {
@@ -483,6 +487,7 @@ export function App({ host }: { host: PluginHost }) {
       }
       if (pm.type === 'import-error') {
         setImporting(false);
+        setImportProgress(0);
         const raw =
           pm.message != null ? msgToText(pm.message) : 'Something went wrong.';
         setStatus(raw);
@@ -490,6 +495,7 @@ export function App({ host }: { host: PluginHost }) {
       }
       if (pm.type !== 'import-done') return;
       setImporting(false);
+      setImportProgress(0);
       const done = pm as {
         error?: unknown;
         placed?: number;
@@ -619,13 +625,13 @@ export function App({ host }: { host: PluginHost }) {
     resetPostSelection();
     setPreview(null);
     setPreviewError('');
+    setPreviewLoading(true);
+    setPreviewThumbsLoading(false);
 
     const timer = window.setTimeout(() => {
       const reqId = previewReqId.current + 1;
       previewReqId.current = reqId;
       previewFetchedForUsername.current = user;
-      setPreviewLoading(true);
-      setPreviewThumbsLoading(false);
       host.send({
         type: 'profile-preview',
         requestId: reqId,
@@ -644,7 +650,7 @@ export function App({ host }: { host: PluginHost }) {
   }, [importing, username, maxPostsLimit, resetPreviewPagination, resetPostSelection]);
 
   const fetchNextPreviewPage = useCallback(() => {
-    if (previewLoadingMore || !hasMorePreview) return;
+    if (previewLoadingMore || previewLoading || !hasMorePreview) return;
     const user = parseInstagramUsername(String(username ?? ''));
     if (!user || !preview?.username) return;
 
@@ -687,6 +693,7 @@ export function App({ host }: { host: PluginHost }) {
     preview?.username,
     hasMorePreview,
     nextPreviewCursor,
+    previewLoading,
     previewLoadingMore,
     previewPageCount,
     instagramUserId,
@@ -821,6 +828,7 @@ export function App({ host }: { host: PluginHost }) {
     lastImportUsername.current = user;
     previewReqId.current += 1;
     setImporting(true);
+    setImportProgress(3);
     setStatus('Kicking things off…');
     const scrapeInput = selectionInputFromIndices(selectedIndices, {
       rangeMode: selectionMode === 'range',
@@ -922,6 +930,7 @@ export function App({ host }: { host: PluginHost }) {
                 sessionError={sessionError}
                 status={status}
                 importing={importing}
+                importProgress={importProgress}
                 preview={preview}
                 previewLoading={previewLoading}
                 previewThumbsLoading={previewThumbsLoading}

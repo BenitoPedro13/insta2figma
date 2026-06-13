@@ -74,6 +74,10 @@ function daysUntilReset(periodEndIso: string | null): number | null {
   return Math.max(0, Math.ceil(ms / 86_400_000));
 }
 
+function formatCount(value: number): string {
+  return value.toLocaleString('en-US');
+}
+
 function defaultQuotaLabel(planTier: PlanTier): string {
   if (planTier === 'max') return '100,000 images / 30 days';
   if (planTier === 'pro') return '10,000 images / 30 days';
@@ -95,7 +99,7 @@ export function PluginFooter({
 
   const quotaLabel =
     used != null && imagesLimit != null
-      ? `${used}/${imagesLimit} images this period`
+      ? `${formatCount(used)}/${formatCount(imagesLimit)} images this period`
       : defaultQuotaLabel(planTier);
 
   return (
