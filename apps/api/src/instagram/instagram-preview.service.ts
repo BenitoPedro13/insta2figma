@@ -23,6 +23,7 @@ import { globalSessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, PREV
 import { REDIS_CACHE_CLIENT } from '../cache/redis-cache.module';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
 import { IgCatalogService } from './catalog/ig-catalog.service';
+import { StorageService } from '../storage/storage.service';
 import { fetchPreviewViaApify, readApifyPreviewConfig, readApifyPostConfig } from './apify-preview.client';
 import { fetchInstagramImageAsDataUrl } from './instagram-image.utils';
 import type { CachedPreviewPayload, TelemetryCtx, PreviewDataSource } from './preview-source.types';
@@ -35,6 +36,14 @@ const MAX_AVATAR_BYTES = 900_000;
 const PREVIEW_CACHE_TTL_MS = 15 * 60 * 1_000;
 const PREVIEW_REVALIDATE_AFTER_MS = 5 * 60 * 1_000;
 const FREE_MAX_PREVIEW_PAGE = 3;
+
+// Catálogo persistente (Fase 3a). Default OFF — leitura catalog-first dark até ligar.
+const CATALOG_ENABLED =
+  (process.env.CATALOG_ENABLED ?? 'false').toLowerCase() === 'true';
+const CATALOG_REFRESH_TTL_MS = Math.max(
+  60_000,
+  Number.parseInt(process.env.CATALOG_REFRESH_TTL_MS ?? '300000', 10) || 300_000,
+);
 
 function assertPreviewPageAllowed(planTier: PlanTier, previewPage: number): void {
   if (planTier === 'max') return;
@@ -184,6 +193,7 @@ export class InstagramPreviewService {
   constructor(
     private readonly telemetry: ScrapeTelemetryService,
     private readonly catalog: IgCatalogService,
+    private readonly storage: StorageService,
     @Inject(REDIS_CACHE_CLIENT) private readonly redis: Redis,
   ) {
     this.previewSource = this.buildPreviewSource();
@@ -196,6 +206,7 @@ export class InstagramPreviewService {
       igUserId: base.instagramUserId,
       mediaCount: base.mediaCount,
       isPrivate: base.isPrivate,
+      profilePicUrl: base.profilePicUrlHd,
       posts: base.parsedPosts,
     });
   }
@@ -412,11 +423,8 @@ export class InstagramPreviewService {
       const ageMs = Date.now() - (cached.cachedAt ?? 0);
       if (ageMs > PREVIEW_REVALIDATE_AFTER_MS && !this.revalidating.has(cacheKey)) {
         this.revalidating.add(cacheKey);
-        void this.fetchInstagramPreviewBase(username, fetchCount, timelineOrder, ctx)
-          .then((fresh) => {
-            this.recordCatalog(fresh);
-            return this.writeCache(cacheKey, toRedisCachedPayload(fresh));
-          })
+        void this.fetchFreshBase(username, fetchCount, timelineOrder, ctx)
+          .then((fresh) => this.writeCache(cacheKey, toRedisCachedPayload(fresh)))
           .catch(() => {})
           .finally(() => this.revalidating.delete(cacheKey));
       }
@@ -428,10 +436,196 @@ export class InstagramPreviewService {
         base: { ...cached, profilePicDataUrl: null, postsPreview },
       };
     }
-    const base = await this.fetchInstagramPreviewBase(username, fetchCount, timelineOrder, ctx);
-    this.recordCatalog(base);
+    const base = await this.fetchFreshBase(username, fetchCount, timelineOrder, ctx);
     await this.writeCache(cacheKey, toRedisCachedPayload(base));
     return { base, cacheKey };
+  }
+
+  /**
+   * Camada L2: tenta servir do catálogo persistente (com top-check incremental
+   * se stale); cai para o fetch live IG/Apify (L3) + write-through quando o
+   * catálogo não cobre o perfil. Unifica o caminho de cache-miss e o de SWR.
+   */
+  private async fetchFreshBase(
+    username: string,
+    fetchCount: number,
+    timelineOrder: 'newest_first' | 'oldest_first',
+    ctx: TelemetryCtx,
+  ): Promise<CachedPreviewPayload> {
+    if (CATALOG_ENABLED) {
+      try {
+        const fromCatalog = await this.tryServeFromCatalog(
+          username,
+          fetchCount,
+          timelineOrder,
+          ctx,
+        );
+        if (fromCatalog) return fromCatalog;
+      } catch (e) {
+        console.warn(
+          '[catalog] serve falhou — fallback live',
+          e instanceof Error ? e.message : String(e),
+        );
+      }
+    }
+    const base = await this.fetchInstagramPreviewBase(
+      username,
+      fetchCount,
+      timelineOrder,
+      ctx,
+    );
+    this.recordCatalog(base);
+    return base;
+  }
+
+  private async acquireCatalogLock(key: string, ttlMs: number): Promise<boolean> {
+    try {
+      const res = await this.redis.set(key, '1', 'PX', ttlMs, 'NX');
+      return res === 'OK';
+    } catch {
+      return false; // Redis indisponível → não bloqueia (permite fetch)
+    }
+  }
+
+  private async releaseCatalogLock(key: string): Promise<void> {
+    try {
+      await this.redis.del(key);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Serve a preview a partir do catálogo persistente (L2). Se o perfil está
+   * stale, faz **1** top-check incremental ao IG (sob lock Redis) que descobre
+   * posts novos, faz write-through e enfileira backfill. Depois lê os posts do
+   * catálogo (ordenados por `takenAt desc`), assinando covers de S3. Devolve
+   * `null` se o catálogo não cobre o perfil (→ fallback live).
+   */
+  private async tryServeFromCatalog(
+    username: string,
+    fetchCount: number,
+    timelineOrder: 'newest_first' | 'oldest_first',
+    ctx: TelemetryCtx,
+  ): Promise<CachedPreviewPayload | null> {
+    const profile = await this.catalog.getProfileByUsername(username);
+    if (!profile) return null; // cold → fallback live (popula p/ próxima vez)
+
+    const freshThumbByShortcode = new Map<string, string | null>();
+    let avatarUrlHd: string | null = null;
+    const stale =
+      !profile.lastRefreshedAt ||
+      Date.now() - profile.lastRefreshedAt.getTime() > CATALOG_REFRESH_TTL_MS;
+
+    if (stale) {
+      const lockKey = `lock:catalog:${username}`;
+      const locked = await this.acquireCatalogLock(lockKey, 30_000);
+      if (locked) {
+        try {
+          const fresh = await this.fetchInstagramPreviewBase(
+            username,
+            fetchCount,
+            timelineOrder,
+            ctx,
+          );
+          this.recordCatalog(fresh); // upsert novos posts + enqueue backfill
+          for (const p of fresh.parsedPosts) {
+            freshThumbByShortcode.set(p.shortcode, p.thumbnailUrl);
+          }
+          avatarUrlHd = fresh.profilePicUrlHd;
+        } catch {
+          // IG falhou no top-check → serve catálogo stale (degradação graciosa)
+        } finally {
+          await this.releaseCatalogLock(lockKey);
+        }
+      }
+      // sem lock → outro pedido está a refrescar; servimos o catálogo atual
+    }
+
+    const posts = await this.catalog.getRecentPosts(profile.id, fetchCount);
+    if (posts.length === 0) return null; // catálogo vazio → fallback live
+
+    const covers = await this.catalog.getCoverAssets(
+      posts.map((p) => p.shortcode),
+    );
+    const keys = new Set(
+      Array.from(covers.values()).map((c) => c.storageKey),
+    );
+    let avatarKey: string | null = null;
+    if (profile.igUserId) {
+      const av = await this.catalog.getProfileAvatarAsset(profile.igUserId);
+      if (av) {
+        avatarKey = av.storageKey;
+        keys.add(avatarKey);
+      }
+    }
+    const signed = await this.storage.signGetObjects(Array.from(keys));
+    const urlByKey = new Map(signed.map((s) => [s.storageKey, s.url] as const));
+
+    const parsedPosts: InstagramPostSummaryItem[] = posts.map((p) => {
+      const cover = covers.get(p.shortcode);
+      const s3Url = cover ? (urlByKey.get(cover.storageKey) ?? null) : null;
+      const thumbnailUrl =
+        s3Url ?? freshThumbByShortcode.get(p.shortcode) ?? null;
+      const item: InstagramPostSummaryItem = {
+        shortcode: p.shortcode,
+        thumbnailUrl,
+        isVideo: p.isVideo,
+        takenAt: Math.floor(p.takenAt.getTime() / 1000),
+        caption: p.caption ?? null,
+      };
+      // Sintetiza `carouselImageUrls` só p/ o badge de contagem (as URLs não são
+      // mostradas na preview; o import faz fetch fresco das imagens reais).
+      const extras = Math.max(0, p.carouselCount - 1);
+      if (extras > 0 && thumbnailUrl) {
+        item.carouselImageUrls = new Array(extras).fill(thumbnailUrl);
+      }
+      return item;
+    });
+
+    const postsPreview = buildIndexedPostPreview(
+      parsedPosts.slice(0, PREVIEW_PAGE_SIZE),
+      timelineOrder,
+      { indexStart: 1 },
+    );
+
+    const avatarSigned = avatarKey ? (urlByKey.get(avatarKey) ?? null) : null;
+
+    this.telemetry.record({
+      endpoint: 'profile-preview',
+      igUsername: username,
+      sessionAccount: null,
+      proxyUsed: false,
+      cacheHit: true, // servido do catálogo (L2)
+      statusCode: 200,
+      retryCount: 0,
+      latencyMs: 0,
+      errorKind: null,
+      userId: ctx.callerUserId,
+      planTier: ctx.planTier,
+    });
+
+    return {
+      username: profile.username,
+      instagramUserId: profile.igUserId,
+      profilePicUrlHd: avatarSigned ?? avatarUrlHd,
+      profilePicDataUrl: null,
+      mediaCount: profile.mediaCount,
+      isPrivate: profile.isPrivate,
+      parsedPosts,
+      postsPreview,
+      postsAvailable: parsedPosts.length,
+      timelineOrder,
+      hasNextPreviewPage:
+        parsedPosts.length > PREVIEW_PAGE_SIZE || !profile.catalogComplete,
+      nextPreviewCursor: null,
+      previewTotalPages: Math.max(
+        1,
+        Math.ceil(
+          (profile.mediaCount || parsedPosts.length) / PREVIEW_PAGE_SIZE,
+        ),
+      ),
+    };
   }
 
   private async fetchFeedPageViaApify(

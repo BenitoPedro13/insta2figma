@@ -153,6 +153,27 @@ export type ScrapeInstagramV1JobPayload = z.infer<
   typeof scrapeInstagramV1JobPayloadSchema
 >;
 
+/** Fila BullMQ p/ backfill assíncrono de imagens (covers de posts + avatares). */
+export const MEDIA_BACKFILL_V1_QUEUE = 'media-backfill-v1' as const;
+
+export const mediaBackfillSlotSchema = z.object({
+  slot: z.number().int().min(0),
+  url: z.string(),
+});
+
+/** Payload: 1 job por post (`jobId='media:'+shortcode`). `slots` leva as URLs CDN
+ * capturadas no fetch que descobriu o post (expiram → backfill corre depressa). */
+export const mediaBackfillV1JobPayloadSchema = z.object({
+  shortcode: z.string(),
+  slots: z.array(mediaBackfillSlotSchema).min(1),
+  igUserId: z.string().optional(),
+  profilePicUrl: z.string().optional(),
+});
+
+export type MediaBackfillV1JobPayload = z.infer<
+  typeof mediaBackfillV1JobPayloadSchema
+>;
+
 /** Item leve do feed para `result_summary` (URLs IG podem expirar; Fase 6 armazena cópias). */
 export const instagramPostSummaryItemSchema = z.object({
   shortcode: z.string(),

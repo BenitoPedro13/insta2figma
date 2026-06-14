@@ -218,9 +218,17 @@ Each `Asset` carries explicit `kind`/`shortcode`/`slot` so plugins and billing
 `MediaAsset` is independent of job lifecycle (deleting a `Job` cascades only its `Asset`
 references, never the shared `media/` object). `MediaAsset.lastUsedAt` enables future GC.
 
-> This is Fase 0+1 of the persistent-catalog plan — see
-> `docs/tasks/TASK-persistent-ig-catalog-dedup.md` for the full design (catalog-first
-> preview + incremental scrape + async backfill are later phases).
+**Persistent catalog (Fases 2–3, atrás de flags):** `IgProfile`/`IgPost` são escritos
+write-through em cada preview (`IgCatalogService`, flag `CATALOG_WRITE_THROUGH`).
+Com `CATALOG_ENABLED=true`, a preview passa a **catalog-first**: L1 Redis → L2 catálogo
+(`tryServeFromCatalog` serve `IgPost` por `takenAt desc` com covers S3 assinados; faz
+**1** top-check incremental ao IG sob lock Redis quando stale) → L3 IG/Apify. Os bytes
+dos covers chegam via fila **`media-backfill-v1`** (2º worker; flag `CATALOG_BACKFILL_ENABLED`),
+enfileirada no write-through. Ordenação por `takenAt desc` faz posts fixados (pinned)
+descerem para a posição cronológica — desvio assumido.
+
+> Plano completo + fases restantes (4 import resolve-from-catalog, 5 GC) em
+> `docs/tasks/TASK-persistent-ig-catalog-dedup.md`.
 
 ## Monorepo pitfalls
 

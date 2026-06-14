@@ -2,6 +2,7 @@ import { Global, Logger, Module, OnApplicationShutdown } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { MEDIA_BACKFILL_V1_QUEUE } from '@insta2figma/shared-contracts';
 import { SCRAPE_INSTAGRAM_V1_QUEUE } from './scrape-queue.name';
 
 let sharedRedisConnection: Redis | null = null;
@@ -27,6 +28,9 @@ function getRedisConnection(url: string): Redis {
     }),
     BullModule.registerQueue({
       name: SCRAPE_INSTAGRAM_V1_QUEUE,
+    }),
+    BullModule.registerQueue({
+      name: MEDIA_BACKFILL_V1_QUEUE,
     }),
   ],
   exports: [BullModule],

@@ -730,8 +730,16 @@ dados.
    `CATALOG_WRITE_THROUGH`, best-effort. **Worker-side write-through adiado** p/
    Fase 3b/4 — onde o worker fica catalog-aware e se extrai um módulo partilhado;
    a preview sozinha já popula o catálogo que a Fase 3a lê).
-4. Fase 3b (infra de backfill: fila `media-backfill-v1` + 2º worker) → Fase 3a
-   (preview catalog-first + incremental + deep-scroll; enfileira backfill `async`).
+4. ✅ **FEITO** — Fase 3b (infra backfill: `MEDIA_BACKFILL_V1_QUEUE` + payload em
+   shared-contracts; fila registada em `QueueModule`; enqueue em `IgCatalogService`
+   gated por `CATALOG_BACKFILL_ENABLED`; 2º `Worker` + `media-backfill.processor`)
+   + Fase 3a (preview catalog-first: `fetchFreshBase` → `tryServeFromCatalog` com
+   top-check incremental sob lock Redis, serve `IgPost` ordenado por `takenAt desc`
+   com covers S3 assinados; gated por `CATALOG_ENABLED`, default OFF).
+   Typechecks + builds + testes verdes. **Nota:** boot DI não validado localmente
+   (quirk pré-existente do nest-build no Node 24); padrões de injeção idênticos aos
+   já em produção (`@InjectQueue` como em `jobs.service`). Deep-scroll para além de
+   `fetchCount` ainda cai no fetch live (persistência descendente = follow-up).
 5. Fase 4 (import resolve-from-catalog).
 6. Fase 5 (GC + telemetria por camada).
 7. Actualizar documentação (§14).

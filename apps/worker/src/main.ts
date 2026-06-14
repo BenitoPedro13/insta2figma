@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 
 import {
   SCRAPE_INSTAGRAM_V1_QUEUE,
+  MEDIA_BACKFILL_V1_QUEUE,
   scrapeInstagramV1JobPayloadSchema,
 } from '@insta2figma/shared-contracts';
 import { globalSessionPool, REDIS_SESSION_KEY } from '@insta2figma/shared-instagram';
@@ -19,6 +20,7 @@ import {
 } from './instagram/http-instagram-data-source';
 import { InstagramUpstreamError } from './instagram/instagram-upstream-error';
 import { processInstagramScrapeJob } from './instagram/scrape-runner';
+import { processMediaBackfillJob } from './backfill/media-backfill.processor';
 
 function truncateMessage(msg: string, max = 2000): string {
   return msg.length <= max ? msg : `${msg.slice(0, max - 1)}…`;
@@ -168,13 +170,31 @@ async function main(): Promise<void> {
     );
   });
 
+  // 2º Worker: backfill assíncrono de imagens (fila `media-backfill-v1`, §6.6).
+  const backfillConcurrency = Math.max(
+    1,
+    Number.parseInt(process.env.MEDIA_BACKFILL_CONCURRENCY ?? '4', 10) || 4,
+  );
+  const backfillWorker = new Worker(
+    MEDIA_BACKFILL_V1_QUEUE,
+    async (bullJob) => {
+      await processMediaBackfillJob(prisma, bullJob.data);
+    },
+    { connection, concurrency: backfillConcurrency },
+  );
+  backfillWorker.on('failed', (job: BullMqJob | undefined, err: Error) => {
+    if (!job?.finishedOn) return; // só loga a falha final (após retries)
+    console.warn('[backfill] job falhou definitivamente', job?.id, err?.message);
+  });
+
   console.info(
-    `[worker] à escuta da fila "${SCRAPE_INSTAGRAM_V1_QUEUE}" (concurrency=${concurrency}, igTimeoutMs=${timeoutMs})`,
+    `[worker] à escuta das filas "${SCRAPE_INSTAGRAM_V1_QUEUE}" (concurrency=${concurrency}, igTimeoutMs=${timeoutMs}) e "${MEDIA_BACKFILL_V1_QUEUE}" (concurrency=${backfillConcurrency})`,
   );
 
   const shutdown = async (): Promise<void> => {
     clearInterval(sessionSyncTimer);
     await worker.close();
+    await backfillWorker.close();
     await connection.quit();
     await prisma.$disconnect();
     process.exit(0);
