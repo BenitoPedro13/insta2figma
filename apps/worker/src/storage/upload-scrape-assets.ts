@@ -5,22 +5,8 @@ import {
   createS3PutClient,
   jobStoragePrefix,
   isS3Configured,
-  putObjectBytes,
 } from './s3-client';
-
-const FETCH_TIMEOUT_MS = Math.max(
-  5_000,
-  Number.parseInt(process.env.ASSET_FETCH_TIMEOUT_MS ?? '20000', 10) || 20_000,
-);
-
-const MAX_BYTES = Math.min(
-  12 * 1024 * 1024,
-  Math.max(
-    256 * 1024,
-    Number.parseInt(process.env.ASSET_MAX_BYTES ?? `${5 * 1024 * 1024}`, 10) ||
-      5 * 1024 * 1024,
-  ),
-);
+import { ensureMediaAsset } from './ensure-media-asset';
 
 const MAX_THUMBS = Math.min(
   24,
@@ -39,51 +25,14 @@ const MAX_THUMBS_EXPANDED = Math.min(
   ),
 );
 
-function guessExtFromMime(mime: string): string {
-  if (mime.includes('webp')) return 'webp';
-  if (mime.includes('png')) return 'png';
-  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
-  return 'bin';
-}
-
-async function fetchBytes(
-  url: string,
-): Promise<{ body: Buffer; contentType: string }> {
-  const res = await fetch(url, {
-    method: 'GET',
-    redirect: 'follow',
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    headers: {
-      Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-      'User-Agent':
-        'Mozilla/5.0 (compatible; Insta2FigmaWorker/1.0)',
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} while downloading media`);
-  }
-  const len = res.headers.get('content-length');
-  if (len !== null) {
-    const n = Number.parseInt(len, 10);
-    if (Number.isFinite(n) && n > MAX_BYTES) {
-      throw new Error('File is too large.');
-    }
-  }
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.byteLength > MAX_BYTES) {
-    throw new Error('File is too large.');
-  }
-  const ct = res.headers.get('content-type')?.split(';')[0]?.trim() || '';
-  const contentType =
-    ct && ct.startsWith('image/') ? ct : 'application/octet-stream';
-  return { body: buf, contentType };
-}
-
 /**
- * Upload opcional de assets para S3/MinIO e cria linhas `Asset`.
- * - `profile.*`: foto de perfil para avatar no histórico/favoritos.
- * - `thumbs/*`: miniaturas dos posts para import no canvas.
- * Falhas por item são ignoradas (log).
+ * Garante as imagens do scrape no store content-addressed (`MediaAsset`, dedupado
+ * globalmente) e cria as linhas `Asset` por-job que apontam para esses bytes.
+ * - `profile`: avatar para o histórico/favoritos.
+ * - `post` (slot 0 = cover; 1..N = carrossel quando `expandCarouselImages`).
+ *
+ * Reuso: se os bytes já existem em S3 (outro user/job), **não** há download — só
+ * se cria a referência `Asset`. Falhas por item são ignoradas (log).
  */
 export async function uploadScrapeAssets(params: {
   prisma: PrismaClient;
@@ -100,32 +49,35 @@ export async function uploadScrapeAssets(params: {
   const client = createS3PutClient();
   const bucket = process.env.S3_BUCKET!.trim();
   if (!client) return null;
+  const s3 = { client, bucket };
 
-  const prefix = jobStoragePrefix(params.jobId);
+  const { prisma, jobId } = params;
 
-  const persist = async (
-    key: string,
-    body: Buffer,
-    contentType: string,
-  ): Promise<void> => {
-    await putObjectBytes({ client, bucket, key, body, contentType });
-    await params.prisma.asset.create({
-      data: {
-        jobId: params.jobId,
-        storageKey: key,
-        contentType,
-        byteSize: BigInt(body.byteLength),
-        expiresAt: null,
-      },
-    });
-  };
-
+  // Avatar do perfil → MediaAsset 'profile' (chave por igUserId).
   const profileUrl = params.summary.profile.profilePicUrlHd;
-  if (profileUrl) {
+  const igUserId = params.summary.profile.id;
+  if (profileUrl && igUserId) {
     try {
-      const { body, contentType } = await fetchBytes(profileUrl);
-      const ext = guessExtFromMime(contentType);
-      await persist(`${prefix}profile.${ext}`, body, contentType);
+      const result = await ensureMediaAsset(prisma, s3, {
+        kind: 'profile',
+        igUserId,
+        url: profileUrl,
+      });
+      if (result) {
+        await prisma.asset.create({
+          data: {
+            jobId,
+            storageKey: result.storageKey,
+            contentType: result.contentType,
+            byteSize: BigInt(result.byteSize),
+            kind: 'profile',
+            shortcode: null,
+            slot: 0,
+            mediaAssetId: result.id,
+            expiresAt: null,
+          },
+        });
+      }
     } catch (e) {
       console.warn('[storage] falha ao guardar foto de perfil', e);
     }
@@ -134,8 +86,8 @@ export async function uploadScrapeAssets(params: {
   const expand = params.expandCarouselImages === true;
   const maxSlots = expand ? MAX_THUMBS_EXPANDED : MAX_THUMBS;
 
-  // Colectar tasks upfront para poder paralelizar sem race conditions no índice
-  type ThumbTask = { url: string; slug: string; shortcode: string };
+  // Colectar tasks upfront (slot 0 = cover; 1..N = carrossel) para paralelizar.
+  type ThumbTask = { url: string; slot: number; shortcode: string };
   const tasks: ThumbTask[] = [];
 
   for (const p of params.summary.postsSample) {
@@ -154,33 +106,54 @@ export async function uploadScrapeAssets(params: {
       continue;
     }
 
-    for (let slotIdx = 0; slotIdx < urls.length; slotIdx++) {
+    for (let slot = 0; slot < urls.length; slot++) {
       if (tasks.length >= maxSlots) break;
-      const slug = urls.length === 1 ? p.shortcode : `${p.shortcode}_${slotIdx}`;
-      tasks.push({ url: urls[slotIdx], slug, shortcode: p.shortcode });
+      tasks.push({ url: urls[slot], slot, shortcode: p.shortcode });
     }
   }
 
   console.info(
-    `[storage] ${params.summary.postsSample.length} posts, ${tasks.length} uploads pendentes`,
+    `[storage] ${params.summary.postsSample.length} posts, ${tasks.length} slots pendentes`,
   );
 
-  // Pool de concorrência — mesmo padrão do inlinePostsPreviewThumbnails da API
+  // Pool de concorrência — mesmo padrão do inlinePostsPreviewThumbnails da API.
   const UPLOAD_CONCURRENCY = 5;
   let succeeded = 0;
+  let reused = 0;
   let taskIdx = 0;
 
   async function uploadWorker(): Promise<void> {
     while (taskIdx < tasks.length) {
       const task = tasks[taskIdx++];
       try {
-        const { body, contentType } = await fetchBytes(task.url);
-        const ext = guessExtFromMime(contentType);
-        await persist(`${prefix}thumbs/${task.slug}.${ext}`, body, contentType);
+        const result = await ensureMediaAsset(prisma, s3, {
+          kind: 'post',
+          shortcode: task.shortcode,
+          slot: task.slot,
+          url: task.url,
+        });
+        if (!result) continue;
+        if (result.reused) reused++;
+        await prisma.asset.create({
+          data: {
+            jobId,
+            storageKey: result.storageKey,
+            contentType: result.contentType,
+            byteSize: BigInt(result.byteSize),
+            kind: 'post',
+            shortcode: task.shortcode,
+            slot: task.slot,
+            mediaAssetId: result.id,
+            expiresAt: null,
+          },
+        });
         succeeded++;
       } catch (e) {
         const reason = e instanceof Error ? e.message : String(e);
-        console.warn('[storage] falha thumbnail', task.shortcode, { url: task.url.slice(0, 80), reason });
+        console.warn('[storage] falha slot', task.shortcode, task.slot, {
+          url: task.url.slice(0, 80),
+          reason,
+        });
       }
     }
   }
@@ -189,6 +162,8 @@ export async function uploadScrapeAssets(params: {
     Array.from({ length: Math.min(UPLOAD_CONCURRENCY, tasks.length) }, uploadWorker),
   );
 
-  console.info(`[storage] upload completo — ${succeeded}/${tasks.length} assets guardados no S3`);
-  return prefix;
+  console.info(
+    `[storage] assets prontos — ${succeeded}/${tasks.length} (${reused} reutilizados sem download)`,
+  );
+  return jobStoragePrefix(jobId);
 }

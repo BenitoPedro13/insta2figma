@@ -190,7 +190,7 @@ export class JobsService {
         signed.map((s) => [s.storageKey, s] as const),
       );
       const signedAssets: JobSignedAssetDto[] = assets
-        .map((a) => {
+        .map((a): JobSignedAssetDto | null => {
           const s = keyToUrl.get(a.storageKey);
           if (!s) return null;
           return {
@@ -199,6 +199,11 @@ export class JobsService {
             contentType: a.contentType,
             url: s.url,
             expiresAt: s.expiresAt,
+            // Metadados explícitos de agrupamento (plugins preferem-nos ao parsing
+            // da `storageKey`). Null/undefined em Assets antigos → fallback regex.
+            ...(a.kind !== null ? { kind: a.kind as 'post' | 'profile' } : {}),
+            ...(a.shortcode !== null ? { shortcode: a.shortcode } : {}),
+            slot: a.slot,
           };
         })
         .filter((x): x is JobSignedAssetDto => x !== null);

@@ -39,7 +39,13 @@ export async function countBillableJobImages(
 ): Promise<number> {
   const assets = await prisma.asset.findMany({
     where: { jobId },
-    select: { storageKey: true },
+    select: { kind: true, storageKey: true },
   });
-  return assets.filter((asset) => asset.storageKey.includes('/thumbs/')).length;
+  // Conta imagens de post (não o avatar). `kind` é a fonte de verdade; mantém-se o
+  // fallback à string p/ Assets antigos (sem `kind`, keys `…/thumbs/…`).
+  return assets.filter((asset) =>
+    asset.kind !== null
+      ? asset.kind === 'post'
+      : asset.storageKey.includes('/thumbs/'),
+  ).length;
 }

@@ -257,6 +257,9 @@ function pickProfilePicUrlFromJobResultSummary(resultSummary: unknown): string |
 type SignedImageAsset = {
   url: string;
   storageKey?: string;
+  kind?: string;
+  shortcode?: string | null;
+  slot?: number;
 };
 
 function parseThumbSlugFromStorageKey(
@@ -283,11 +286,17 @@ function groupAssetsIntoPostRows(assets: SignedImageAsset[]): SignedImageAsset[]
   >();
 
   assets.forEach((asset, sequence) => {
-    const parsed = asset.storageKey
+    // Preferir metadados explícitos (kind/shortcode/slot); fallback ao parsing da
+    // storageKey p/ jobs antigos (keys `…/thumbs/<slug>.<ext>`).
+    const fallback = asset.storageKey
       ? parseThumbSlugFromStorageKey(asset.storageKey)
       : null;
-    const postKey = parsed?.postKey ?? `__row_${sequence}`;
-    const slot = parsed?.slot ?? 0;
+    const postKey =
+      typeof asset.shortcode === 'string' && asset.shortcode.length > 0
+        ? asset.shortcode
+        : (fallback?.postKey ?? `__row_${sequence}`);
+    const slot =
+      typeof asset.slot === 'number' ? asset.slot : (fallback?.slot ?? 0);
     if (!byPost.has(postKey)) {
       postOrder.push(postKey);
       byPost.set(postKey, []);
@@ -1073,7 +1082,13 @@ async function importProfileViaApi(
 
   notifyStatus(importStatusWaiting(0), 18);
   let lastResultSummary: unknown = undefined;
-  let lastSignedAssets: { url?: string; storageKey?: string }[] = [];
+  let lastSignedAssets: {
+    url?: string;
+    storageKey?: string;
+    kind?: string;
+    shortcode?: string | null;
+    slot?: number;
+  }[] = [];
   let status = '';
   const pollMax = 120;
   for (let i = 0; i < pollMax; i++) {
@@ -1115,24 +1130,26 @@ async function importProfileViaApi(
   }
 
   const list = lastSignedAssets;
-  const profileAsset = list.find((a) =>
-    typeof a?.storageKey === 'string'
-      ? /\/profile\.[a-z0-9]+$/i.test(String(a.storageKey))
-      : false,
-  );
+  // Avatar: preferir `kind === 'profile'`; fallback à regex p/ jobs antigos.
+  const isProfileAsset = (a: { kind?: string; storageKey?: string }): boolean =>
+    typeof a?.kind === 'string'
+      ? a.kind === 'profile'
+      : typeof a?.storageKey === 'string'
+        ? /\/profile\.[a-z0-9]+$/i.test(String(a.storageKey))
+        : false;
+  const profileAsset = list.find(isProfileAsset);
   const profileUrlFromSignedAssets =
     typeof profileAsset?.url === 'string' && profileAsset.url.trim() !== ''
       ? profileAsset.url.trim()
       : undefined;
   const imageAssets: SignedImageAsset[] = list
-    .filter((a) =>
-      typeof a?.storageKey === 'string'
-        ? !/\/profile\.[a-z0-9]+$/i.test(String(a.storageKey))
-        : true,
-    )
+    .filter((a) => !isProfileAsset(a))
     .map((a) => ({
       url: a?.url ? String(a.url) : '',
       ...(typeof a?.storageKey === 'string' ? { storageKey: a.storageKey } : {}),
+      ...(typeof a?.kind === 'string' ? { kind: a.kind } : {}),
+      ...(typeof a?.shortcode === 'string' ? { shortcode: a.shortcode } : {}),
+      ...(typeof a?.slot === 'number' ? { slot: a.slot } : {}),
     }))
     .filter((a) => a.url.length > 0);
 

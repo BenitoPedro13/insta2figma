@@ -2,20 +2,28 @@
 
 Consumidor **BullMQ** da fila `scrape-instagram-v1` (ver `@insta2figma/shared-contracts`). Descarrega o perfil público via **`web_profile_info`**: `HttpInstagramDataSource` + parsing defensivo, erros `IG_*` / `INTERNAL` e retries BullMQ.
 
-Com **`S3_*`** definido (MinIO local ou S3-compat), após scrape faz **upload** da foto de perfil (`profile.*`, usada no avatar da lista) e de thumbnails dos posts (até `STORAGE_MAX_THUMBNAILS`). O plugin filtra `profile.*` para **não** colocar avatar no canvas, e usa essa URL assinada no histórico/favoritos.
+Com **`S3_*`** definido (MinIO local ou S3-compat), após scrape garante os bytes no
+store **content-addressed** (`ensureMediaAsset`) e grava linhas `assets` por-job que os
+referenciam. O plugin filtra `kind='profile'` para **não** colocar avatar no canvas, e usa
+essa URL assinada no histórico/favoritos.
 
-## Convenção de assets no bucket
+## Convenção de assets no bucket (content-addressed, partilhado)
 
-Prefixo por job: `jobs/{jobId}/`
+Os bytes são guardados **uma vez globalmente** (dedup por `MediaAsset.mediaKey`):
 
-- `jobs/{jobId}/profile.{ext}`: avatar do perfil para histórico/favoritos.
-- `jobs/{jobId}/thumbs/{shortcode}.{ext}`: capa principal do post.
-- `jobs/{jobId}/thumbs/{shortcode}_{i}.{ext}`: extras de carrossel quando expandido.
+- `media/{shortcode}/0.{ext}`: capa principal do post (slot 0).
+- `media/{shortcode}/{i}.{ext}`: extras de carrossel quando expandido (slots 1..N).
+- `media/profile/{igUserId}.{ext}`: avatar do perfil para histórico/favoritos.
 
-O worker grava linhas na tabela `assets` para todos estes ficheiros; o plugin decide o uso:
+Cada `Asset` (por job) aponta para o `MediaAsset` via `mediaAssetId` e carrega
+`kind`/`shortcode`/`slot` explícitos. Reuso: se os bytes já existem, **não** há download —
+só se cria a referência `Asset`. O plugin decide o uso por `kind`:
 
-- `profile.*` -> UI/lista
-- `thumbs/*` -> canvas Figma
+- `kind='profile'` -> UI/lista (avatar)
+- `kind='post'` -> canvas Figma
+
+> Layout legado `jobs/{jobId}/thumbs/...` ainda existe em jobs antigos; plugins e billing
+> fazem fallback ao parsing da `storageKey`. Ver `docs/tasks/TASK-persistent-ig-catalog-dedup.md`.
 
 ## Pré-requisitos
 

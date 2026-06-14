@@ -6,7 +6,13 @@ const TOKEN_KEY = "insta2figma:token:v1"
 
 // ─── Layout helpers (mirrors apps/figma-plugin/src/code.ts) ──────────────────
 
-type SignedAsset = { url?: string; storageKey?: string }
+type SignedAsset = {
+  url?: string
+  storageKey?: string
+  kind?: string
+  shortcode?: string | null
+  slot?: number
+}
 
 function parseThumbSlug(storageKey: string): { postKey: string; slot: number } | null {
   const match = storageKey.match(/\/thumbs\/([^/]+)\.[a-z0-9]+$/i)
@@ -15,6 +21,12 @@ function parseThumbSlug(storageKey: string): { postKey: string; slot: number } |
   const slotMatch = slug.match(/^(.+)_(\d+)$/)
   if (slotMatch) return { postKey: slotMatch[1], slot: parseInt(slotMatch[2], 10) || 0 }
   return { postKey: slug, slot: 0 }
+}
+
+// Avatar: preferir `kind === 'profile'`; fallback à regex p/ jobs antigos.
+function isProfileAsset(a: SignedAsset): boolean {
+  if (typeof a.kind === "string") return a.kind === "profile"
+  return typeof a.storageKey === "string" && /\/profile\.[a-z0-9]+$/i.test(a.storageKey)
 }
 
 function chunkFlat(assets: SignedAsset[], cols: number): SignedAsset[][] {
@@ -27,9 +39,13 @@ function groupIntoPostRows(assets: SignedAsset[]): SignedAsset[][] {
   const order: string[] = []
   const byPost = new Map<string, { asset: SignedAsset; slot: number; seq: number }[]>()
   assets.forEach((asset, seq) => {
-    const parsed = asset.storageKey ? parseThumbSlug(asset.storageKey) : null
-    const postKey = parsed?.postKey ?? `__row_${seq}`
-    const slot = parsed?.slot ?? 0
+    // Preferir metadados explícitos (shortcode/slot); fallback ao parsing da key.
+    const fallback = asset.storageKey ? parseThumbSlug(asset.storageKey) : null
+    const postKey =
+      typeof asset.shortcode === "string" && asset.shortcode.length > 0
+        ? asset.shortcode
+        : (fallback?.postKey ?? `__row_${seq}`)
+    const slot = typeof asset.slot === "number" ? asset.slot : (fallback?.slot ?? 0)
     if (!byPost.has(postKey)) { order.push(postKey); byPost.set(postKey, []) }
     byPost.get(postKey)!.push({ asset, slot, seq })
   })
@@ -605,7 +621,7 @@ export class FramerHost implements PluginHost {
         throw new Error("Could not start the import. Try again in a moment.")
 
       // Poll for completion
-      let signedAssets: { url?: string; storageKey?: string }[] = []
+      let signedAssets: SignedAsset[] = []
       let status = ""
 
       for (let i = 0; i < 120; i++) {
@@ -632,12 +648,7 @@ export class FramerHost implements PluginHost {
         throw new Error("Import is taking longer than expected.")
 
       const imageAssets = signedAssets
-        .filter(
-          (a) =>
-            typeof a.storageKey === "string"
-              ? !/\/profile\.[a-z0-9]+$/i.test(a.storageKey)
-              : true,
-        )
+        .filter((a) => !isProfileAsset(a))
         .filter((a) => !!a.url)
 
       if (imageAssets.length === 0)
@@ -723,11 +734,7 @@ export class FramerHost implements PluginHost {
         )
       }
 
-      const profileAsset = signedAssets.find(
-        (a) =>
-          typeof a.storageKey === "string" &&
-          /\/profile\.[a-z0-9]+$/i.test(a.storageKey),
-      )
+      const profileAsset = signedAssets.find(isProfileAsset)
 
       this.emit({
         type: "import-done",

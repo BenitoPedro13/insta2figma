@@ -25,9 +25,23 @@ export function createS3PutClient(): S3Client | null {
   });
 }
 
-/** Prefixo de chaves no bucket para um job. */
+/** Prefixo de chaves no bucket para um job (legado — mantido como marcador). */
 export function jobStoragePrefix(jobId: string): string {
   return `jobs/${jobId}/`;
+}
+
+/** Chave global content-addressed para a imagem de um post (slot 0 = cover). */
+export function mediaPostStorageKey(
+  shortcode: string,
+  slot: number,
+  ext: string,
+): string {
+  return `media/${shortcode}/${slot}.${ext}`;
+}
+
+/** Chave global para o avatar de um perfil. */
+export function mediaProfileStorageKey(igUserId: string, ext: string): string {
+  return `media/profile/${igUserId}.${ext}`;
 }
 
 export async function putObjectBytes(opts: {

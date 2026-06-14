@@ -167,9 +167,91 @@ model Asset {
   storageKey  String    @map("storage_key")
   byteSize    BigInt    @map("byte_size")
   expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  // Metadados explícitos — substituem o parsing da string `storageKey` em
+  // plugins (agrupamento de carrossel/avatar) e no billing do worker.
+  kind         String? // 'post' | 'profile'
+  shortcode    String?
+  slot         Int     @default(0)
+  mediaAssetId String? @map("media_asset_id") @db.Uuid
 
-  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job        Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  mediaAsset MediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
 
   @@index([jobId])
+  @@index([mediaAssetId])
   @@map("assets")
+}
+
+/// Imagem content-addressed, partilhada por todos os jobs/users. Os bytes são
+/// guardados uma única vez em S3; `mediaKey` é a chave de negócio estável.
+model MediaAsset {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// "<shortcode>:<slot>" para imagens de post; "profile:<igUserId>" para avatares.
+  mediaKey    String   @unique @map("media_key")
+  kind        String // 'post' | 'profile'
+  shortcode   String? // null em avatares
+  slot        Int      @default(0)
+  contentType String   @map("content_type")
+  /// media/<shortcode>/<slot>.<ext> | media/profile/<igUserId>.<ext>
+  storageKey  String   @map("storage_key")
+  byteSize    BigInt   @map("byte_size")
+  width       Int?
+  height      Int?
+  sourceUrl   String?  @map("source_url") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastUsedAt  DateTime @default(now()) @map("last_used_at") @db.Timestamptz(6)
+
+  assets Asset[]
+
+  @@index([shortcode])
+  @@index([lastUsedAt])
+  @@map("media_assets")
+}
+
+/// Perfil Instagram no catálogo persistente + marcas de água para scrape incremental.
+model IgProfile {
+  id              String    @id @default(uuid()) @db.Uuid
+  username        String    @unique // normalizado (lowercase, sem @)
+  igUserId        String?   @unique @map("ig_user_id")
+  fullName        String?   @map("full_name")
+  biography       String?   @db.Text
+  followerCount   Int       @default(0) @map("follower_count")
+  followingCount  Int       @default(0) @map("following_count")
+  mediaCount      Int       @default(0) @map("media_count")
+  isPrivate       Boolean   @default(false) @map("is_private")
+  isVerified      Boolean   @default(false) @map("is_verified")
+  profileMediaKey String?   @map("profile_media_key") // → MediaAsset.mediaKey do avatar
+  newestPostAt    DateTime? @map("newest_post_at") @db.Timestamptz(6)
+  newestShortcode String?   @map("newest_shortcode")
+  oldestPostAt    DateTime? @map("oldest_post_at") @db.Timestamptz(6)
+  oldestCursor    String?   @map("oldest_cursor")
+  catalogComplete Boolean   @default(false) @map("catalog_complete")
+  lastScrapedAt   DateTime? @map("last_scraped_at") @db.Timestamptz(6)
+  lastRefreshedAt DateTime? @map("last_refreshed_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  posts IgPost[]
+
+  @@map("ig_profiles")
+}
+
+/// Um registo por post Instagram (metadados). As imagens obtêm-se via
+/// `MediaAsset` por `shortcode` (slot 0 = cover/1ª imagem).
+model IgPost {
+  id            String   @id @default(uuid()) @db.Uuid
+  profileId     String   @map("profile_id") @db.Uuid
+  shortcode     String   @unique
+  takenAt       DateTime @map("taken_at") @db.Timestamptz(6) // se IG omitir, usar firstSeenAt
+  isVideo       Boolean  @default(false) @map("is_video")
+  caption       String?  @db.Text
+  carouselCount Int      @default(1) @map("carousel_count")
+  imagesReady   Boolean  @default(false) @map("images_ready")
+  firstSeenAt   DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt    DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  profile IgProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, takenAt(sort: Desc)])
+  @@map("ig_posts")
 }

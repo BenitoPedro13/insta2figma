@@ -196,12 +196,31 @@ Ver `docs/SESSION-MANAGEMENT.md` para o fluxo completo.
 3. **Framer:** `FramerHost` calls `POST /v1/jobs` → polls → `fetch` images → 
    `framer.uploadImage` → `framer.createFrameNode` in a nested stack layout
    (outer = vertical stack, rows = horizontal stack, leaves = image frames).
-4. Both use `storageKey` to group carousel images per post row when `expandCarouselImages=true`.
+4. Both group carousel images per post row using the **explicit `kind`/`shortcode`/`slot`
+   fields** on each signed asset (slot 0 = cover, 1..N = carousel). Older jobs without
+   these fields fall back to parsing the `storageKey` string (`…/thumbs/<slug>.<ext>`).
 
 **Worker scrape pagination:** `HttpInstagramDataSource.fetchProfilePostsSample` fetches the
 Instagram web profile (returns ≤12 posts), then paginates via `feedUrl(userId, maxId)` until
 `allEdges.length >= fetchCount` or `more_available: false`. This fixed a bug where imports
 were always capped at 12 posts regardless of `maxPosts`.
+
+## Media dedup — content-addressed store (`MediaAsset`)
+
+Image bytes are stored **once globally**, shared across every job/user. The worker's
+`uploadScrapeAssets` calls `ensureMediaAsset(prisma, s3, …)` per `(shortcode, slot)`:
+a `MediaAsset` row (unique `mediaKey = "<shortcode>:<slot>"`, or `"profile:<igUserId>"`)
+points at a content-addressed S3 key `media/<shortcode>/<slot>.<ext>`
+(avatars: `media/profile/<igUserId>.<ext>`). On a HIT the bytes are **not** re-downloaded —
+only a per-job `Asset` row is created referencing the existing object (`mediaAssetId`).
+Each `Asset` carries explicit `kind`/`shortcode`/`slot` so plugins and billing
+(`countBillableJobImages`, counts `kind='post'`) no longer parse the key string.
+`MediaAsset` is independent of job lifecycle (deleting a `Job` cascades only its `Asset`
+references, never the shared `media/` object). `MediaAsset.lastUsedAt` enables future GC.
+
+> This is Fase 0+1 of the persistent-catalog plan — see
+> `docs/tasks/TASK-persistent-ig-catalog-dedup.md` for the full design (catalog-first
+> preview + incremental scrape + async backfill are later phases).
 
 ## Monorepo pitfalls
 

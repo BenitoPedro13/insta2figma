@@ -3,6 +3,9 @@ export type TimelinePostItem = {
   thumbnailUrl: string | null;
   isVideo?: boolean;
   carouselImageUrls?: string[];
+  /** Timestamp do post em segundos unix (UTC). Usado p/ ordenar o catálogo. */
+  takenAt?: number | null;
+  caption?: string | null;
 };
 
 function asRecord(o: unknown): Record<string, unknown> | null {
@@ -43,6 +46,28 @@ function isLikelyVideo(node: Record<string, unknown>): boolean {
   if (tn === 'GraphVideo') return true;
   const vu = node.video_url;
   return typeof vu === 'string' && vu.length > 0;
+}
+
+function pickTakenAt(node: Record<string, unknown>): number | null {
+  const t = node.taken_at_timestamp ?? node.taken_at;
+  if (typeof t === 'number' && Number.isFinite(t) && t > 0) return Math.floor(t);
+  if (typeof t === 'string') {
+    const n = Number.parseInt(t, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function pickCaption(node: Record<string, unknown>): string | null {
+  const edge = asRecord(node.edge_media_to_caption);
+  const edges = edge?.edges;
+  if (Array.isArray(edges) && edges.length > 0) {
+    const text = asRecord(asRecord(edges[0])?.node)?.text;
+    if (typeof text === 'string' && text.length > 0) return text;
+  }
+  const direct = node.caption;
+  if (typeof direct === 'string' && direct.length > 0) return direct;
+  return null;
 }
 
 function parseSidecarCarouselUrls(node: Record<string, unknown>): string[] {
@@ -87,6 +112,8 @@ export function parseTimelineSampleFromUserNode(
       shortcode,
       thumbnailUrl: pickThumbnail(node),
       isVideo: isLikelyVideo(node),
+      takenAt: pickTakenAt(node),
+      caption: pickCaption(node),
     };
     if (sidecar.length > 0) {
       item.carouselImageUrls = sidecar;
@@ -120,7 +147,10 @@ export function buildIndexedPostPreview(
     index: indexStart + i,
     shortcode: post.shortcode,
     isVideo: post.isVideo,
-    takenAt: null,
+    takenAt:
+      typeof post.takenAt === 'number' && post.takenAt > 0
+        ? new Date(post.takenAt * 1000).toISOString()
+        : null,
     thumbnailUrl: post.thumbnailUrl,
     carouselCount: post.carouselImageUrls
       ? post.carouselImageUrls.length + 1

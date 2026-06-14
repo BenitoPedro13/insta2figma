@@ -57,10 +57,21 @@ export function parseFeedItems(itemsRaw: unknown, maxPosts = 50): TimelinePostIt
       }
     }
 
+    const takenAtRaw = item.taken_at;
+    const takenAt =
+      typeof takenAtRaw === 'number' && Number.isFinite(takenAtRaw) && takenAtRaw > 0
+        ? Math.floor(takenAtRaw)
+        : null;
+    const captionText = toRecord(item.caption)?.text;
+    const caption =
+      typeof captionText === 'string' && captionText.length > 0 ? captionText : null;
+
     const parsed: TimelinePostItem = {
       shortcode,
       thumbnailUrl,
       isVideo: item.media_type === 2,
+      takenAt,
+      caption,
       ...(carouselImageUrls.length > 0 ? { carouselImageUrls } : {}),
     };
     out.push(parsed);

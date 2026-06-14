@@ -160,6 +160,9 @@ export const instagramPostSummaryItemSchema = z.object({
   isVideo: z.boolean().optional(),
   /** URLs adicionais (carrossel / sidecar), sem o thumbnail principal já em `thumbnailUrl`. */
   carouselImageUrls: z.array(z.string()).optional(),
+  /** Timestamp do post em segundos unix (UTC) — usado p/ ordenar o catálogo persistente. */
+  takenAt: z.number().nullable().optional(),
+  caption: z.string().nullable().optional(),
 });
 
 export type InstagramPostSummaryItem = z.infer<
@@ -244,6 +247,11 @@ export const jobSignedAssetDtoSchema = z.object({
   contentType: z.string(),
   url: z.string(),
   expiresAt: z.string(),
+  // Metadados explícitos de agrupamento (opcionais p/ retrocompat com jobs antigos,
+  // cujos plugins fazem fallback ao parsing da `storageKey`).
+  kind: z.enum(['post', 'profile']).optional(),
+  shortcode: z.string().nullable().optional(),
+  slot: z.number().int().min(0).optional(),
 });
 
 export type JobSignedAssetDto = z.infer<typeof jobSignedAssetDtoSchema>;

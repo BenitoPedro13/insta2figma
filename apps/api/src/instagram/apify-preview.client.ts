@@ -78,10 +78,23 @@ function mapApifyPost(raw: unknown): TimelinePostItem | null {
     str(post.imageUrl) ??
     str(post.previewUrl);
 
+  // Apify expõe `timestamp` (ISO) p/ a data do post; fallbacks p/ unix.
+  let takenAt: number | null = null;
+  const ts = post.timestamp ?? post.taken_at ?? post.takenAt;
+  if (typeof ts === 'string' && ts.length > 0) {
+    const ms = Date.parse(ts);
+    if (Number.isFinite(ms)) takenAt = Math.floor(ms / 1000);
+  } else if (typeof ts === 'number' && Number.isFinite(ts) && ts > 0) {
+    takenAt = ts > 1e12 ? Math.floor(ts / 1000) : Math.floor(ts);
+  }
+  const caption = str(post.caption) ?? str(post.title);
+
   const item: TimelinePostItem = {
     shortcode,
     thumbnailUrl,
     isVideo,
+    takenAt,
+    caption,
   };
 
   // Carrosséis: Sidecar/GraphSidecar tem imagens filhas em `images` e/ou `childPosts`
