@@ -427,6 +427,13 @@ postsPreview[].thumbnailUrl = signedUrl(cover)   // URL S3 assinada, transparent
   Assim que o backfill conclui, as próximas previews servem a **URL S3 assinada**.
   A UI é agnóstica ao tipo de URL.
 
+> **Update 2026-06-14:** implementada a **paginação catalog-aware da preview** (distinta
+> do import resolve-from-catalog abaixo, ainda pendente). Página 2+ passa a ser
+> catalog-first via `tryServeCatalogPage` (`getPostsPage`/`countPosts` + covers S3),
+> com `recordCatalogPosts` a fazer write-through dos posts paginados no caminho live.
+> Motivo: os actores Apify de posts não expõem cursor — o catálogo é a única fonte de
+> paginação incremental sem sessão IG. Ver `docs/tasks/TASK-catalog-aware-pagination.md`.
+
 ### 6.5. Import resolve-from-catalog (Fase 4)
 
 No `JobsService.create`, **antes** de enfileirar: se o catálogo cobre a seleção

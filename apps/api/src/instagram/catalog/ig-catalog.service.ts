@@ -70,6 +70,24 @@ export class IgCatalogService {
     });
   }
 
+  /**
+   * Janela de posts por offset (paginação catalog-aware), mesma ordenação que
+   * `getRecentPosts` (`takenAt desc`, tiebreak shortcode) para slices estáveis.
+   */
+  getPostsPage(profileId: string, skip: number, take: number) {
+    return this.prisma.igPost.findMany({
+      where: { profileId },
+      orderBy: [{ takenAt: 'desc' }, { shortcode: 'desc' }],
+      skip: Math.max(0, skip),
+      take: Math.max(1, Math.min(50, take)),
+    });
+  }
+
+  /** Total de posts no catálogo para o perfil (para calcular `hasNextPreviewPage`). */
+  countPosts(profileId: string): Promise<number> {
+    return this.prisma.igPost.count({ where: { profileId } });
+  }
+
   /** Covers (slot 0) em S3 para os `shortcodes` dados → Map<shortcode, {storageKey, contentType}>. */
   async getCoverAssets(
     shortcodes: string[],

@@ -211,6 +211,20 @@ export class InstagramPreviewService {
     });
   }
 
+  /**
+   * Write-through dos posts trazidos pela paginação live → o catálogo cresce além da
+   * página 1 e enfileira backfill dos covers, para as próximas visitas servirem da DB
+   * (ver `tryServeCatalogPage`). Best-effort: nunca lança para o chamador.
+   */
+  private recordCatalogPosts(
+    username: string,
+    igUserId: string | null,
+    posts: TimelinePostItem[],
+  ): void {
+    if (posts.length === 0) return;
+    void this.catalog.writeThrough({ username, igUserId, posts });
+  }
+
   private buildPreviewSource(): PreviewDataSource {
     const direct: PreviewDataSource = {
       name: 'instagram-direct',
@@ -266,6 +280,27 @@ export class InstagramPreviewService {
     };
 
     if (previewPage > 1) {
+      // Catalog-first (Fase 4): serve a página da DB (takenAt desc + covers S3) sem
+      // Apify nem sessão. `null` se o catálogo não cobre a página ou faltam covers →
+      // cai no caminho live abaixo, que popula o catálogo p/ a próxima visita.
+      if (CATALOG_ENABLED) {
+        try {
+          const fromCatalog = await this.tryServeCatalogPage(
+            username,
+            previewPage,
+            timelineOrder,
+            selection,
+            tCtx,
+          );
+          if (fromCatalog) return fromCatalog;
+        } catch (e) {
+          console.warn(
+            '[catalog] serve página falhou — fallback live',
+            e instanceof Error ? e.message : String(e),
+          );
+        }
+      }
+
       const { base } = await this.getOrFetchPreviewBase(
         username,
         fetchCount,
@@ -325,6 +360,9 @@ export class InstagramPreviewService {
         pagePosts.hasNextPage,
         previewPage,
       );
+      // Write-through dos posts paginados → catálogo cresce + backfill dos covers,
+      // para as próximas visitas servirem esta página da DB (catalog-first acima).
+      this.recordCatalogPosts(username, userId, pagePosts.posts);
       return this.buildPaginatedPreviewResponse({
         username: base.username,
         instagramUserId: userId,
@@ -648,6 +686,93 @@ export class InstagramPreviewService {
         ),
       ),
     };
+  }
+
+  /**
+   * Serve a página N (N>1) a partir do catálogo persistente: lê `IgPost` por
+   * `takenAt desc` na janela da página, assina covers de S3 e devolve sem Apify nem
+   * sessão. Devolve `null` (→ fallback live) quando o catálogo não cobre a página ou
+   * falta algum cover em S3 (evita imagens partidas; auto-cura via backfill).
+   */
+  private async tryServeCatalogPage(
+    username: string,
+    previewPage: number,
+    timelineOrder: 'newest_first' | 'oldest_first',
+    selection: ReturnType<typeof resolveScrapeSelection>,
+    ctx: TelemetryCtx,
+  ): Promise<ProfilePreviewResponse | null> {
+    const profile = await this.catalog.getProfileByUsername(username);
+    if (!profile) return null;
+
+    const start = (previewPage - 1) * PREVIEW_PAGE_SIZE;
+    const pagePosts = await this.catalog.getPostsPage(
+      profile.id,
+      start,
+      PREVIEW_PAGE_SIZE,
+    );
+    if (pagePosts.length === 0) return null; // catálogo não cobre esta página
+
+    const covers = await this.catalog.getCoverAssets(
+      pagePosts.map((p) => p.shortcode),
+    );
+    const keys = Array.from(
+      new Set(Array.from(covers.values()).map((c) => c.storageKey)),
+    );
+    const signed = await this.storage.signGetObjects(keys);
+    const urlByKey = new Map(signed.map((s) => [s.storageKey, s.url] as const));
+
+    const posts: TimelinePostItem[] = [];
+    for (const p of pagePosts) {
+      const cover = covers.get(p.shortcode);
+      const url = cover ? (urlByKey.get(cover.storageKey) ?? null) : null;
+      if (!url) return null; // cover em falta → fallback live (+ backfill p/ próxima vez)
+      const item: TimelinePostItem = {
+        shortcode: p.shortcode,
+        thumbnailUrl: url,
+        isVideo: p.isVideo,
+        takenAt: Math.floor(p.takenAt.getTime() / 1000),
+        caption: p.caption ?? null,
+      };
+      const extras = Math.max(0, p.carouselCount - 1);
+      if (extras > 0) item.carouselImageUrls = new Array(extras).fill(url);
+      posts.push(item);
+    }
+
+    const total = await this.catalog.countPosts(profile.id);
+    const hasNextPreviewPage =
+      total > start + posts.length || !profile.catalogComplete;
+
+    this.telemetry.record({
+      endpoint: 'profile-preview',
+      igUsername: username,
+      sessionAccount: null,
+      proxyUsed: false,
+      cacheHit: true, // servido do catálogo (L2)
+      statusCode: 200,
+      retryCount: 0,
+      latencyMs: 0,
+      errorKind: null,
+      userId: ctx.callerUserId,
+      planTier: ctx.planTier,
+    });
+    console.info(
+      `[catalog] serve pág.${previewPage} @${profile.username} — ${posts.length} posts da DB`,
+    );
+
+    return this.buildPaginatedPreviewResponse({
+      username: profile.username,
+      instagramUserId: profile.igUserId,
+      previewPage,
+      timelineOrder,
+      selection,
+      posts,
+      previewTotalPages: Math.max(
+        1,
+        Math.ceil((profile.mediaCount || total) / PREVIEW_PAGE_SIZE),
+      ),
+      hasNextPreviewPage,
+      nextPreviewCursor: null,
+    });
   }
 
   private async fetchFeedPageViaApify(

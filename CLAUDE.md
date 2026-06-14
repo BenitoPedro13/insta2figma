@@ -240,6 +240,15 @@ dos covers chegam via fila **`media-backfill-v1`** (2º worker; flag `CATALOG_BA
 enfileirada no write-through. Ordenação por `takenAt desc` faz posts fixados (pinned)
 descerem para a posição cronológica — desvio assumido.
 
+**Paginação catalog-aware (Fase 4, parcial):** com `CATALOG_ENABLED=true`, a página 2+
+também é **catalog-first** — `tryServeCatalogPage` lê `IgPost` por `takenAt desc` na janela
+da página (`getPostsPage`/`countPosts`) e assina covers S3, **sem Apify nem sessão IG**.
+Se o catálogo não cobre a página ou falta algum cover, devolve `null` → caminho live
+(IG cursor → Apify), que agora faz `recordCatalogPosts` (write-through dos posts paginados
++ backfill) para a próxima visita servir da DB. Motivo: os actores Apify de posts **não
+expõem cursor** (só `resultsLimit`/`onlyPostsNewerThan`/`directUrls`), por isso paginar via
+Apify = re-scrape do topo; o catálogo é a fonte de paginação incremental real.
+
 > Plano completo + fases restantes (4 import resolve-from-catalog, 5 GC) em
 > `docs/tasks/TASK-persistent-ig-catalog-dedup.md`.
 
