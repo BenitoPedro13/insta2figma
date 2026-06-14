@@ -90,6 +90,27 @@ const HISTORY_STORAGE_KEY = 'insta2figma:history:v1';
 const SESSION_STORAGE_KEY = 'insta2figma:session:v1';
 const API_BASE_STORAGE_KEY = 'insta2figma:api-base:v1';
 
+/**
+ * Decide se uma URL de imagem precisa do proxy da API. Só IG CDN precisa (o `<img>`
+ * no iframe Figma não carrega cdninstagram/fbcdn directamente). Covers servidos do
+ * catálogo (S3 `t3.storageapi.dev`) já estão no `allowedDomains` do manifest e são
+ * carregáveis directamente — e o proxy rejeita-os (400), por isso NÃO devem ser proxied.
+ * Regex em vez de `URL` (pode não existir na sandbox do main thread).
+ */
+function isIgCdnUrl(u: string): boolean {
+  return /^https:\/\/[^/]*\.(cdninstagram\.com|fbcdn\.net)(\/|$|\?)/i.test(u);
+}
+
+/**
+ * Devolve a URL pronta para `<img src>`: proxy só p/ IG CDN; data:/blob:/S3 directos.
+ */
+function thumbForDisplay(base: string, url: string): string {
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+  return isIgCdnUrl(url)
+    ? `${base}/v1/instagram/image?url=${encodeURIComponent(url)}`
+    : url;
+}
+
 /** Local se `pnpm dev` responder em /v1/health; senão Railway (ver `api-base.ts`). */
 async function getApiBase(): Promise<string> {
   const base = await resolveApiBase();
@@ -1171,7 +1192,7 @@ async function importProfileViaApi(
     notifyStatus(importStatusAvatar(), 96);
     profilePicForHistory =
       (await fetchInstagramAvatarAsDataUrl(rawProfilePic)) ??
-      `${base}/v1/instagram/image?url=${encodeURIComponent(rawProfilePic)}`;
+      thumbForDisplay(base, rawProfilePic);
   }
   await placeSignedImages(imageAssets, {
     username,
@@ -1656,21 +1677,14 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         ...(preview.profilePicDataUrl
           ? { profilePicUrlHd: preview.profilePicDataUrl }
           : preview.profilePicUrlHd
-            ? {
-                profilePicUrlHd:
-                  preview.profilePicUrlHd.startsWith('data:') || preview.profilePicUrlHd.startsWith('blob:')
-                    ? preview.profilePicUrlHd
-                    : `${base}/v1/instagram/image?url=${encodeURIComponent(preview.profilePicUrlHd)}`,
-              }
+            ? { profilePicUrlHd: thumbForDisplay(base, preview.profilePicUrlHd) }
             : {}),
       });
       for (const item of postsWithThumbs) {
         const url = item.thumbnailUrl;
         if (typeof url === 'string' && url.length > 0) {
-          // CDN Instagram não funciona em <img> no iframe Figma — usar proxy da API
-          const proxied = url.startsWith('data:') || url.startsWith('blob:')
-            ? url
-            : `${base}/v1/instagram/image?url=${encodeURIComponent(url)}`;
+          // IG CDN não carrega em <img> no iframe Figma → proxy; S3 catalog carrega directo.
+          const proxied = thumbForDisplay(base, url);
           figma.ui.postMessage({
             type: 'profile-preview-thumb',
             requestKind,

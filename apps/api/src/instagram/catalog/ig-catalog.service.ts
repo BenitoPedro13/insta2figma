@@ -204,7 +204,7 @@ export class IgCatalogService {
 
   /**
    * Enfileira o backfill assíncrono dos covers (slot 0) dos posts cujos bytes
-   * ainda não estão em S3. `jobId='media:'+shortcode` colapsa enqueues
+   * ainda não estão em S3. `jobId='media-'+shortcode` colapsa enqueues
    * duplicados; o consumidor reverifica `MediaAsset` por idempotência. O avatar
    * (igUserId+profilePicUrl) é anexado a um único job por refresh.
    */
@@ -247,7 +247,7 @@ export class IgCatalogService {
             name: 'run',
             data: payload,
             opts: {
-              jobId: `media:${p.shortcode}`,
+              jobId: `media-${p.shortcode}`, // BullMQ não permite `:` em custom job IDs
               attempts: BACKFILL_ATTEMPTS,
               backoff: { type: 'exponential' as const, delay: 2000 },
               removeOnComplete: true,

@@ -125,6 +125,19 @@ O backend cria um `User` com email sintético (`figma+<id>@mailinator.com` /
 de onde o utilizador usa o app mesmo com o mesmo email; cada job grava `Job.platform`
 (`"figma" | "framer"`), enviado pelos plugins no body de `POST /v1/jobs`.
 
+## Preview — image proxy vs covers S3 directos
+
+O endpoint `GET /v1/instagram/image?url=` é um proxy **estrito a IG CDN**
+(`cdninstagram.com`/`fbcdn.net`) — existe porque `<img>` no iframe Figma não carrega
+essas URLs directamente, e a estritez evita ser um open proxy. Devolve **400** p/
+qualquer outro host.
+
+Os covers servidos do catálogo (L2) são **URLs S3 assinadas** (`t3.storageapi.dev`), que
+já estão no `allowedDomains` do manifest Figma e carregam directamente. Por isso os
+plugins **NÃO** devem passá-las pelo proxy (dava 400). A regra está no helper
+`thumbForDisplay`/`isIgCdnUrl` em ambos (`code.ts` e `FramerHost.ts`): proxy só p/ IG
+CDN; `data:`/`blob:`/S3 vão directos.
+
 ## Preview — infinite scroll
 
 The post preview grid uses **infinite scroll** (not page-based pagination).

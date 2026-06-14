@@ -4,6 +4,21 @@ import type { PluginHost, HostMessage } from "@insta2figma/plugin-ui"
 const API = "https://insta2figma-production.up.railway.app"
 const TOKEN_KEY = "insta2figma:token:v1"
 
+/**
+ * Proxy só p/ IG CDN (cdninstagram/fbcdn não carregam directos no iframe). Covers
+ * servidos do catálogo (S3 `t3.storageapi.dev`) e data:/blob: carregam directos — o
+ * proxy IG-only rejeita-os (400), por isso não devem ser proxied.
+ */
+function isIgCdnUrl(u: string): boolean {
+  return /^https:\/\/[^/]*\.(cdninstagram\.com|fbcdn\.net)(\/|$|\?)/i.test(u)
+}
+function thumbForDisplay(url: string): string {
+  if (url.startsWith("data:") || url.startsWith("blob:")) return url
+  return isIgCdnUrl(url)
+    ? `${API}/v1/instagram/image?url=${encodeURIComponent(url)}`
+    : url
+}
+
 // ─── Layout helpers (mirrors apps/figma-plugin/src/code.ts) ──────────────────
 
 type SignedAsset = {
@@ -464,7 +479,7 @@ export class FramerHost implements PluginHost {
         typeof data.profilePicDataUrl === "string"
           ? data.profilePicDataUrl
           : typeof data.profilePicUrlHd === "string"
-            ? `${API}/v1/instagram/image?url=${encodeURIComponent(data.profilePicUrlHd)}`
+            ? thumbForDisplay(data.profilePicUrlHd)
             : undefined
 
       this.emit({
@@ -491,10 +506,7 @@ export class FramerHost implements PluginHost {
       for (const p of rawPosts as Record<string, unknown>[]) {
         const url = p.thumbnailUrl
         if (typeof url === "string" && url.length > 0) {
-          const proxied =
-            url.startsWith("data:") || url.startsWith("blob:")
-              ? url
-              : `${API}/v1/instagram/image?url=${encodeURIComponent(url)}`
+          const proxied = thumbForDisplay(url)
           this.emit({
             type: "profile-preview-thumb",
             requestKind,
