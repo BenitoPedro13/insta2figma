@@ -585,6 +585,20 @@ export class InstagramPreviewService {
       return item;
     });
 
+    // Não servir do catálogo com covers em falta (evita imagens partidas): se a
+    // página 1 ainda não tem todos os covers em S3 (e não houve top-check a trazer
+    // URLs frescas), cai para o fetch live — que serve URLs boas e re-enfileira o
+    // backfill que preenche o S3 para a próxima vez. Auto-cura à medida que aquece.
+    const pageOneMissing = parsedPosts
+      .slice(0, PREVIEW_PAGE_SIZE)
+      .filter((p) => !p.thumbnailUrl).length;
+    if (pageOneMissing > 0) {
+      console.info(
+        `[catalog] serve @${profile.username} incompleto — ${pageOneMissing} cover(s) em falta na pág.1; fallback live`,
+      );
+      return null;
+    }
+
     const postsPreview = buildIndexedPostPreview(
       parsedPosts.slice(0, PREVIEW_PAGE_SIZE),
       timelineOrder,
