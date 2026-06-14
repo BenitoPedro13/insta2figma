@@ -724,7 +724,12 @@ dados.
    + `Asset` metadata + `countBillableJobImages` por `kind` + `signedAssets` DTO +
    plugins Figma/Framer com fallback. Testes: `ensure-media-asset.test.ts`,
    `instagram-timeline-parse.test.ts`. Typechecks + builds verdes).
-3. Fase 2 (write-through catálogo).
+3. ✅ **FEITO (parcial)** — Fase 2 (write-through catálogo no **lado API**:
+   `IgCatalogService.writeThrough` + `IgCatalogModule`, chamado em
+   `getOrFetchPreviewBase` nos dois caminhos de fetch fresco; gated por
+   `CATALOG_WRITE_THROUGH`, best-effort. **Worker-side write-through adiado** p/
+   Fase 3b/4 — onde o worker fica catalog-aware e se extrai um módulo partilhado;
+   a preview sozinha já popula o catálogo que a Fase 3a lê).
 4. Fase 3b (infra de backfill: fila `media-backfill-v1` + 2º worker) → Fase 3a
    (preview catalog-first + incremental + deep-scroll; enfileira backfill `async`).
 5. Fase 4 (import resolve-from-catalog).

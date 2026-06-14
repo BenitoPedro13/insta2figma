@@ -22,6 +22,7 @@ import {
 import { globalSessionPool, getProxyAgent, buildProxyAgent, fetchWithRetry, PREVIEW_RETRY, parseFeedItems, IG_HEADERS, buildIgHeaders } from '@insta2figma/shared-instagram';
 import { REDIS_CACHE_CLIENT } from '../cache/redis-cache.module';
 import { ScrapeTelemetryService } from './instagram-telemetry.service';
+import { IgCatalogService } from './catalog/ig-catalog.service';
 import { fetchPreviewViaApify, readApifyPreviewConfig, readApifyPostConfig } from './apify-preview.client';
 import { fetchInstagramImageAsDataUrl } from './instagram-image.utils';
 import type { CachedPreviewPayload, TelemetryCtx, PreviewDataSource } from './preview-source.types';
@@ -182,9 +183,21 @@ export class InstagramPreviewService {
 
   constructor(
     private readonly telemetry: ScrapeTelemetryService,
+    private readonly catalog: IgCatalogService,
     @Inject(REDIS_CACHE_CLIENT) private readonly redis: Redis,
   ) {
     this.previewSource = this.buildPreviewSource();
+  }
+
+  /** Write-through best-effort do catálogo (não bloqueia a resposta). */
+  private recordCatalog(base: CachedPreviewPayload): void {
+    void this.catalog.writeThrough({
+      username: base.username,
+      igUserId: base.instagramUserId,
+      mediaCount: base.mediaCount,
+      isPrivate: base.isPrivate,
+      posts: base.parsedPosts,
+    });
   }
 
   private buildPreviewSource(): PreviewDataSource {
@@ -400,7 +413,10 @@ export class InstagramPreviewService {
       if (ageMs > PREVIEW_REVALIDATE_AFTER_MS && !this.revalidating.has(cacheKey)) {
         this.revalidating.add(cacheKey);
         void this.fetchInstagramPreviewBase(username, fetchCount, timelineOrder, ctx)
-          .then((fresh) => this.writeCache(cacheKey, toRedisCachedPayload(fresh)))
+          .then((fresh) => {
+            this.recordCatalog(fresh);
+            return this.writeCache(cacheKey, toRedisCachedPayload(fresh));
+          })
           .catch(() => {})
           .finally(() => this.revalidating.delete(cacheKey));
       }
@@ -413,6 +429,7 @@ export class InstagramPreviewService {
       };
     }
     const base = await this.fetchInstagramPreviewBase(username, fetchCount, timelineOrder, ctx);
+    this.recordCatalog(base);
     await this.writeCache(cacheKey, toRedisCachedPayload(base));
     return { base, cacheKey };
   }
