@@ -196,6 +196,9 @@ export class IgCatalogService {
       await this.prisma.igProfile.update({ where: { id: profile.id }, data });
     }
 
+    console.info(
+      `[catalog] write-through @${username} — perfil + ${input.posts.filter((p) => p.shortcode).length} posts`,
+    );
     await this.enqueueBackfill(input);
   }
 
@@ -253,7 +256,12 @@ export class IgCatalogService {
           };
         });
 
-      if (jobs.length > 0) await this.backfillQueue.addBulk(jobs);
+      if (jobs.length > 0) {
+        await this.backfillQueue.addBulk(jobs);
+        console.info(
+          `[catalog] enqueued ${jobs.length} backfill job(s) @${input.username.trim().toLowerCase()}`,
+        );
+      }
     } catch (e) {
       console.warn(
         '[catalog] enqueue backfill falhou',

@@ -65,6 +65,9 @@ export async function processMediaBackfillJob(
     await prisma.igPost
       .updateMany({ where: { shortcode }, data: { imagesReady: true } })
       .catch(() => {});
+    console.info(
+      `[backfill] ${shortcode} — ${slots.length}/${slots.length} slots ok (imagesReady)`,
+    );
     return;
   }
 

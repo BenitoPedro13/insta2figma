@@ -513,6 +513,7 @@ export class InstagramPreviewService {
 
     const freshThumbByShortcode = new Map<string, string | null>();
     let avatarUrlHd: string | null = null;
+    let didTopCheck = false;
     const stale =
       !profile.lastRefreshedAt ||
       Date.now() - profile.lastRefreshedAt.getTime() > CATALOG_REFRESH_TTL_MS;
@@ -533,6 +534,7 @@ export class InstagramPreviewService {
             freshThumbByShortcode.set(p.shortcode, p.thumbnailUrl);
           }
           avatarUrlHd = fresh.profilePicUrlHd;
+          didTopCheck = true;
         } catch {
           // IG falhou no top-check → serve catálogo stale (degradação graciosa)
         } finally {
@@ -590,6 +592,12 @@ export class InstagramPreviewService {
     );
 
     const avatarSigned = avatarKey ? (urlByKey.get(avatarKey) ?? null) : null;
+    const coversFromS3 = parsedPosts.filter(
+      (p) => typeof p.thumbnailUrl === 'string' && !p.thumbnailUrl.includes('cdninstagram'),
+    ).length;
+    console.info(
+      `[catalog] serve @${profile.username} — ${parsedPosts.length} posts (${coversFromS3} covers S3), topCheck=${didTopCheck}`,
+    );
 
     this.telemetry.record({
       endpoint: 'profile-preview',
